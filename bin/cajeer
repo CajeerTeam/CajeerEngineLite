@@ -1,0 +1,18 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/bootstrap.php';
+$app=new CajeerEngine\Lite(dirname(__DIR__));
+try {
+    switch ($argv[1]??'help') {
+        case 'install':
+            $password=getenv('CAJEER_ADMIN_PASSWORD');
+            if ($password===false) { fwrite(STDERR,"Admin password (input is visible): "); $password=rtrim((string)fgets(STDIN),"\r\n"); }
+            $app->install($password,$argv[2]??'http://127.0.0.1:8080',$argv[3]??'Мой сайт'); echo "Installed. /admin\n"; break;
+        case 'doctor':
+            if (version_compare(PHP_VERSION,'8.4.1','<')) throw new RuntimeException('PHP 8.4.1+ required');
+            if (!is_file($app->file())) throw new RuntimeException('Not installed');
+            $app->load(); if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable'); echo "OK\n"; break;
+        default: echo "CajeerEngine Lite ".CajeerEngine\Lite::VERSION."\nphp bin/cajeer install [url] [name]\nphp bin/cajeer doctor\n";
+    }
+} catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

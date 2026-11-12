@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ $page['title'] }} — {{ $site['name'] }}</title>
+<meta name="description" content="{{ $page['description'] }}">
+<link rel="canonical" href="{{ $canonical }}">
+<meta property="og:title" content="{{ $page['title'] }}">
+<meta property="og:description" content="{{ $page['description'] }}">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header><a class="brand" href="/">{{ $site['name'] }}</a><nav aria-label="Навигация">
+@foreach ($navigation as $item)
+<a href="{{ $item['path'] }}">{{ $item['title'] }}</a>
+@endforeach
+</nav></header>
+<main><article><h1>{{ $page['title'] }}</h1><p class="lead">{{ $page['description'] }}</p><div>{!! $body_html !!}</div></article></main>
+<footer>
+@if (!empty($site['email']))
+<a href="mailto:{{ $site['email'] }}">{{ $site['email'] }}</a>
+@endif
+@if (!empty($site['phone']))
+<a href="tel:{{ $site['phone'] }}">{{ $site['phone'] }}</a>
+@endif
+<span>Работает на CajeerEngine Lite</span></footer>
+</body></html>
