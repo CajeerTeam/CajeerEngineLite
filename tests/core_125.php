@@ -7,7 +7,7 @@ use CajeerEngine\Storage\SiteState;
 function yes125(bool $ok,string $message):void {if (!$ok)throw new RuntimeException('SEO 1.2.5: '.$message);}
 function deny125(callable $run,string $message):void {try {$run();}catch (InvalidArgumentException|RuntimeException $e){return;}throw new RuntimeException('SEO accepted: '.$message);}
 function cleanup125(string $path):void {if(is_link($path)||is_file($path)){unlink($path);return;}if(is_dir($path)){foreach(new FilesystemIterator($path) as $item)cleanup125($item->getPathname());rmdir($path);}}
-yes125(Lite::VERSION==='1.2.5' && SiteState::SCHEMA===13,'version / unchanged schema');
+yes125(version_compare(Lite::VERSION,'1.2.5','>=') && SiteState::SCHEMA===13,'version / unchanged schema');
 $root=sys_get_temp_dir().'/cajeer-seo-'.bin2hex(random_bytes(7));
 mkdir($root.'/templates/default',0700,true);
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');

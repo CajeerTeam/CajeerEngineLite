@@ -14,7 +14,7 @@ function rm123(string $path): void {
     if (is_file($path) || is_link($path)) {unlink($path);return;}
     if (is_dir($path)) {foreach(new FilesystemIterator($path) as $item)rm123($item->getPathname());rmdir($path);}
 }
-ok123(in_array(Lite::VERSION, ['1.2.3','1.2.4','1.2.5'], true) && SiteState::SCHEMA === 13, 'version and schema');
+ok123(version_compare(Lite::VERSION, '1.2.3', '>=') && SiteState::SCHEMA === 13, 'version and schema');
 $root = sys_get_temp_dir().'/lite-content123-'.bin2hex(random_bytes(8));
 mkdir($root,0700);
 mkdir($root.'/templates/default',0700,true);
