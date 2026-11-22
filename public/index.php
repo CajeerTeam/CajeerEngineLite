@@ -5,6 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
+use CajeerEngine\Integrations\GA4Config;
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -64,6 +65,13 @@ try {
                         return $d;
                     }); go('/admin');
                 }
+                elseif ($action==='ga4') {
+                    $config = GA4Config::fromPost($_POST);
+                    $app->change(static function(array $d) use ($config): array {
+                        $d['integrations']['ga4'] = $config;
+                        return $d;
+                    }); go('/admin');
+                }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
                     $app->change(function($d)use($p,$old,$revision){
@@ -106,7 +114,19 @@ try {
         $consentForm.=input('title',$c['title']).'<label>Описание<textarea name="description" maxlength="1000">'.e($c['description']).'</textarea></label>';
         $consentForm.=input('days',(string)$c['days'],'number').input('privacy_url',$c['privacy_url']);
         $consentForm.='<p>Срок действия в днях (1–365). Ссылка на политику — локальный путь (например, /privacy) или пустое поле. Категории: необходимые, аналитика, маркетинг, запись сессий.</p><button>Сохранить Cookie Consent</button>';
-        $html.=form('consent',$consentForm); shell('Управление сайтом',$html);
+        $html.=form('consent',$consentForm);
+        $g=$d['integrations']['ga4'];
+        $ga4Form='<h2>Google Analytics 4 (GA4)</h2>';
+        $ga4Form.='<p>Прямое подключение через gtag.js. Скрипт загружается только после согласия на аналитику. Настраивайте GA4 без дублирующего тега в GTM.</p>';
+        $ga4Form.='<label><input type="checkbox" name="enabled" value="1" '.($g['enabled']?'checked':'').'> Включить GA4</label>';
+        $ga4Form.=input('measurement_id',$g['measurement_id']);
+        $ga4Form.='<p>Measurement ID формата G-XXXXXXXXXX (а не GTM-...). Для работы требуется включённый Cookie Consent.</p>';
+        foreach (['page_views'=>'Отправлять page_view', 'contact_clicks'=>'Отправлять contact_click (без адреса почты и телефона)', 'debug_mode'=>'Debug mode (отладочные события GA4)'] as $key=>$caption) {
+            $ga4Form.='<label><input type="checkbox" name="'.e($key).'" value="1" '.($g[$key]?'checked':'').'> '.e($caption).'</label>';
+        }
+        if (!$c['enabled']) $ga4Form.='<p class="error">Cookie Consent отключён. Отслеживание GA4 останется заблокированным до его включения.</p>';
+        $ga4Form.='<button>Сохранить GA4</button>';
+        $html.=form('ga4',$ga4Form); shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
     if ($path==='/robots.txt' && ModuleConfig::enabled($d, 'robots')) { header('Content-Type: text/plain; charset=utf-8'); echo "User-agent: *\nDisallow: /admin\n"; if (ModuleConfig::enabled($d, 'sitemap')) echo "Sitemap: ".$d['settings']['url']."/sitemap.xml\n"; exit; }
@@ -116,6 +136,12 @@ try {
     // Personalized consent state must never be shared via a public intermediary cache.
     header('Cache-Control: private, no-store');
     // Keep /admin script-free; public pages may run only the shipped first-party consent runtime.
-    header("Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    // Only explicitly configured public GA4 pages get a Google tag CSP allowlist.
+    // Runtime still blocks loading the external tag until analytics opt-in.
+    if (GA4Config::active($d)) {
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' https://www.googletagmanager.com; connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://www.google.com; img-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.google.com; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    } else {
+        header("Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    }
     echo $app->render($d,$d['pages'][$path]);
 } catch(Throwable $ex) { error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }

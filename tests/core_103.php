@@ -26,7 +26,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123', 'https://lite.example.org', 'Тестовый сайт');
     $site=$app->load();
-    ok103(Lite::VERSION === '1.0.3' && SiteState::SCHEMA === 3 && $site['schema'] === 3, 'version or schema');
+    ok103(Lite::VERSION === '1.0.4' && SiteState::SCHEMA === 4 && $site['schema'] === 4, 'version or schema');
     ok103($site['consent'] === ConsentConfig::DEFAULTS, 'new installation policy');
     ok103(str_contains((new Lite(dirname(__DIR__)))->render($site, $site['pages']['/']), 'data-consent-action="accept"'), 'initial banner is missing');
 
@@ -68,12 +68,12 @@ try {
     // Upgrade a REAL schema 2 snapshot; migration must preserve original bytes in a backup.
     $before=$site;
     $before['schema']=2;
-    unset($before['consent']);
+    unset($before['consent'], $before['integrations']);
     $raw=SiteState::encode($before);
     OperationFiles::write($app->file(),$raw,0600);
     ok103($app->migrate(), 'v2 migration did not run');
     $site=$app->load();
-    ok103($site['schema'] === 3 && $site['consent'] === ConsentConfig::DEFAULTS, 'migration v2->v3 wrong');
+    ok103($site['schema'] === 4 && $site['consent'] === ConsentConfig::DEFAULTS, 'migration v2->v3 wrong');
     ok103($site['pages'] === $before['pages'] && $site['settings'] === $before['settings'] && $site['password'] === $before['password'], 'migration changed existing content or auth');
     $backupName=null;
     foreach ($app->backups()->names() as $name) {
@@ -83,10 +83,10 @@ try {
     ok103($backupName !== null, 'v2 snapshot not backed up');
     ok103(str_contains((string)file_get_contents($root.'/storage/backups/'.$backupName),base64_encode($raw)), 'backup lost original bytes');
     $app->backups()->restore($backupName);
-    ok103($app->load()['schema'] === 3 && $app->load()['consent'] === ConsentConfig::DEFAULTS, 'restore v2 did not upgrade');
+    ok103($app->load()['schema'] === 4 && $app->load()['consent'] === ConsentConfig::DEFAULTS, 'restore v2 did not upgrade');
     $state=$app->load();
     $state['consent']['days']=400;
     throws103(fn()=>$app->change(fn()=> $state), 'invalid durable policy');
     ok103($app->load()['consent']['days'] === 180, 'invalid update reached disk');
-    echo "Lite 1.0.3 cookie consent core regression OK\n";
+    echo "Lite cookie consent legacy regression OK\n";
 } finally { clean103($root); }

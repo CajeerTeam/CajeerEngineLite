@@ -4,12 +4,13 @@ namespace CajeerEngine;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\{ConsentConfig,ConsentCookie};
+use CajeerEngine\Integrations\GA4Config;
 use CajeerEngine\Storage\{SiteRepository,BackupService,SiteState};
 use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.0.3';
+    public const VERSION = '1.0.4';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
@@ -47,7 +48,7 @@ final class Lite
         $this->change(function($d) use($password,$settings) {
             if ($d!==null) throw new \InvalidArgumentException('Already installed');
             $home=self::page(['path'=>'/','title'=>'Добро пожаловать','description'=>'Сайт на CajeerEngine Lite','body'=>'Расскажите о себе, своих услугах и контактах. Измените эту страницу в административной панели.','published'=>'1','menu'=>'1']);
-            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS];
+            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS]];
         });
     }
     public function login(string $password): bool {
@@ -69,6 +70,7 @@ final class Lite
             'body_html'=>nl2br(self::esc($p['body']),false),
             'consent'=>$d['consent'], 'consent_saved'=>$choice !== null,
             'consent_mask'=>$choice === null ? 0 : ConsentCookie::mask($choice),
+            'ga4_active'=>GA4Config::active($d), 'ga4'=>$d['integrations']['ga4'],
         ]);
     }
 }

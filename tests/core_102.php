@@ -22,14 +22,14 @@ mkdir($root, 0700);
 try {
     $app = new Lite($root);
     $app->install('AnotherPassword123', 'https://example.org', 'Hello');
-    assert102(Lite::VERSION === '1.0.3', 'wrong version');
-    assert102($app->load()['schema'] === 3, 'new install schema');
+    assert102(Lite::VERSION === '1.0.4', 'wrong version');
+    assert102($app->load()['schema'] === 4, 'new install schema');
     assert102($app->load()['modules'] === ModuleConfig::DEFAULTS, 'new modules defaults');
     assert102(!$app->migrate(), 'noop migration');
     assert102($app->login('AnotherPassword123'), 'login failed');
     $backup = $app->backups();
     $first = $backup->create();
-    assert102($backup->verify($first)['schema'] === 3, 'backup verify');
+    assert102($backup->verify($first)['schema'] === 4, 'backup verify');
     assert102(count($backup->names()) === 1, 'backup listing');
     assert102((fileperms($root.'/storage/backups') & 0777) === 0700, 'private backup directory');
     assert102((fileperms($root.'/storage/backups/'.$first) & 0777) === 0600, 'private backup');
@@ -45,12 +45,12 @@ try {
     // Build a real schema 1 site like Lite 1.0.1 and ensure its original bytes are backed up.
     $state = $app->load();
     $state['schema'] = 1;
-    unset($state['modules']);
+    unset($state['modules'], $state['consent'], $state['integrations']);
     $raw = SiteState::encode($state);
     OperationFiles::write($app->file(), $raw, 0600);
     assert102($app->migrate(), 'v1 migration was not performed');
     $migrated = $app->load();
-    assert102($migrated['schema'] === 3, 'v1 upgrade incorrect');
+    assert102($migrated['schema'] === 4, 'v1 upgrade incorrect');
     assert102($migrated['modules'] === ModuleConfig::DEFAULTS, 'v1 defaults absent');
     $migration = null;
     foreach ($backup->names() as $entry) if ($backup->verify($entry)['reason'] === 'migration') $migration = $entry;
@@ -58,7 +58,7 @@ try {
     $info = $backup->verify($migration);
     assert102($info['reason'] === 'migration' && $info['schema'] === 1, 'migration backup not preserved');
     assert102($backup->restore($migration) !== '', 'restore v1 snapshot');
-    assert102($app->load()['schema'] === 3, 'restored schema 1 not upgraded');
+    assert102($app->load()['schema'] === 4, 'restored schema 1 not upgraded');
     assert102($app->login('AnotherPassword123'), 'restored site authentication');
 
     // Tampered checksums, symlinks, and permissions must never overwrite the live site.
@@ -86,7 +86,7 @@ try {
     fails102(fn()=> $app->load(), 'corrupted JSON');
     $rescue = $backup->restore($good);
     assert102($rescue !== '' && is_file($root.'/storage/backups/'.$rescue), 'damaged state not preserved');
-    assert102($app->load()['schema'] === 3, 'recovery failed');
+    assert102($app->load()['schema'] === 4, 'recovery failed');
     assert102($app->login('AnotherPassword123'), 'recovered auth failed');
 
     // Future schemas and invalid state transitions are rejected before any write.
