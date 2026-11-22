@@ -100,6 +100,22 @@ final class UsageLimiter
         },$day);
     }
 
+    /** Multi-turn generation with the same durable quota accounting as test generations. */
+    public function chat(OpenAIClient $client,array $config,array $messages,bool $stream=false,?callable $onDelta=null): array
+    {
+        $prompt=implode("\n",array_column($messages,'content'));
+        if (!$config['enabled']) throw new \RuntimeException('OpenAI integration is disabled');
+        if (strlen($prompt)>$config['max_input_chars']) throw new \InvalidArgumentException('Chat context exceeds limit');
+        $id=$this->reserve($config,$prompt);
+        $tokens=null;
+        try {
+            $result=$stream ? $client->streamChat($messages,$config,$onDelta ?? static function(string $delta):void {})
+                : $client->chat($messages,$config);
+            $tokens=$result['input_tokens']+$result['output_tokens'];
+            return $result;
+        } finally { $this->finish($id,$tokens); }
+    }
+
     public function generate(OpenAIClient $client,array $config,string $prompt): array
     {
         if (!$config['enabled']) throw new \RuntimeException('OpenAI integration is disabled');

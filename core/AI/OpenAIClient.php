@@ -72,6 +72,134 @@ final class OpenAIClient
             'input_tokens'=>$in,'output_tokens'=>$out];
     }
 
+    /** Multi-turn text chat uses the same paid Responses API and explicit server-side context. */
+    public function chat(array $messages,array $config): array
+    {
+        $payload=$this->chatPayload($messages,$config,false);
+        $data=$this->request('/v1/responses','POST',$payload);
+        return $this->parseChatResponse($data,$config);
+    }
+
+    /** Consume actual OpenAI SSE frames, forwarding incremental text to an authenticated HTTP response. */
+    public function streamChat(array $messages,array $config,callable $onDelta): array
+    {
+        $payload=$this->chatPayload($messages,$config,true);
+        $body=json_encode($payload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);
+        if (strlen($body)>24000) throw new \RuntimeException('Chat context exceeds request limit');
+        $headers=['Authorization: Bearer '.$this->key,'Accept: text/event-stream',
+            'Content-Type: application/json','Connection: close'];
+        $stream=null;
+        try {
+            if ($this->driver!==null) {
+                [$status,$raw]=($this->driver)(self::ORIGIN.'/v1/responses','POST',$headers,$body);
+                if (!is_string($raw) || strlen($raw)>1048576) throw new \RuntimeException('Invalid test stream');
+                $stream=fopen('php://temp','w+');
+                fwrite($stream,$raw);rewind($stream);
+            } else {
+                $context=stream_context_create([
+                    'http'=>['method'=>'POST','header'=>implode("\r\n",$headers),'content'=>$body,
+                        'timeout'=>30,'follow_location'=>0,'max_redirects'=>0,'ignore_errors'=>true,
+                        'protocol_version'=>1.1],
+                    'ssl'=>['verify_peer'=>true,'verify_peer_name'=>true,'allow_self_signed'=>false],
+                ]);
+                $stream=@fopen(self::ORIGIN.'/v1/responses','rb',false,$context);
+                if (!is_resource($stream)) throw new \RuntimeException('Cannot connect to OpenAI');
+                $status=0;
+                foreach (stream_get_meta_data($stream)['wrapper_data']??[] as $line) {
+                    if (preg_match('~^HTTP/\S+\s+(\d{3})~',$line,$m)) $status=(int)$m[1];
+                }
+            }
+            if ($status===401 || $status===403) throw new \RuntimeException('OpenAI credentials or project access rejected');
+            if ($status===429) throw new \RuntimeException('OpenAI rate limit or quota exceeded');
+            if ($status!==200) throw new \RuntimeException('OpenAI streaming API returned HTTP '.(int)$status);
+            $buffer='';$text='';$completed=null;$total=0;
+            while (($line=fgets($stream,65536))!==false) {
+                $total+=strlen($line);
+                if ($total>2097152) throw new \RuntimeException('OpenAI stream exceeds safe limit');
+                $line=rtrim($line,"\r\n");
+                if ($line==='' && $buffer!=='') {
+                    try { $event=json_decode($buffer,true,64,JSON_THROW_ON_ERROR); }
+                    catch (\JsonException) { throw new \RuntimeException('Invalid OpenAI streaming event'); }
+                    $buffer='';
+                    if (!is_array($event)) throw new \RuntimeException('Invalid OpenAI streaming event');
+                    $type=$event['type']??null;
+                    if ($type==='response.output_text.delta') {
+                        $delta=$event['delta']??null;
+                        if (!is_string($delta) || !preg_match('//u',$delta)) throw new \RuntimeException('Invalid OpenAI text delta');
+                        $text.=$delta;
+                        if (strlen($text)>100000) throw new \RuntimeException('AI response is too large');
+                        $onDelta($delta);
+                    } elseif ($type==='response.completed') {
+                        $completed=$event['response']??null;
+                    } elseif ($type==='response.failed' || $type==='response.incomplete' || $type==='error') {
+                        throw new \RuntimeException('OpenAI generation failed or incomplete');
+                    }
+                    continue;
+                }
+                if (str_starts_with($line,'data:')) {
+                    $part=ltrim(substr($line,5));
+                    if ($part==='[DONE]') break;
+                    $buffer.=$part;
+                    if (strlen($buffer)>1048576) throw new \RuntimeException('OpenAI streaming frame too large');
+                }
+            }
+            if (!is_array($completed)) throw new \RuntimeException('OpenAI stream ended before completion');
+            $result=$this->parseChatResponse($completed,$config);
+            if ($text!=='' && $text!==$result['text']) throw new \RuntimeException('OpenAI stream text mismatch');
+            if ($text==='' && $result['text']!=='') $onDelta($result['text']);
+            return $result;
+        } catch (\RuntimeException $e) {
+            // Provider responses and exception details must never expose API keys.
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('OpenAI streaming connection failed');
+        } finally { if (is_resource($stream)) fclose($stream); }
+    }
+
+    private function chatPayload(array $messages,array $config,bool $stream): array
+    {
+        AIConfig::validate($config);
+        if (!$config['enabled']) throw new \RuntimeException('OpenAI integration is disabled');
+        if (!$messages || count($messages)>80 || !array_is_list($messages)) throw new \InvalidArgumentException('Invalid chat context');
+        $length=0;
+        foreach ($messages as $message) {
+            if (!is_array($message) || array_keys($message)!==['role','content'] ||
+                !in_array($message['role'],['user','assistant'],true) ||
+                !is_string($message['content']) || $message['content']==='' ||
+                !preg_match('//u',$message['content']) || str_contains($message['content'],"\0")) {
+                throw new \InvalidArgumentException('Invalid chat message');
+            }
+            $length+=strlen($message['content']);
+        }
+        if ($length>$config['max_input_chars'] || end($messages)['role']!=='user') {
+            throw new \InvalidArgumentException('Chat context exceeds configured limit');
+        }
+        return ['model'=>$config['model'],'input'=>$messages,
+            'max_output_tokens'=>$config['max_output_tokens'],'store'=>false,'stream'=>$stream];
+    }
+
+    private function parseChatResponse(array $data,array $config): array
+    {
+        if (($data['status']??null)!=='completed' || !is_array($data['output']??null)) {
+            throw new \RuntimeException('OpenAI generation did not complete');
+        }
+        $text='';
+        foreach ($data['output'] as $item) {
+            if (!is_array($item) || ($item['type']??null)!=='message' || !is_array($item['content']??null)) continue;
+            foreach ($item['content'] as $part) {
+                if (is_array($part) && ($part['type']??null)==='output_text' && is_string($part['text']??null)) $text.=$part['text'];
+            }
+        }
+        if ($text==='' || strlen($text)>100000 || !preg_match('//u',$text)) throw new \RuntimeException('OpenAI returned no usable text');
+        $usage=$data['usage']??null;
+        $in=$usage['input_tokens']??null;$out=$usage['output_tokens']??null;
+        if (!is_int($in) || !is_int($out) || $in<0 || $out<0 || $in>1000000 || $out>1000000) {
+            throw new \RuntimeException('OpenAI token usage missing or invalid');
+        }
+        return ['text'=>$text,'model'=>is_string($data['model']??null)?substr($data['model'],0,80):$config['model'],
+            'input_tokens'=>$in,'output_tokens'=>$out];
+    }
+
     private function request(string $path,string $method,?array $payload): array
     {
         if (!in_array([$path,$method],[['/v1/models','GET'],['/v1/responses','POST']],true)) {

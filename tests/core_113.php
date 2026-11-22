@@ -72,7 +72,7 @@ try {
     $app=new Lite($root);
     $app->install('ExtremelyStrongPassword123','https://lite.example.test','Owner binding');
     $state=$app->load();
-    ok113(Lite::VERSION==='1.2.1' && SiteState::SCHEMA===13 && $state['schema']===13,'release baseline');
+    ok113(Lite::VERSION==='1.2.2' && SiteState::SCHEMA===13 && $state['schema']===13,'release baseline');
     $gen0=$state['identity']['generation'];
     ok113(preg_match('/^[a-f0-9]{48}$/D',$gen0)===1 && $state['identity']['owner']===null,'fresh identity');
     $old=['iss'=>$issuer,'sub'=>'old-owner'];

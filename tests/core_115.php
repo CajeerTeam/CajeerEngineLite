@@ -17,7 +17,7 @@ function rm115(string $path):void {
     if (is_dir($path)) {foreach (new FilesystemIterator($path) as $child) rm115($child->getPathname());rmdir($path);}
 }
 
-check115(Lite::VERSION==='1.2.1' && SiteState::SCHEMA===13,'release version / no site migration');
+check115(Lite::VERSION==='1.2.2' && SiteState::SCHEMA===13,'release version / no site migration');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 check115($key instanceof OpenSSLAsymmetricKey,'OpenSSL RSA available');
 $detail=openssl_pkey_get_details($key);

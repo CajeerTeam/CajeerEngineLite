@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.2.1
+# CajeerEngine Lite Edition 1.2.2
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -975,3 +975,29 @@ POST-запросы, чтобы исключить двойное начисле
 **Тесты:** `php tests/core_121.php`, `bash tests/ai_http.sh`, затем полный CI. API-тесты используют
 детерминированный транспорт с реальным форматом Responses API; без действующего API-ключа и разрешённого
 интернет-доступа они не подтверждают успешную генерацию в реальном OpenAI-проекте.
+
+
+## AI Assistant Chat — 1.2.2
+
+`/admin/ai` provides a private chat for the authenticated owner. OpenAI settings and
+`CAJEER_OPENAI_API_KEY` are configured as described in the 1.2.1 section. Create a
+conversation, send messages, read incremental responses, stop an active request, and
+delete one conversation or all history. Without JavaScript the send form uses a regular
+server-side response and redirects back to the saved conversation. Responses API calls
+are made exclusively from PHP using `store: false` and count toward existing daily
+request/token limits. Prompts and assistant messages are stored under
+`storage/ai/conversations/<owner-generation>/` (private 0700 directories and 0600
+files). This history is deliberately excluded from normal site backups and public
+pages. The API key is never written to JSON. Changing the owner generation isolates
+prior chat history. A chat has at most 80 messages, and the oldest turns are omitted
+from the **API context** as necessary to honor `max_input_chars`. Maximum 30 conversations
+per owner generation. No AI content is automatically published or executed.
+
+The chat route has its own same-origin JavaScript CSP exception; all other admin routes
+retain their previous `script-src 'none'` policy. Stopping an answer requests cancellation
+of the server job and invalidates its storage reservation. If the upstream API may have
+already billed tokens without returning usage, the daily quota counts the full reserved
+amount. Real OpenAI account delivery requires a working key and network access; local
+contract tests use a deterministic fake transport.
+
+Run `php tests/core_122.php` and `bash tests/ai_chat_http.sh` after upgrading.

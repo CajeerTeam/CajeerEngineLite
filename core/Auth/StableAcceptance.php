@@ -18,8 +18,8 @@ final class StableAcceptance
         $add=static function(string $id,string $status,string $message)use(&$checks):void {
             $checks[]=compact('id','status','message');
         };
-        $add('release_version',Lite::VERSION==='1.2.1' && $site['schema']===SiteState::SCHEMA ? 'pass':'fail',
-            'Lite 1.2.1 requires current JSON schema '.SiteState::SCHEMA);
+        $add('release_version',Lite::VERSION==='1.2.2' && $site['schema']===SiteState::SCHEMA ? 'pass':'fail',
+            'Lite 1.2.2 requires current JSON schema '.SiteState::SCHEMA);
         $origin=$site['settings']['url'];
         $owner=$site['identity']['owner']??null;
         $add('owner_bound',OwnerIdentity::validSubject($owner)?'pass':'fail',

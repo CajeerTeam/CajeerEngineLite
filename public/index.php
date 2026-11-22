@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter};
+use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -13,7 +13,7 @@ $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 function go(string $path): never { header('Location: '.$path,true,303); exit; }
-function shell(string $title,string $html): never { header('Content-Type: text/html; charset=utf-8'); echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.e($title).'</title><link rel="stylesheet" href="/assets/style.css"><body><header><a href="/">На сайт</a><a href="/admin">CajeerEngine Lite</a></header><main><h1>'.e($title).'</h1>'.$html.'</main></body></html>'; exit; }
+function shell(string $title,string $html,bool $aiChat=false): never { header('Content-Type: text/html; charset=utf-8'); echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.e($title).'</title><link rel="stylesheet" href="/assets/style.css"><body><header><a href="/">На сайт</a><a href="/admin">CajeerEngine Lite</a></header><main><h1>'.e($title).'</h1>'.$html.'</main>'.($aiChat?'<script src="/assets/ai-chat.js" defer></script>':'').'</body></html>'; exit; }
 function input(string $name,string $value='',string $type='text'): string { return '<label>'.e($name).'<input name="'.e($name).'" type="'.e($type).'" value="'.e($value).'"></label>'; }
 function token(): string { return '<input type="hidden" name="csrf" value="'.e($_SESSION['csrf']).'">'; }
 function form(string $action,string $html): string { return '<form method="post" action="/admin">'.token().'<input type="hidden" name="action" value="'.e($action).'">'.$html.'</form>'; }
@@ -31,7 +31,7 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/ai' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -96,6 +96,85 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/ai') {
+            if (!$auth) stop(403,'Administrator login required');
+            header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; connect-src 'self'");
+            $store=new ConversationStore($app->root,$d['identity']['generation']);
+            if ($method==='GET' || $method==='HEAD') {
+                $all=$store->all();
+                $id=$_GET['id']??($all[0]['id']??null);
+                if ($id!==null && !is_string($id)) stop(400,'Invalid conversation ID');
+                try { $chat=$id!==null?$store->get($id):null; }
+                catch (InvalidArgumentException|RuntimeException) { stop(404,'Conversation unavailable'); }
+                shell('Cajeer AI Assistant',ChatView::render($all,$chat,$_SESSION['csrf'],$d['ai'],OpenAIClient::configured()),true);
+            }
+            if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+            $action=$_POST['action']??null;
+            if (!is_string($action)) stop(400,'Invalid AI action');
+            try {
+                if ($action==='create') {
+                    $chat=$store->create();go('/admin/ai?id='.$chat['id']);
+                }
+                if ($action==='delete') {
+                    if (!is_string($_POST['id']??null)) stop(400,'Invalid conversation ID');
+                    $store->delete($_POST['id']);go('/admin/ai');
+                }
+                if ($action==='clear') { $store->clear();go('/admin/ai'); }
+                if ($action==='cancel') {
+                    if (!is_string($_POST['id']??null)) stop(400,'Invalid conversation ID');
+                    $store->cancel($_POST['id']);
+                    header('Content-Type: application/json; charset=utf-8');echo '{"cancelled":true}';exit;
+                }
+                if ($action!=='send') stop(400,'Invalid AI action');
+                if (!$d['ai']['enabled'] || !OpenAIClient::configured()) stop(503,'OpenAI is not configured');
+                $id=$_POST['id']??null;$message=$_POST['message']??null;
+                if (!is_string($id) || !is_string($message)) stop(422,'Invalid message');
+                $pending=$store->begin($id,$message,$d['ai']['max_input_chars']);
+            } catch (InvalidArgumentException $failure) { stop(422,$failure->getMessage()); }
+              catch (RuntimeException $failure) { stop(409,'Conversation operation unavailable'); }
+            // Release the PHP session lock while OpenAI responds, so other devices
+            // can revoke access and the Stop action can cancel an in-flight request.
+            session_write_close();
+            $stream=str_contains($_SERVER['HTTP_ACCEPT']??'','application/x-ndjson');
+            if ($stream) {
+                header('Content-Type: application/x-ndjson; charset=utf-8');
+                header('X-Accel-Buffering: no');
+                header('Cache-Control: no-store, no-transform');
+                ignore_user_abort(true);
+                while (ob_get_level()>0) ob_end_flush();
+            }
+            $emit=static function(array $event)use($stream):void {
+                if ($stream) { echo json_encode($event,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_INVALID_UTF8_SUBSTITUTE)."\n"; flush(); }
+            };
+            $stillAllowed=static function()use($app,$sessions,$store,$id,$pending):bool {
+                $latest=$app->load();
+                return hash_equals($latest['identity']['generation'],$pending['generation']) &&
+                    $sessions->valid($_SESSION,$latest) &&
+                    $store->active($id,$pending['token']);
+            };
+            $pending['generation']=$d['identity']['generation'];
+            try {
+                $client=new OpenAIClient();$quota=new UsageLimiter($app->root);
+                $deltas=0;
+                $onDelta=static function(string $delta)use(&$deltas,$emit,$stillAllowed):void {
+                    if (++$deltas%8===1 && !$stillAllowed()) throw new RuntimeException('Chat request cancelled or access revoked');
+                    $emit(['type'=>'delta','text'=>$delta]);
+                };
+                $result=$quota->chat($client,$d['ai'],$pending['messages'],$stream,$onDelta);
+                if (!$stillAllowed()) throw new RuntimeException('Chat request cancelled or access revoked');
+                $store->complete($id,$pending['token'],$result['text']);
+                if ($stream) {
+                    $emit(['type'=>'done','input_tokens'=>$result['input_tokens'],
+                        'output_tokens'=>$result['output_tokens'],'model'=>$result['model']]);exit;
+                }
+                go('/admin/ai?id='.$id);
+            } catch (Throwable $failure) {
+                try { $store->cancel($id,$pending['token']); } catch (Throwable) {}
+                error_log('Cajeer AI chat: '.get_class($failure));
+                if ($stream) { $emit(['type'=>'error','message'=>'Не удалось получить ответ. Проверьте настройки, лимиты или подключение.']);exit; }
+                stop(502,'Chat generation failed; retry from the conversation');
+            }
+        }
         if (str_starts_with($path, '/admin/oidc/')) {
             if ($method !== 'GET') { header('Allow: GET'); stop(405, 'Method not allowed'); }
             if (!OidcClient::enabled($d['settings']['url'])) stop(503, 'SkiF4er ID is not configured for HTTPS');
@@ -461,6 +540,7 @@ try {
         }
         $identity=$d['identity']['owner'] ?? null;
         $ai=$d['ai'];
+        $html.='<p><a href="/admin/ai">Cajeer AI Assistant — открыть чат</a></p>';
         $html.='<section id="ai"><h2>OpenAI — серверная интеграция</h2>'.
             '<p>Responses API. Запросы выполняются только сервером, API-ключ недоступен браузеру. ' .
             'Пробная генерация расходует токены. Ключ задаётся переменной CAJEER_OPENAI_API_KEY.</p>';

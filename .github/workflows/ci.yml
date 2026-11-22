@@ -19,6 +19,7 @@ jobs:
       - run: node --check public/assets/gtm.js
       - run: node --check public/assets/clarity.js
       - run: node --check public/assets/matomo.js
+      - run: node --check public/assets/ai-chat.js
       - run: php tests/smoke.php
       - run: php tests/core_210.php
       - run: php tests/core_102.php
@@ -41,6 +42,7 @@ jobs:
       - run: php tests/core_119.php
       - run: php tests/core_120.php
       - run: php tests/core_121.php
+      - run: php tests/core_122.php
       - run: php tests/ai_concurrency_121.php
       - run: php tests/auth_concurrency_119.php
       - run: bash tests/auth_hardening_http.sh
@@ -50,6 +52,7 @@ jobs:
       - run: bash tests/recovery_cli.sh
       - run: bash tests/http.sh
       - run: bash tests/ai_http.sh
+      - run: bash tests/ai_chat_http.sh
   browser:
     runs-on: ubuntu-latest
     steps:
@@ -71,3 +74,4 @@ jobs:
       - run: python tests/browser_108.py
       - run: python tests/browser_109.py
       - run: python tests/browser_110.py
+      - run: python tests/browser_122.py

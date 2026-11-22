@@ -10,3 +10,13 @@ main section article{padding:16px 20px;margin:14px 0;border-color:#dce3ec}
 main section article h3{margin:0 0 10px;font-size:1.15rem}
 main section td{font-variant-numeric:tabular-nums}
 main section table{display:block;overflow-x:auto}
+
+/* The administrator chat uses only same-origin JavaScript, never external scripts. */
+.ai-chat{padding:20px}.ai-chat-layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:20px}
+.ai-chat-sidebar{border-right:1px solid #dce3ec;padding-right:14px;min-width:0}.ai-chat-sidebar ul{padding:0;list-style:none;overflow-wrap:anywhere}
+.ai-chat-sidebar li{margin:10px 0}.ai-chat-sidebar a[aria-current=page]{font-weight:750}
+.ai-chat-sidebar form,.ai-chat-main form{padding:0;border:0;margin:10px 0}.ai-chat-messages{max-height:56vh;overflow-y:auto;padding:12px;border:1px solid #dce3ec;border-radius:10px;background:#f5f7fa;min-height:140px}
+.ai-chat-messages .ai-message{padding:12px;margin:8px 0;border-radius:10px;background:#fff;border:1px solid #dce3ec;overflow-wrap:anywhere}
+.ai-chat-messages .ai-message-user{background:#e9f1fe}.ai-chat-messages .ai-message p{margin:5px 0 0;white-space:pre-wrap}
+.ai-chat-actions{display:flex;gap:10px;align-items:center}.ai-danger{background:#7e2930}.ai-chat #ai-chat-status{font-size:.92rem;color:#526378}
+@media(max-width:650px){.ai-chat-layout{grid-template-columns:1fr}.ai-chat-sidebar{border-right:0;border-bottom:1px solid #dce3ec;padding:0 0 12px}}

@@ -22,7 +22,7 @@ mkdir($root, 0700);
 try {
     $app = new Lite($root);
     $app->install('AnotherPassword123', 'https://example.org', 'Hello');
-    assert102(Lite::VERSION === '1.2.1', 'wrong version');
+    assert102(Lite::VERSION === '1.2.2', 'wrong version');
     assert102($app->load()['schema'] === 13, 'new install schema');
     assert102($app->load()['modules'] === ModuleConfig::DEFAULTS, 'new modules defaults');
     assert102(!$app->migrate(), 'noop migration');
