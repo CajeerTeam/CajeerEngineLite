@@ -116,6 +116,22 @@ final class UsageLimiter
         } finally { $this->finish($id,$tokens); }
     }
 
+    public function structuredContent(OpenAIClient $client, array $config, string $prompt, string $mode): array
+    {
+        if (!$config['enabled']) throw new \RuntimeException('OpenAI integration is disabled');
+        if ($prompt === '' || strlen($prompt) > $config['max_input_chars'] ||
+            !preg_match('//u', $prompt) || str_contains($prompt, "\0")) {
+            throw new \InvalidArgumentException('Invalid OpenAI generation context');
+        }
+        $id = $this->reserve($config, $prompt);
+        $tokens = null;
+        try {
+            $result = $client->structuredContent($prompt, $config, $mode);
+            $tokens = $result['input_tokens'] + $result['output_tokens'];
+            return $result;
+        } finally { $this->finish($id, $tokens); }
+    }
+
     public function generate(OpenAIClient $client,array $config,string $prompt): array
     {
         if (!$config['enabled']) throw new \RuntimeException('OpenAI integration is disabled');

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView};
+use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -31,7 +31,7 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin' || $path==='/admin/ai' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/ai' || $path==='/admin/ai/content' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -96,6 +96,61 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path === '/admin/ai/content') {
+            if (!$auth) stop(403, 'Administrator login required');
+            $proposal = $_SESSION['ai_content_proposal'] ?? null;
+            if (!is_array($proposal) || !is_int($proposal['created'] ?? null) ||
+                $proposal['created'] > time() || time() - $proposal['created'] > 1800 ||
+                !is_string($proposal['owner_generation'] ?? null) ||
+                !hash_equals($d['identity']['generation'], $proposal['owner_generation'])) {
+                unset($_SESSION['ai_content_proposal']);
+                $proposal = null;
+            }
+            if ($method === 'GET' || $method === 'HEAD') {
+                shell('AI — генерация контента', ContentView::render($d, $_SESSION['csrf'],
+                    $proposal, OpenAIClient::configured()));
+            }
+            if (!is_string($_POST['csrf'] ?? null) || !hash_equals($_SESSION['csrf'], $_POST['csrf'])) {
+                stop(403, 'Invalid CSRF token');
+            }
+            $action = $_POST['action'] ?? null;
+            if (!is_string($action) || !in_array($action, ['generate','apply','discard'], true)) {
+                stop(400, 'Invalid AI content action');
+            }
+            $error = '';
+            try {
+                if ($action === 'discard') {
+                    unset($_SESSION['ai_content_proposal']);
+                    go('/admin/ai/content');
+                }
+                if ($action === 'generate') {
+                    if (!$d['ai']['enabled'] || !OpenAIClient::configured()) {
+                        stop(503, 'OpenAI is not configured');
+                    }
+                    // Invalidate an older proposal before starting a paid request.
+                    unset($_SESSION['ai_content_proposal']);
+                    $proposal = ContentGenerator::generate($_POST, $d, new OpenAIClient(),
+                        new UsageLimiter($app->root));
+                    $_SESSION['ai_content_proposal'] = $proposal;
+                    go('/admin/ai/content');
+                }
+                if ($proposal === null || !is_string($_POST['id'] ?? null) ||
+                    !hash_equals($proposal['id'] ?? '', $_POST['id'])) {
+                    stop(409, 'Generated preview is missing or expired');
+                }
+                $savedPath = ContentGenerator::apply($app, $proposal, $_POST);
+                unset($_SESSION['ai_content_proposal']);
+                go('/admin?edit='.rawurlencode($savedPath));
+            } catch (InvalidArgumentException $failure) {
+                http_response_code(422);
+                $error = $failure->getMessage();
+            } catch (RuntimeException $failure) {
+                http_response_code(502);
+                $error = $failure->getMessage();
+            }
+            shell('AI — генерация контента', ContentView::render($app->load(), $_SESSION['csrf'],
+                $_SESSION['ai_content_proposal'] ?? null, OpenAIClient::configured(), $error));
+        }
         if ($path==='/admin/ai') {
             if (!$auth) stop(403,'Administrator login required');
             header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; connect-src 'self'");
@@ -541,6 +596,7 @@ try {
         $identity=$d['identity']['owner'] ?? null;
         $ai=$d['ai'];
         $html.='<p><a href="/admin/ai">Cajeer AI Assistant — открыть чат</a></p>';
+        $html.='<p><a href="/admin/ai/content">AI Content Generation — создать страницу, заголовок или описание</a></p>';
         $html.='<section id="ai"><h2>OpenAI — серверная интеграция</h2>'.
             '<p>Responses API. Запросы выполняются только сервером, API-ключ недоступен браузеру. ' .
             'Пробная генерация расходует токены. Ключ задаётся переменной CAJEER_OPENAI_API_KEY.</p>';

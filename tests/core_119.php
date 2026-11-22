@@ -20,7 +20,7 @@ function del119(string $path): void {
 }
 function origin119(): string { return 'https://lite.example.test'; }
 
-ok119(Lite::VERSION === '1.2.2' && SiteState::SCHEMA === 13, 'version and compatible schema');
+ok119(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA === 13, 'version and compatible schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 ok119($key instanceof OpenSSLAsymmetricKey, 'RSA key generation');
 $details=openssl_pkey_get_details($key);

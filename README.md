@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.2.2
+# CajeerEngine Lite Edition 1.2.3
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -1001,3 +1001,36 @@ amount. Real OpenAI account delivery requires a working key and network access; 
 contract tests use a deterministic fake transport.
 
 Run `php tests/core_122.php` and `bash tests/ai_chat_http.sh` after upgrading.
+
+
+## AI Content Generation — 1.2.3
+
+Open `/admin/ai/content` after logging in as the administrator. Enable OpenAI in `/admin`
+and provide `CAJEER_OPENAI_API_KEY` in the PHP server environment. The new generator
+creates **unpublished page drafts**, or suggests a **title** or **SEO description** for
+an existing page. Choose a mode, enter a subject, style, audience, keywords and length,
+then submit. The generation uses the server-side OpenAI Responses API with strict
+`text.format: json_schema`, TLS verification, `store: false`, and the existing atomic
+request/token quotas. An API request is billable.
+
+The result is shown in an editable preview. **Nothing is saved until the administrator
+submits the separate confirmation form.** New pages are always created as unpublished
+and hidden from the menu. Existing-page suggestions change only the chosen metadata
+field, with an optimistic revision check to prevent overwriting concurrent edits.
+Proposals are held in the private PHP session for 30 minutes, and expire after owner
+replacement; discarding the preview does not touch site data. There is no new SQL,
+Composer or external browser JavaScript dependency and **no JSON migration** from
+1.2.2 (`schema 13` remains current). The public renderer continues to escape text.
+
+Tests:
+
+```sh
+php tests/core_123.php
+bash tests/ai_content_http.sh
+```
+
+The PHP test exercises actual Structured Outputs request construction and parsing
+using a local injected test transport, validates quota accounting, draft creation,
+metadata updates, concurrent revisions and malformed AI responses. The HTTP test
+exercises authenticated admin routes and CSRF with no API key configured. End-to-end
+response delivery from a live OpenAI project requires staging credentials.
