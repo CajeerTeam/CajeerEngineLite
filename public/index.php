@@ -38,7 +38,9 @@ try {
         $_SESSION['csrf']??=bin2hex(random_bytes(32));
         $auth=isset($_SESSION['auth'],$_SESSION['seen']) && is_string($_SESSION['auth']) &&
             is_int($_SESSION['seen']) && hash_equals(hash('sha256',$d['password']),$_SESSION['auth']) &&
-            time() >= $_SESSION['seen'] && time()-$_SESSION['seen']<3600;
+            time() >= $_SESSION['seen'] && time()-$_SESSION['seen']<3600 &&
+            is_string($_SESSION['owner_generation'] ?? null) &&
+            hash_equals($d['identity']['generation'], $_SESSION['owner_generation']);
         if ($auth && isset($_SESSION['oidc_identity'])) {
             $auth = OwnerIdentity::matches($d['identity']['owner'] ?? null, $_SESSION['oidc_identity']);
         }
@@ -57,16 +59,45 @@ try {
                     $hadLocalAuth=$auth && !isset($_SESSION['oidc_identity']);
                     $result=OidcFlow::finish($_SESSION, $client, $_GET);
                     $identity=$result['identity'];
-                    if ($result['mode']==='bind') {
-                        if (!$hadLocalAuth) stop(403, 'Local administrator login is required for account binding');
-                        $app->change(static fn(array $site): array => OwnerIdentity::bind($site, $identity));
-                        $d=$app->load();
-                    } elseif (!OwnerIdentity::matches($d['identity']['owner'] ?? null, $identity)) {
+                    $mode=$result['mode'];
+                    $context=$result['context'];
+                    $expectedGeneration=$context['generation'] ?? null;
+                    if ($mode==='bind') {
+                        if (!$hadLocalAuth || !is_string($expectedGeneration)) {
+                            stop(403, 'Local administrator login is required for account binding');
+                        }
+                        $d=$app->change(static fn(array $site): array => OwnerIdentity::bind($site, $identity, $expectedGeneration));
+                    } elseif ($mode==='replace_current' || $mode==='unbind') {
+                        if (!$auth || !is_string($expectedGeneration) ||
+                            !hash_equals($d['identity']['generation'], $expectedGeneration) ||
+                            !OwnerIdentity::matches($d['identity']['owner'] ?? null, $identity)) {
+                            stop(403, 'Current linked owner reauthentication required');
+                        }
+                        if ($mode==='replace_current') {
+                            // Verification of the old owner is completed before allowing a new one.
+                            $url=OidcFlow::start($_SESSION, $client, 'replace_new', [
+                                'generation'=>$expectedGeneration, 'previous_owner'=>$identity,
+                            ]);
+                            header('Location: '.$url, true, 303); exit;
+                        }
+                        $d=$app->change(static fn(array $site): array =>
+                            OwnerIdentity::unbind($site, $identity, $expectedGeneration));
+                    } elseif ($mode==='replace_new') {
+                        if (!$auth || !is_string($expectedGeneration) ||
+                            !hash_equals($d['identity']['generation'], $expectedGeneration) ||
+                            !OwnerIdentity::matches($d['identity']['owner'] ?? null, $context['previous_owner'] ?? null)) {
+                            stop(403, 'Owner binding changed during replacement');
+                        }
+                        $previous=$context['previous_owner'];
+                        $d=$app->change(static fn(array $site): array =>
+                            OwnerIdentity::replace($site, $previous, $identity, $expectedGeneration));
+                    } elseif ($mode!=='login' || !OwnerIdentity::matches($d['identity']['owner'] ?? null, $identity)) {
                         stop(403, 'SkiF4er ID is not authorized for this site');
                     }
                     session_regenerate_id(true);
                     $_SESSION=['auth'=>hash('sha256',$d['password']), 'seen'=>time(),
-                        'csrf'=>bin2hex(random_bytes(32)), 'oidc_identity'=>$identity];
+                        'csrf'=>bin2hex(random_bytes(32)), 'owner_generation'=>$d['identity']['generation']];
+                    if ($mode!=='unbind') $_SESSION['oidc_identity']=$identity;
                     go('/admin');
                 }
                 stop(404, 'Not found');
@@ -81,7 +112,7 @@ try {
             $action=$_POST['action']??'';
             try {
                 if ($action==='login' && !$auth) {
-                    if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32))]; go('/admin'); }
+                    if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32)),'owner_generation'=>$d['identity']['generation']]; go('/admin'); }
                     http_response_code(401); $error='Неверный пароль или временная блокировка. Повторите через 5 минут.';
                 } elseif (!$auth) stop(403,'Login required');
                 elseif ($action==='oidc_bind') {
@@ -96,9 +127,33 @@ try {
                         throw new InvalidArgumentException('Re-enter the correct local administrator password');
                     }
                     try {
-                        $url=OidcFlow::start($_SESSION, OidcClient::fromEnvironment($d['settings']['url']), 'bind');
+                        $url=OidcFlow::start($_SESSION, OidcClient::fromEnvironment($d['settings']['url']),
+                            'bind', ['generation'=>$d['identity']['generation']]);
                     } catch (RuntimeException $exception) {
                         error_log('SkiF4er bind initialization failed: '.get_class($exception));
+                        throw new InvalidArgumentException('SkiF4er ID is temporarily unavailable');
+                    }
+                    header('Location: '.$url, true, 303); exit;
+                }
+                elseif ($action==='oidc_replace' || $action==='oidc_unbind') {
+                    if (!OidcClient::enabled($d['settings']['url']) || ($d['identity']['owner'] ?? null) === null) {
+                        throw new InvalidArgumentException('A linked owner and configured SkiF4er ID are required');
+                    }
+                    if (($_POST['confirm_owner_change'] ?? null) !== '1') {
+                        throw new InvalidArgumentException('Confirm the account ownership change');
+                    }
+                    $password=$_POST['oidc_password'] ?? null;
+                    if (!is_string($password) || !$app->login($password)) {
+                        throw new InvalidArgumentException('Re-enter the correct local administrator password');
+                    }
+                    // The first OIDC roundtrip must authenticate the *existing* owner.
+                    // The replacement flow subsequently authenticates the new owner.
+                    $mode=$action==='oidc_replace' ? 'replace_current' : 'unbind';
+                    try {
+                        $url=OidcFlow::start($_SESSION, OidcClient::fromEnvironment($d['settings']['url']),
+                            $mode, ['generation'=>$d['identity']['generation']]);
+                    } catch (RuntimeException $exception) {
+                        error_log('SkiF4er owner operation initialization: '.get_class($exception));
                         throw new InvalidArgumentException('SkiF4er ID is temporarily unavailable');
                     }
                     header('Location: '.$url, true, 303); exit;
@@ -229,6 +284,16 @@ try {
         } else {
             $html.='<p>Владелец привязан к SkiF4er ID. Идентификатор: '.e(substr($identity['sub'],0,12)).'…</p>';
             if (isset($_SESSION['oidc_identity'])) $html.='<p>Текущий вход: SkiF4er ID.</p>';
+            if (OidcClient::enabled($d['settings']['url'])) {
+                $html.='<p>Смена владельца требует локальный пароль и два последовательных входа SkiF4er ID: сначала текущего, затем нового владельца. После смены прежние сеансы станут недействительными.</p>';
+                $html.=form('oidc_replace', input('oidc_password','','password').
+                    '<label><input type="checkbox" name="confirm_owner_change" value="1" required> Подтверждаю смену привязанного аккаунта</label>'.
+                    '<button>Сменить аккаунт владельца</button>');
+                $html.='<p>Отвязка требует локальный пароль и повторный вход в текущий SkiF4er ID. Локальный пароль останется действующим, а предыдущие сеансы будут отозваны.</p>';
+                $html.=form('oidc_unbind', input('oidc_password','','password').
+                    '<label><input type="checkbox" name="confirm_owner_change" value="1" required> Подтверждаю отвязку аккаунта владельца</label>'.
+                    '<button>Отвязать SkiF4er ID</button>');
+            }
         }
         $html.='</section>';
         $html.=form('logout','<button>Выйти</button>').'<section><h2>Страницы</h2><ul>';

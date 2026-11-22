@@ -30,8 +30,8 @@ if get / | grep_all '<nav'; then echo 'Disabled navigation still shown' >&2; exi
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep_all "$base/"
 get / | grep_all '<nav'
-php bin/cajeer doctor | grep_all 'schema 10'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 10.' ]]
+php bin/cajeer doctor | grep_all 'schema 11'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 11.' ]]
 php bin/cajeer module disable robots | grep_all disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep_all enabled
@@ -200,5 +200,11 @@ curl -fsSI "$base/admin?analytics=1" | grep_all -i "script-src 'none'"
 [[ $(status "$base/admin/oidc/callback?code=invalid&state=invalid") == 503 ]]
 [[ $(status -X POST "$base/admin/oidc/login") == 405 ]]
 [[ $(status "$base/auth/skif4er/login") == 404 ]]
+# 1.1.3 owner-management actions are authenticated, CSRF protected and fail closed.
+curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/owner-unbound"
+grep_all 'Аккаунт владельца пока не привязан' "$tmp/owner-unbound"
+[[ $(status -b "$tmp/cookies" -d "action=oidc_replace&csrf=invalid&oidc_password=TestPassword123&confirm_owner_change=1" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=oidc_replace&csrf=$csrf&oidc_password=TestPassword123&confirm_owner_change=1" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=oidc_unbind&csrf=$csrf&oidc_password=TestPassword123&confirm_owner_change=1" "$base/admin") == 422 ]]
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

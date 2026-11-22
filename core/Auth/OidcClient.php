@@ -49,7 +49,7 @@ final class OidcClient
     /** @return array{state:string,nonce:string,verifier:string,created:int,mode:string,url:string} */
     public function begin(string $mode): array
     {
-        if (!in_array($mode, ['login', 'bind'], true)) throw new \InvalidArgumentException('Invalid OIDC flow mode');
+        if (!in_array($mode, ['login', 'bind', 'replace_current', 'replace_new', 'unbind'], true)) throw new \InvalidArgumentException('Invalid OIDC flow mode');
         $this->discovery(); // fail closed if provider metadata is unavailable or unexpected
         $state = self::random();
         $nonce = self::random();
@@ -59,6 +59,8 @@ final class OidcClient
             'scope' => 'openid profile email', 'redirect_uri' => $this->redirectUri,
             'state' => $state, 'nonce' => $nonce, 'code_challenge_method' => 'S256',
             'code_challenge' => self::b64(hash('sha256', $verifier, true)),
+            // Require a fresh interactive identity check for owner mutations.
+            ...($mode === 'login' ? [] : ['prompt' => 'login', 'max_age' => '0']),
         ], '', '&', PHP_QUERY_RFC3986);
         return compact('state', 'nonce', 'verifier', 'mode', 'url') + ['created' => time()];
     }
@@ -91,6 +93,11 @@ final class OidcClient
         if (!is_string($idToken) || strlen($idToken) > 16000 || strlen($idToken) < 100 ||
             !is_string($response['token_type'] ?? null) || strcasecmp($response['token_type'], 'Bearer') !== 0) throw new \RuntimeException('Invalid OIDC token response');
         $claims = $this->verifyIdToken($idToken, $transaction['nonce'], $response['access_token'] ?? null);
+        if (($transaction['mode'] ?? 'login') !== 'login' &&
+            (!is_int($claims['auth_time'] ?? null) || $claims['auth_time'] > time()+60 ||
+                $claims['auth_time'] < time()-300)) {
+            throw new \RuntimeException('Fresh SkiF4er ID authentication is required');
+        }
         return ['iss' => $claims['iss'], 'sub' => $claims['sub']];
     }
 

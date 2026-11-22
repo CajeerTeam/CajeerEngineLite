@@ -11,13 +11,13 @@ use CajeerEngine\Analytics\ReportConfig;
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
 {
-    public const SCHEMA = 10;
+    public const SCHEMA = 11;
     public const LIMIT = 4_000_000;
 
     public static function validate(array $state): void
     {
         $version = $state['schema'] ?? null;
-        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], true)) throw new \RuntimeException('Unsupported site schema');
+        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], true)) throw new \RuntimeException('Unsupported site schema');
         $settings = $state['settings'] ?? null;
         if (!is_array($settings) || !is_string($settings['name'] ?? null) || trim($settings['name']) === '' ||
             !is_string($settings['url'] ?? null) || !is_string($settings['email'] ?? null) ||
@@ -84,8 +84,12 @@ final class SiteState
         }
         if ($version >= 10) {
             $identity = $state['identity'] ?? null;
-            if (!is_array($identity) || array_keys($identity) !== ['owner']) {
+            if (!is_array($identity) || array_keys($identity) !== ($version >= 11 ? ['owner', 'generation'] : ['owner'])) {
                 throw new \RuntimeException('Invalid owner identity configuration');
+            }
+            if ($version >= 11 && (!is_string($identity['generation'] ?? null) ||
+                !preg_match('/^[a-f0-9]{48}$/D', $identity['generation']))) {
+                throw new \RuntimeException('Invalid owner binding generation');
             }
             $owner = $identity['owner'];
             if ($owner !== null && (!is_array($owner) || array_keys($owner) !== ['iss', 'sub'] ||
@@ -135,6 +139,10 @@ final class SiteState
         if ($state['schema'] === 9) {
             $state['identity'] = ['owner' => null];
             $state['schema'] = 10;
+        }
+        if ($state['schema'] === 10) {
+            $state['identity']['generation'] = \CajeerEngine\Auth\OwnerIdentity::generation();
+            $state['schema'] = 11;
         }
         self::validate($state);
         return $state;

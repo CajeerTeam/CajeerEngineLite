@@ -106,13 +106,13 @@ mkdir($root,0700,true);
 try {
     $app=new Lite($root);
     $app->install('ExtremelyStrongPassword123',$origin,'OIDC integration');
-    expect112(Lite::VERSION==='1.1.2' && SiteState::SCHEMA===10 && $app->load()['identity']===['owner'=>null], 'new install identity');
+    expect112(Lite::VERSION==='1.1.3' && SiteState::SCHEMA===11 && $app->load()['identity']['owner']===null, 'new install identity');
     $legacy=$app->load();
     $legacy['pages']['/auth/legacy']=Lite::page(['path'=>'/auth/legacy','title'=>'Legacy auth content','body'=>'Preserved','published'=>'1','menu'=>'0']);
     unset($legacy['identity']); $legacy['schema']=9;
     file_put_contents($app->file(),SiteState::encode($legacy));
     $migrated=$app->load();
-    expect112($migrated['schema']===10 && $migrated['identity']['owner']===null,'schema 9 to 10');
+    expect112($migrated['schema']===11 && $migrated['identity']['owner']===null,'schema 9 to 10');
     expect112(isset($migrated['pages']['/auth/legacy']), 'legacy auth page lost during update');
     $backup=$app->backups()->names();
     expect112(count($backup)>0 && $app->backups()->verify($backup[0])['schema']===9,'migration backup');

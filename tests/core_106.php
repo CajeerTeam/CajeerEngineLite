@@ -23,7 +23,7 @@ try {
     $app = new Lite($root);
     $app->install('StrongPassword123','https://example.org','GTM test');
     $s = $app->load();
-    check106(Lite::VERSION === '1.1.2' && SiteState::SCHEMA === 10 && $s['schema'] === 10,'version/schema');
+    check106(Lite::VERSION === '1.1.3' && SiteState::SCHEMA === 11 && $s['schema'] === 11,'version/schema');
     check106($s['integrations']['gtm'] === GTMConfig::DEFAULTS,'default GTM config');
     check106(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/gtm.js'),'disabled GTM loaded');
     foreach ([
@@ -69,7 +69,7 @@ try {
     OperationFiles::write($app->file(),$raw,0600);
     check106($app->migrate(),'schema 5 migration skipped');
     $updated=$app->load();
-    check106($updated['schema']===10 && $updated['integrations']['gtm']===GTMConfig::DEFAULTS,'migration defaults');
+    check106($updated['schema']===11 && $updated['integrations']['gtm']===GTMConfig::DEFAULTS,'migration defaults');
     foreach (['settings','pages','password','login','modules','consent'] as $key)
         check106($updated[$key]===$old[$key], 'migration changed '.$key);
     check106($updated['integrations']['ga4']===$old['integrations']['ga4'] &&
@@ -82,7 +82,7 @@ try {
     check106(is_string($backup),'schema 5 backup missing');
     check106(str_contains((string)file_get_contents($root.'/storage/backups/'.$backup),base64_encode($raw)),'source backup bytes changed');
     $app->backups()->restore($backup);
-    check106($app->load()['schema']===10 && $app->load()['integrations']['ga4']===$old['integrations']['ga4'] &&
+    check106($app->load()['schema']===11 && $app->load()['integrations']['ga4']===$old['integrations']['ga4'] &&
         $app->load()['integrations']['metrica']===$old['integrations']['metrica'],'backup restore lost existing integrations');
     check106(!$app->migrate(),'no-op migration modified current schema');
     echo "Lite 1.0.6 GTM core/migration regression OK\n";

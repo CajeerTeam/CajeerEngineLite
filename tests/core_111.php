@@ -19,7 +19,7 @@ try {
     $app=new Lite($root);
     $app->install('ExtremelyStrongPassword123','https://example.org','Test analytics');
     $state=$app->load();
-    check111(Lite::VERSION==='1.1.2' && $state['schema']===10 && SiteState::SCHEMA===10,'1.1.1 schema');
+    check111(Lite::VERSION==='1.1.3' && $state['schema']===11 && SiteState::SCHEMA===11,'1.1.1 schema');
     check111($state['reporting']===ReportConfig::DEFAULTS,'reporting defaults');
     // A real 1.1.0 state migrates under lock; a verified snapshot of schema 8 remains.
     $legacy=$state;
@@ -27,7 +27,7 @@ try {
     $app->change(static function(array $s): array { return $s; });
     file_put_contents($app->file(),SiteState::encode($legacy));
     $upgraded=$app->load();
-    check111($upgraded['schema']===10,'8 -> 9 migration');
+    check111($upgraded['schema']===11,'8 -> 9 migration');
     $backups=$app->backups()->names();
     check111(count($backups)>0,'automatic backup');
     $backup=$app->backups()->verify($backups[0]);
