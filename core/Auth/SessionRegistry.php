@@ -183,6 +183,21 @@ final class SessionRegistry
         },$site,$clock);
     }
 
+    /** Validate and prune the on-disk registry under its production lock for CLI acceptance. */
+    public function inspect(array $site, ?int $clock = null): array
+    {
+        return $this->locked(static function(array &$items, int $time, array &$replays): array {
+            $local = 0;
+            $oidc = 0;
+            foreach ($items as $record) {
+                if ($record['method'] === 'oidc') ++$oidc;
+                else ++$local;
+            }
+            return ['active' => $local + $oidc, 'local' => $local, 'oidc' => $oidc,
+                'replay_entries' => count($replays)];
+        }, $site, $clock);
+    }
+
     /** @return list<array{id:string,method:string,agent:string,ip:string,created:int,seen:int,expires:int,current:bool}> */
     public function devices(array $session,array $site,?int $clock=null): array
     {

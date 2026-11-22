@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Auth\RecoveryService;
+use CajeerEngine\Auth\{RecoveryService,AuthAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
@@ -58,6 +58,24 @@ try {
                 foreach ($report['manual'] as $step) echo 'MANUAL '.$step."\n";
                 echo $report['ok'] ? "Automated production checks: PASS (external verification pending)\n" :
                     "Automated production checks: FAIL\n";
+            }
+            if (!$report['ok']) exit(1);
+            break;
+        case 'auth':
+            if (($argv[2] ?? null) !== 'check' || count($argv) > 4 ||
+                (count($argv) === 4 && $argv[3] !== '--json')) {
+                throw new InvalidArgumentException('Usage: auth check [--json]');
+            }
+            $report = AuthAcceptance::run($app->root, $app->load());
+            if (($argv[3] ?? null) === '--json') {
+                echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
+            } else {
+                foreach ($report['checks'] as $check) {
+                    echo strtoupper($check['status']).' '.$check['id'].': '.$check['message']."\n";
+                }
+                foreach ($report['manual'] as $step) echo 'MANUAL '.$step."\n";
+                echo $report['ok'] ? "Authentication local checks: PASS (live IdP acceptance pending)\n" :
+                    "Authentication local checks: FAIL\n";
             }
             if (!$report['ok']) exit(1);
             break;
@@ -136,6 +154,7 @@ try {
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
-                 "php bin/cajeer release check [--json]\nphp bin/cajeer analytics refresh|status [--days=7]\n";
+                 "php bin/cajeer release check [--json]\nphp bin/cajeer auth check [--json]\n".
+                 "php bin/cajeer analytics refresh|status [--days=7]\n";
     }
 } catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

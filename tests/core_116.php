@@ -16,7 +16,7 @@ function wipe116(string $path): void {
     if (is_dir($path)) { foreach (new FilesystemIterator($path) as $entry) wipe116($entry->getPathname()); rmdir($path); }
 }
 
-ok116(Lite::VERSION==='1.1.8' && SiteState::SCHEMA===12, 'release version and schema');
+ok116(Lite::VERSION==='1.1.9' && SiteState::SCHEMA===12, 'release version and schema');
 $root = sys_get_temp_dir().'/cajeer-recovery-'.bin2hex(random_bytes(10));
 mkdir($root,0700,true);
 try {

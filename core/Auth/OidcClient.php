@@ -96,9 +96,14 @@ final class OidcClient
             'redirect_uri' => $this->redirectUri, 'code_verifier' => $transaction['verifier'],
         ], '', '&', PHP_QUERY_RFC3986));
         $idToken = $response['id_token'] ?? null;
+        $accessToken = $response['access_token'] ?? null;
+        // Authorization Code token responses must include an access token. Do not
+        // authenticate from an orphan ID token in a partial or malformed reply.
         if (!is_string($idToken) || strlen($idToken) > 16000 || strlen($idToken) < 100 ||
+            !is_string($accessToken) || $accessToken === '' || strlen($accessToken) > 16000 ||
+            preg_match('/[\x00-\x20\x7f]/', $accessToken) ||
             !is_string($response['token_type'] ?? null) || strcasecmp($response['token_type'], 'Bearer') !== 0) throw new \RuntimeException('Invalid OIDC token response');
-        $claims = $this->verifyIdToken($idToken, $transaction['nonce'], $response['access_token'] ?? null);
+        $claims = $this->verifyIdToken($idToken, $transaction['nonce'], $accessToken);
         if (($transaction['mode'] ?? 'login') !== 'login' &&
             (!is_int($claims['auth_time'] ?? null) || $claims['auth_time'] > time()+60 ||
                 $claims['auth_time'] < time()-300)) {
@@ -112,15 +117,15 @@ final class OidcClient
     {
         $claims = $this->signedClaims($jwt, false);
         $now = time();
-        $aud = $claims['aud'] ?? null;
-        $audiences = is_string($aud) ? [$aud] : $aud;
+        $audiences = self::audiences($claims['aud'] ?? null);
         if (($claims['iss'] ?? null) !== self::ISSUER || !is_array($audiences) ||
             !in_array($this->clientId, $audiences, true) ||
             (count($audiences) > 1 && ($claims['azp'] ?? null) !== $this->clientId) ||
             (isset($claims['azp']) && $claims['azp'] !== $this->clientId) ||
-            !is_int($claims['exp'] ?? null) || $claims['exp'] <= $now - 60 ||
+            !is_int($claims['exp'] ?? null) || $claims['exp'] <= $now ||
             !is_int($claims['iat'] ?? null) || $claims['iat'] > $now + 60 || $claims['iat'] < $now - 7200 ||
-            (isset($claims['nbf']) && (!is_int($claims['nbf']) || $claims['nbf'] > $now + 60)) ||
+            $claims['exp'] <= $claims['iat'] ||
+            (isset($claims['nbf']) && (!is_int($claims['nbf']) || $claims['nbf'] > $now + 60 || $claims['nbf'] >= $claims['exp'])) ||
             !is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']) ||
             !is_string($claims['sub'] ?? null) || strlen($claims['sub']) < 1 || strlen($claims['sub']) > 255 ||
             preg_match('/[\x00-\x1f\x7f]/', $claims['sub']) ||
@@ -188,8 +193,7 @@ final class OidcClient
     {
         $claims=$this->signedClaims($jwt,true);
         $now=time();
-        $aud=$claims['aud']??null;
-        $audiences=is_string($aud)?[$aud]:$aud;
+        $audiences=self::audiences($claims['aud']??null);
         $sub=$claims['sub']??null;
         $sid=$claims['sid']??null;
         // A Logout Token event must be a JSON *object*, not an array or scalar.
@@ -200,6 +204,10 @@ final class OidcClient
         } catch (\JsonException) { throw new \RuntimeException('Invalid logout event JSON'); }
         $events=is_object($payloadObject)?($payloadObject->events??null):null;
         $event=$events instanceof \stdClass ? ($events->{'http://schemas.openid.net/event/backchannel-logout'}??null) : null;
+        // Back-Channel Logout: exactly one event name with an empty JSON object.
+        // An otherwise signed JWT carrying unrelated events is not a Logout Token.
+        $validEvent=$events instanceof \stdClass && count(get_object_vars($events))===1 &&
+            $event instanceof \stdClass && get_object_vars($event)===[];
         if (($claims['iss']??null)!==self::ISSUER || !is_array($audiences) ||
             !in_array($this->clientId,$audiences,true) ||
             (count($audiences)>1 && ($claims['azp']??null)!==$this->clientId) ||
@@ -208,7 +216,7 @@ final class OidcClient
             !is_int($claims['exp']??null) || $claims['exp']<=$now || $claims['exp']>$now+3600 ||
             !is_string($claims['jti']??null) || strlen($claims['jti'])<8 || strlen($claims['jti'])>255 ||
             !preg_match('/\A[\x21-\x7e]+\z/D',$claims['jti']) ||
-            array_key_exists('nonce',$claims) || !($event instanceof \stdClass) ||
+            array_key_exists('nonce',$claims) || !$validEvent ||
             ($sub===null && $sid===null) ||
             ($sub!==null && (!is_string($sub)||strlen($sub)<1||strlen($sub)>255||preg_match('/[\x00-\x1f\x7f]/',$sub))) ||
             ($sid!==null && (!is_string($sid)||strlen($sid)<1||strlen($sid)>255||preg_match('/[\x00-\x1f\x7f]/',$sid)))) {
@@ -286,6 +294,25 @@ final class OidcClient
         try { $result = json_decode($raw, true, 32, JSON_THROW_ON_ERROR); }
         catch (\JsonException) { throw new \RuntimeException('Invalid SkiF4er ID JSON'); }
         return self::object($result);
+    }
+
+    /** OIDC aud is a string or a nonempty JSON array of distinct strings, never an object. */
+    private static function audiences(mixed $aud): array
+    {
+        $items = is_string($aud) ? [$aud] : $aud;
+        if (!is_array($items) || !array_is_list($items) || $items === [] || count($items) > 16) {
+            throw new \RuntimeException('Invalid OIDC token audience');
+        }
+        foreach ($items as $audience) {
+            if (!is_string($audience) || $audience === '' || strlen($audience) > 255 ||
+                preg_match('/[\x00-\x1f\x7f]/', $audience)) {
+                throw new \RuntimeException('Invalid OIDC token audience');
+            }
+        }
+        if (count(array_unique($items)) !== count($items)) {
+            throw new \RuntimeException('Duplicate OIDC token audience');
+        }
+        return $items;
     }
 
     private static function random(): string { return self::b64(random_bytes(32)); }

@@ -19,7 +19,7 @@ try {
     $app=new Lite($root);
     $app->install('ExtremelyStrongPassword123','https://example.org','Test analytics');
     $state=$app->load();
-    check111(Lite::VERSION==='1.1.8' && $state['schema']===12 && SiteState::SCHEMA===12,'1.1.1 schema');
+    check111(Lite::VERSION==='1.1.9' && $state['schema']===12 && SiteState::SCHEMA===12,'1.1.1 schema');
     check111($state['reporting']===ReportConfig::DEFAULTS,'reporting defaults');
     // A real 1.1.0 state migrates under lock; a verified snapshot of schema 8 remains.
     $legacy=$state;

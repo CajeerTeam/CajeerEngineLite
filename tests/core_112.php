@@ -106,7 +106,7 @@ mkdir($root,0700,true);
 try {
     $app=new Lite($root);
     $app->install('ExtremelyStrongPassword123',$origin,'OIDC integration');
-    expect112(Lite::VERSION==='1.1.8' && SiteState::SCHEMA===12 && $app->load()['identity']['owner']===null, 'new install identity');
+    expect112(Lite::VERSION==='1.1.9' && SiteState::SCHEMA===12 && $app->load()['identity']['owner']===null, 'new install identity');
     $legacy=$app->load();
     $legacy['pages']['/auth/legacy']=Lite::page(['path'=>'/auth/legacy','title'=>'Legacy auth content','body'=>'Preserved','published'=>'1','menu'=>'0']);
     unset($legacy['identity']); $legacy['schema']=9;
