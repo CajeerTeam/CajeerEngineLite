@@ -23,7 +23,7 @@ try {
     $app = new Lite($root);
     $app->install('VeryStrongPassword123', 'https://example.org', 'Matomo 1.0.8');
     $state = $app->load();
-    check108(Lite::VERSION === '1.0.8' && SiteState::SCHEMA === 8 && $state['schema'] === 8, 'version/schema');
+    check108(Lite::VERSION === '1.0.9' && SiteState::SCHEMA === 8 && $state['schema'] === 8, 'version/schema');
     check108($state['integrations']['matomo'] === MatomoConfig::DEFAULTS, 'missing defaults');
     check108(!str_contains((new Lite(dirname(__DIR__)))->render($state, $state['pages']['/']), '/assets/matomo.js'), 'disabled Matomo published');
     foreach ([

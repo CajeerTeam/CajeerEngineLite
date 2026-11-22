@@ -122,14 +122,18 @@
 
   function goal(name, params = {}) {
     if (!allowed || reloading || !preference() || !initialized || !validGoal(name) ||
+        (/[0-9]{7,}/.test(name)) ||
         !params || typeof params !== 'object' || Array.isArray(params)) return false;
     const entries = Object.entries(params);
     if (entries.length > 10) return false;
     const safe = Object.create(null);
     for (const [key, value] of entries) {
       if (!/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(key) ||
-          !((typeof value === 'string' && value.length <= 100 && !/[<>]/.test(value)) ||
-            (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean')) return false;
+          /(?:email|phone|address|user|token|secret|password|ip_address|identifier|location|url|href|referrer|name|search|query|session|client_id)/i.test(key) ||
+          !((typeof value === 'string' && value.length <= 80 &&
+              /^[\p{L}\p{N} _.-]*$/u.test(value) && !/[0-9]{7,}/.test(value)) ||
+            (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e9) ||
+            typeof value === 'boolean')) return false;
       safe[key] = value;
     }
     if (entries.length) window.ym(id, 'reachGoal', name, safe);
@@ -140,8 +144,7 @@
   function hit(path) {
     if (!allowed || reloading || !preference() || !initialized ||
         typeof path !== 'string' || path.length > 1024 ||
-        !/^\/(?:[A-Za-z0-9_./~-]|%[0-9A-Fa-f]{2})*$/.test(path) ||
-        path.includes('..')) return false;
+        !/^\/[A-Za-z0-9_\/-]*$/.test(path) || /[0-9]{7,}/.test(path)) return false;
     window.ym(id, 'hit', location.origin + path, { title: document.title.slice(0, 200) });
     return true;
   }

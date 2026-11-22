@@ -5,7 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
-use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig};
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics};
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -15,6 +15,8 @@ function input(string $name,string $value='',string $type='text'): string { retu
 function token(): string { return '<input type="hidden" name="csrf" value="'.e($_SESSION['csrf']).'">'; }
 function form(string $action,string $html): string { return '<form method="post" action="/admin">'.token().'<input type="hidden" name="action" value="'.e($action).'">'.$html.'</form>'; }
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin'); header('X-Frame-Options: DENY');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
+header('Cross-Origin-Opener-Policy: same-origin');
 header("Content-Security-Policy: default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 header('Content-Type: text/html; charset=utf-8');
 try {
@@ -204,6 +206,24 @@ try {
         if (!$c['enabled']) $matomoForm.='<p class="error">Cookie Consent выключен: Matomo останется заблокированным.</p>';
         $matomoForm.='<button>Сохранить Matomo</button>';
         $html.=form('matomo',$matomoForm);
+        // Live diagnostics on the authenticated admin page; no publicly reachable
+        // debug endpoint, secrets or third-party network fetches.
+        $report=IntegrationDiagnostics::run($app->root,$d);
+        $html.='<section><h2>Диагностика интеграций</h2>';
+        $html.='<p>'.($report['ok'] ? 'Локальные проверки: успешно.' :
+            'Есть ошибки файлов или конфигурации. Используйте CLI integrations check.').'</p><ul>';
+        foreach ($report['providers'] as $name => $status) {
+            $html.='<li>'.e(strtoupper($name)).': '.e($status).'</li>';
+        }
+        $html.='</ul>';
+        foreach ($report['checks'] as $check) {
+            if ($check['status'] !== 'pass') {
+                $html.='<p class="'.($check['status'] === 'fail' ? 'error' : 'notice').'">'.
+                    e(strtoupper($check['status']).': '.$check['message']).'</p>';
+            }
+        }
+        $html.='<p>Подробные результаты: php bin/cajeer integrations check --json. '.
+            'Проверка не подтверждает доставку событий во внешние сервисы.</p></section>';
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
@@ -213,62 +233,8 @@ try {
     if ($path!==$raw) { header('Location: '.$path,true,301); exit; }
     // Personalized consent state must never be shared via a public intermediary cache.
     header('Cache-Control: private, no-store');
-    // The admin area remains script-free. Public provider allowlists are emitted only
-    // for configured integrations; first-party runtimes still require visitor opt-in
-    // before requesting any third-party endpoint.
-    $scripts=["'self'"]; $connections=["'self'"]; $images=["'self'"];
-    $frame="frame-src 'none'"; $child="child-src 'none'";
-    $frameAncestors="frame-ancestors 'none'";
-    if (GA4Config::active($d) || GTMConfig::active($d)) {
-        $scripts[]='https://www.googletagmanager.com';
-        array_push($connections,'https://www.googletagmanager.com','https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
-        array_push($images,'https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
-    }
-    if (ClarityConfig::active($d)) {
-        $scripts[]='https://www.clarity.ms';
-        $connections[]='https://*.clarity.ms';
-        $connections[]='https://www.clarity.ms';
-        $images[]='https://*.clarity.ms';
-        $images[]='https://www.clarity.ms';
-    }
-    if (MatomoConfig::active($d)) {
-        $mt = $d['integrations']['matomo'];
-        $scriptUrl = MatomoConfig::scriptUrl($mt);
-        $trackerUrl = MatomoConfig::trackerUrl($mt);
-        $scriptParts = parse_url($scriptUrl);
-        $trackerParts = parse_url($trackerUrl);
-        $scriptOrigin = $scriptParts['scheme'].'://'.$scriptParts['host'].(isset($scriptParts['port']) ? ':'.$scriptParts['port'] : '');
-        $trackerOrigin = $trackerParts['scheme'].'://'.$trackerParts['host'].(isset($trackerParts['port']) ? ':'.$trackerParts['port'] : '');
-        $scripts[] = $scriptOrigin;
-        $connections[] = $trackerOrigin;
-        $images[] = $trackerOrigin;
-    }
-    if (MetricaConfig::active($d)) {
-        // Official provider endpoints include regional hosts and Webvisor domains.
-        $mc=['mc.yandex.ru','mc.yandex.az','mc.yandex.by','mc.yandex.co.il',
-            'mc.yandex.com','mc.yandex.com.am','mc.yandex.com.ge','mc.yandex.com.tr',
-            'mc.yandex.ee','mc.yandex.fr','mc.yandex.kg','mc.yandex.kz',
-            'mc.yandex.lt','mc.yandex.lv','mc.yandex.md','mc.yandex.tj',
-            'mc.yandex.tm','mc.yandex.uz','mc.webvisor.com','mc.webvisor.org'];
-        foreach ($mc as $host) {
-            $url='https://'.$host;
-            $connections[]=$url; $connections[]='wss://'.$host; $images[]=$url;
-            $scripts[]=$url;
-        }
-        $scripts[]='https://yastatic.net';
-        $frame="frame-src blob: https://mc.yandex.ru https://mc.webvisor.com https://mc.webvisor.org";
-        $child="child-src blob: https://mc.yandex.ru https://mc.webvisor.com https://mc.webvisor.org";
-        if ($d['integrations']['metrica']['webvisor']) {
-            // Yandex's official CSP guidance requires its replay interfaces to
-            // frame PUBLIC pages. Never relax the admin response headers.
-            header_remove('X-Frame-Options');
-            $frameAncestors="frame-ancestors 'self' https://metrika.yandex.ru https://metrica.yandex.ru https://metrica.yandex.com https://metrika.yandex.com https://metrika.yandex.kz https://metrica.yandex.kz https://metrika.yandex.by https://metrica.yandex.by https://metrika.yandex.com.tr https://metrica.yandex.com.tr https://metrica.ya.ru https://metrika.ya.ru";
-        }
-    }
-    header("Content-Security-Policy: default-src 'self'; script-src ".implode(' ',array_unique($scripts)).
-        "; connect-src ".implode(' ',array_unique($connections)).
-        "; img-src ".implode(' ',array_unique($images)).
-        "; style-src 'self'; ".$frame.'; '.$child.
-        "; object-src 'none'; base-uri 'none'; ".$frameAncestors."; form-action 'self'");
+    $csp = PublicCsp::headers($d);
+    if ($csp['webvisor_frames']) header_remove('X-Frame-Options');
+    header('Content-Security-Policy: '.$csp['policy']);
     echo $app->render($d,$d['pages'][$path]);
 } catch(Throwable $ex) { error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }

@@ -33,12 +33,12 @@ with tempfile.TemporaryDirectory(prefix='lite-104-ui-') as folder:
         });
         $s=$app->load(); echo $app->render($s,$s['pages']['/']);'''
     html = subprocess.check_output(['php', '-r', configure], cwd=root, text=True)
-    tag = re.search(r'<script defer src="/assets/ga4.js\?v=104" ([^>]*)></script>', html)
+    tag = re.search(r'<script defer src="/assets/ga4.js\?v=109" ([^>]*)></script>', html)
     assert tag, 'GA4 runtime missing from PHP rendered template'
     ga4attrs = dict(re.findall(r'data-ga4-([a-z]+)="([^"]*)"', tag.group(1)))
     assert ga4attrs['id'] == 'G-1234567890' and ga4attrs['pageviews'] == '1', ga4attrs
     html = re.sub(r'<script defer src="/assets/(?:consent|ga4).js\?v=\d+"></script>', '', html)
-    html = re.sub(r'<script defer src="/assets/ga4.js\?v=104" [^>]*></script>', '', html)
+    html = re.sub(r'<script defer src="/assets/ga4.js\?v=109" [^>]*></script>', '', html)
     html = html.replace('<link rel="stylesheet" href="/assets/style.css">', '')
     consentjs = (root/'public/assets/consent.js').read_text()
     ga4js = (root/'public/assets/ga4.js').read_text()

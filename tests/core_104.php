@@ -22,7 +22,7 @@ try {
     $app=new Lite($root);
     $app->install('TestPassword123','https://example.org','GA4 example');
     $d=$app->load();
-    assert104(Lite::VERSION==='1.0.8' && SiteState::SCHEMA===8 && $d['schema']===8,'version/schema');
+    assert104(Lite::VERSION==='1.0.9' && SiteState::SCHEMA===8 && $d['schema']===8,'version/schema');
     assert104($d['integrations']['ga4']===GA4Config::DEFAULTS,'default GA4 settings');
     assert104(!str_contains((new Lite(dirname(__DIR__)))->render($d,$d['pages']['/']),'/assets/ga4.js'),'disabled GA4 rendered');
     reject104(fn()=>GA4Config::fromPost(['enabled'=>'1','measurement_id'=>'G-NOT!SAFE']), 'injection ID');
@@ -36,7 +36,7 @@ try {
     $state=$app->load();
     $_COOKIE['cajeer_lite_consent']='v1.1.'.time().'.0';
     $html=(new Lite(dirname(__DIR__)))->render($state,$state['pages']['/']);
-    assert104(str_contains($html, '/assets/ga4.js?v=104') && str_contains($html,'data-ga4-id="G-1234567890"'), 'ga4 script not rendered');
+    assert104(str_contains($html, '/assets/ga4.js?v=109') && str_contains($html,'data-ga4-id="G-1234567890"'), 'ga4 script not rendered');
     unset($_COOKIE['cajeer_lite_consent']);
     $state['consent']['enabled']=false;
     assert104(!str_contains((new Lite(dirname(__DIR__)))->render($state,$state['pages']['/']), '/assets/ga4.js'), 'disabled consent must block GA4');

@@ -62,7 +62,20 @@ final class SiteRepository
     public function exclusive(callable $fn): mixed
     {
         if ($this->locked) throw new \LogicException('Nested site transaction');
-        OperationFiles::dir($this->root.'/storage', 0700);
+        $storage = OperationFiles::path($this->root, 'storage');
+        OperationFiles::dir($storage, 0700);
+        // An unpacked release often gives storage/ mode 0755. Before any
+        // installation or writer transaction, make it private for site.json,
+        // backups and lock data; never loosen private existing permissions.
+        $permissions = @fileperms($storage);
+        if ($permissions === false ||
+            (($permissions & 0077) !== 0 && !@chmod($storage, 0700))) {
+            throw new \RuntimeException('Cannot secure private storage directory (0700)');
+        }
+        clearstatcache(true, $storage);
+        if ((fileperms($storage) & 0077) !== 0) {
+            throw new \RuntimeException('Private storage directory is not 0700');
+        }
         $lock = OperationLock::openLockFile(OperationFiles::path($this->root, 'storage/site.lock'), 0600);
         try {
             if (!flock($lock, LOCK_EX)) throw new \RuntimeException('Cannot lock site state');

@@ -28,6 +28,7 @@ jobs:
       - run: php tests/core_106.php
       - run: php tests/core_107.php
       - run: php tests/core_108.php
+      - run: php tests/core_109.php
       - run: bash tests/http.sh
   browser:
     runs-on: ubuntu-latest
@@ -42,8 +43,10 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install playwright
       - run: python -m playwright install --with-deps chromium
+      - run: python tests/browser_103.py
       - run: python tests/browser_104.py
       - run: python tests/browser_105.py
       - run: python tests/browser_106.py
       - run: python tests/browser_107.py
       - run: python tests/browser_108.py
+      - run: python tests/browser_109.py

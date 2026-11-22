@@ -23,7 +23,7 @@ try {
     $app = new Lite($root);
     $app->install('StrongPassword123','https://example.org','GTM test');
     $s = $app->load();
-    check106(Lite::VERSION === '1.0.8' && SiteState::SCHEMA === 8 && $s['schema'] === 8,'version/schema');
+    check106(Lite::VERSION === '1.0.9' && SiteState::SCHEMA === 8 && $s['schema'] === 8,'version/schema');
     check106($s['integrations']['gtm'] === GTMConfig::DEFAULTS,'default GTM config');
     check106(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/gtm.js'),'disabled GTM loaded');
     foreach ([

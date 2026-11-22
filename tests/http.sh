@@ -163,5 +163,17 @@ if curl -fsSI "$base/" | grep_all -i 'stats.example.org'; then echo 'Matomo CSP 
 get / | grep_all '/assets/matomo.js'
 [[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&mode=onpremise&server_url=https://stats.example.org/matomo/&site_id=5" "$base/admin") == 303 ]]
 get / | grep_all -v '/assets/matomo.js'
+# 1.0.9 runtime diagnostics, restrictive headers and machine-readable report.
+php bin/cajeer integrations check --json | php -r '
+    $r=json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR);
+    if (!$r["ok"] || !isset($r["providers"]["matomo"]) || count($r["checks"]) < 12) exit(1);
+'
+php bin/cajeer integrations check | grep_all 'Integration diagnostics: OK'
+curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/admin-diagnostics"
+grep_all 'Диагностика интеграций' "$tmp/admin-diagnostics"
+curl -fsSI "$base/admin" | grep_all -i 'Permissions-Policy: camera=()'
+curl -fsSI "$base/admin" | grep_all -i 'Cross-Origin-Opener-Policy: same-origin'
+curl -fsSI "$base/" | grep_all -i "script-src-attr 'none'"
+curl -fsSI "$base/admin" | grep_all -i "script-src 'none'"
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

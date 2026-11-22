@@ -118,21 +118,31 @@
     else if (granted) stop();
   }
 
+  // Never accept personally identifying keys, email/phone/URL strings, or
+  // long numeric identifiers from arbitrary callers of the public event API.
+  // Legitimate business events should use short symbolic labels or numbers.
+  function safeParam(key, value) {
+    if (!/^[a-z][a-z0-9_]{0,39}$/.test(key) ||
+        /(?:email|phone|address|user|token|secret|password|ip_address|identifier|location|url|href|referrer|name|search|query|session|client_id)/.test(key) ||
+        ['send_to', 'event', 'page_location', 'page_referrer', 'user_id'].includes(key)) return false;
+    if (typeof value === 'boolean') return true;
+    if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= 1e9;
+    return typeof value === 'string' && value.length <= 80 &&
+      /^[\p{L}\p{N} _.-]*$/u.test(value) && !/[0-9]{7,}/.test(value);
+  }
+
   function track(name, params = {}) {
     if (!granted || !consentState() || !initialized ||
         typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(name) ||
         /^(ga_|google_|firebase_)/.test(name) ||
         ['page_view', 'session_start', 'first_visit', 'user_engagement'].includes(name) ||
+        (/[0-9]{7,}/.test(name)) ||
         !params || typeof params !== 'object' || Array.isArray(params)) return false;
     const entries = Object.entries(params);
     if (entries.length > 25) return false;
     const properties = { send_to: id };
     for (const [key, value] of entries) {
-      if (!/^[a-z][a-z0-9_]{0,39}$/.test(key) || key === 'send_to' ||
-          /^(ga_|google_|firebase_)/.test(key) ||
-          !((typeof value === 'string' && value.length <= 100) ||
-            (typeof value === 'number' && Number.isFinite(value)) ||
-            typeof value === 'boolean')) return false;
+      if (!safeParam(key, value)) return false;
       properties[key] = value;
     }
     gtag('event', name, properties);
