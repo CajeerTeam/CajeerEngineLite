@@ -14,4 +14,5 @@ jobs:
       - run: find . -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: php -l bin/cajeer
       - run: php tests/smoke.php
+      - run: php tests/core_210.php
       - run: bash tests/http.sh

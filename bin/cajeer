@@ -12,7 +12,7 @@ try {
         case 'doctor':
             if (version_compare(PHP_VERSION,'8.4.1','<')) throw new RuntimeException('PHP 8.4.1+ required');
             if (!is_file($app->file())) throw new RuntimeException('Not installed');
-            $app->load(); if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable'); echo "OK\n"; break;
-        default: echo "CajeerEngine Lite ".CajeerEngine\Lite::VERSION."\nphp bin/cajeer install [url] [name]\nphp bin/cajeer doctor\n";
+            $app->load(); if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable'); echo "OK (Lite ".CajeerEngine\Lite::VERSION.", core baseline ".CajeerEngine\Lite::ENGINE_BASE_VERSION.")\n"; break;
+        default: echo "CajeerEngine Lite ".CajeerEngine\Lite::VERSION." (CajeerEngine core ".CajeerEngine\Lite::ENGINE_BASE_VERSION.")\nphp bin/cajeer install [url] [name]\nphp bin/cajeer doctor\n";
     }
 } catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

@@ -2,41 +2,39 @@
 declare(strict_types=1);
 namespace CajeerEngine;
 use CajeerEngine\Public\PublicPath;
+use CajeerEngine\Update\{OperationFiles,OperationLock};
 use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.0.1';
+    /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
+    public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
     public function file(): string { return $this->root.'/storage/site.json'; }
     public function load(): array {
-        $raw = file_get_contents($this->file());
-        if ($raw === false) throw new \RuntimeException('Cannot read site');
-        $d = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        // Reject a substituted state file or a symlinked storage path.
+        $path = OperationFiles::path($this->root, 'storage/site.json');
+        $d = OperationFiles::read($path);
         if (!is_array($d) || ($d['schema'] ?? null) !== 1) throw new \RuntimeException('Invalid site schema');
         return $d;
     }
     // A stable lock file serializes read-modify-write transactions; atomic rename protects readers.
     public function change(callable $fn): array {
         $dir = dirname($this->file());
-        if (is_link($dir) || (!is_dir($dir) && !mkdir($dir, 0700, true))) throw new \RuntimeException('Storage unavailable');
-        if (is_link($this->file()) || is_link($dir.'/site.lock')) throw new \RuntimeException('Unsafe storage');
-        $lock = fopen($dir.'/site.lock', 'c');
-        if (!$lock) throw new \RuntimeException('Cannot open lock');
-        $tmp = null;
+        // CajeerEngine 2.1.0 primitives reject symlinks in *ancestor* directories,
+        // and bind the lock descriptor to the on-disk regular-file identity.
+        OperationFiles::dir($dir, 0700);
+        $lock = OperationLock::openLockFile($dir.'/site.lock', 0600);
         try {
             if (!flock($lock, LOCK_EX)) throw new \RuntimeException('Cannot lock');
+            if (is_link($this->file())) throw new \RuntimeException('Unsafe storage');
             $data = $fn(is_file($this->file()) ? $this->load() : null);
             $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
             if (strlen($json)>4_000_000) throw new \InvalidArgumentException('Site exceeds 4 MB');
-            $tmp = $dir.'/.tmp-'.bin2hex(random_bytes(12));
-            $h = fopen($tmp, 'xb');
-            if (!$h) throw new \RuntimeException('Cannot write');
-            try { if (!chmod($tmp, 0600) || fwrite($h,$json)!==strlen($json) || !fflush($h) || !fsync($h)) throw new \RuntimeException('Cannot save'); }
-            finally { fclose($h); }
-            if (!rename($tmp,$this->file())) throw new \RuntimeException('Cannot replace site');
+            OperationFiles::write($this->file(), $json, 0600);
             return $data;
-        } finally { if ($tmp && is_file($tmp)) unlink($tmp); fclose($lock); }
+        } finally { flock($lock, LOCK_UN); fclose($lock); }
     }
     public static function esc(string $s): string { return htmlspecialchars($s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
     public static function field(array $a,string $key,int $max,bool $required=false): string {
