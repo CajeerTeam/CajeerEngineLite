@@ -75,4 +75,4 @@ WORKER);
     $raw=file_get_contents($root.'/storage/auth/sessions.json');
     ensure119(!str_contains($raw,'RaceSafetyPassword119') && !str_contains($raw,'racing-owner'), 'registry contains no secrets or user identities');
 } finally { clean119($root); }
-echo "Lite 1.1.9 multi-process owner CAS and 10 simultaneous session writes OK\n";
+echo "Lite 1.2.0 multi-process owner CAS and 10 simultaneous session writes OK\n";

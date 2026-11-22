@@ -69,4 +69,4 @@ csrf=$(csrf_from "$tmp/fresh.login")
 [[ $(http_status -b "$tmp/fresh.cookie" -c "$tmp/fresh.cookie" \
   -d "action=login&csrf=$csrf&password=NewPasswordForHTTP119%21" "$base/admin") == 303 ]]
 [[ $(http_status -b "$tmp/a.cookie" -d "action=modules&csrf=$csrf" "$base/admin") == 403 ]]
-echo 'Lite 1.1.9 HTTP two-device revocation, SSO-only restore safety, acceptance CLI and recovery OK'
+echo 'Lite 1.2.0 HTTP two-device revocation, SSO-only restore safety, acceptance CLI and recovery OK'

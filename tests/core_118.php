@@ -15,7 +15,7 @@ function remove118(string $path): void {
     if (is_link($path)||is_file($path)) {unlink($path);return;}
     if (is_dir($path)) {foreach(new FilesystemIterator($path) as $entry) remove118($entry->getPathname());rmdir($path);}
 }
-assert118(Lite::VERSION==='1.1.9' && SiteState::SCHEMA===12,'version and unchanged schema');
+assert118(Lite::VERSION==='1.2.0' && SiteState::SCHEMA===12,'version and unchanged schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 assert118($key instanceof OpenSSLAsymmetricKey,'OpenSSL RSA');
 $info=openssl_pkey_get_details($key);

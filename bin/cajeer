@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Auth\{RecoveryService,AuthAcceptance};
+use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
@@ -62,22 +62,45 @@ try {
             if (!$report['ok']) exit(1);
             break;
         case 'auth':
-            if (($argv[2] ?? null) !== 'check' || count($argv) > 4 ||
-                (count($argv) === 4 && $argv[3] !== '--json')) {
-                throw new InvalidArgumentException('Usage: auth check [--json]');
-            }
-            $report = AuthAcceptance::run($app->root, $app->load());
-            if (($argv[3] ?? null) === '--json') {
-                echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
-            } else {
-                foreach ($report['checks'] as $check) {
-                    echo strtoupper($check['status']).' '.$check['id'].': '.$check['message']."\n";
+            $operation = $argv[2] ?? null;
+            if ($operation === 'check') {
+                if (count($argv) > 4 || (isset($argv[3]) && $argv[3] !== '--json')) {
+                    throw new InvalidArgumentException('Usage: auth check [--json]');
                 }
-                foreach ($report['manual'] as $step) echo 'MANUAL '.$step."\n";
-                echo $report['ok'] ? "Authentication local checks: PASS (live IdP acceptance pending)\n" :
-                    "Authentication local checks: FAIL\n";
+                $report = AuthAcceptance::run($app->root, $app->load());
+                if (($argv[3] ?? null) === '--json') {
+                    echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
+                } else {
+                    foreach ($report['checks'] as $check) {
+                        echo strtoupper($check['status']).' '.$check['id'].': '.$check['message']."\n";
+                    }
+                    foreach ($report['manual'] as $step) echo 'MANUAL '.$step."\n";
+                    echo $report['ok'] ? "Authentication local checks: PASS (live IdP acceptance pending)\n" :
+                        "Authentication local checks: FAIL\n";
+                }
+                if (!$report['ok']) exit(1);
+            } elseif ($operation === 'release-check') {
+                $options = array_slice($argv,3);
+                if (count($options) > 2 || count($options) !== count(array_unique($options)) ||
+                    array_diff($options,['--json','--live'])) {
+                    throw new InvalidArgumentException('Usage: auth release-check [--json] [--live]');
+                }
+                $report=StableAcceptance::run($app->root,$app->load(),in_array('--live',$options,true));
+                if (in_array('--json',$options,true)) {
+                    echo json_encode($report,JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
+                } else {
+                    foreach ($report['checks'] as $check) {
+                        echo strtoupper($check['status']).' '.$check['id'].': '.$check['message']."\n";
+                    }
+                    foreach ($report['manual'] as $step) echo 'MANUAL '.$step."\n";
+                    echo 'Release readiness: '.strtoupper($report['status'])."\n";
+                }
+                // Never use a successful exit code to imply live owner/Keycloak acceptance.
+                if (!$report['automated_ok']) exit(1);
+                if (!$report['production_accepted']) exit(2);
+            } else {
+                throw new InvalidArgumentException('Usage: auth check [--json] | auth release-check [--json] [--live]');
             }
-            if (!$report['ok']) exit(1);
             break;
         case 'analytics':
             $operation=$argv[2]??'';
@@ -155,6 +178,7 @@ try {
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
                  "php bin/cajeer release check [--json]\nphp bin/cajeer auth check [--json]\n".
+                 "php bin/cajeer auth release-check [--json] [--live]\n".
                  "php bin/cajeer analytics refresh|status [--days=7]\n";
     }
 } catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

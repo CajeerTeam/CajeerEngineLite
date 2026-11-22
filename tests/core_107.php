@@ -23,7 +23,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123','https://example.org','Clarity test');
     $s=$app->load();
-    check107(Lite::VERSION==='1.1.9' && SiteState::SCHEMA===12 && $s['schema']===12,'version/schema');
+    check107(Lite::VERSION==='1.2.0' && SiteState::SCHEMA===12 && $s['schema']===12,'version/schema');
     check107($s['integrations']['clarity']===ClarityConfig::DEFAULTS,'defaults');
     check107(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/clarity.js'),'disabled tracker rendered');
     foreach ([

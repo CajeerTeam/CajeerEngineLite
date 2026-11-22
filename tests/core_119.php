@@ -20,7 +20,7 @@ function del119(string $path): void {
 }
 function origin119(): string { return 'https://lite.example.test'; }
 
-ok119(Lite::VERSION === '1.1.9' && SiteState::SCHEMA === 12, 'version and compatible schema');
+ok119(Lite::VERSION === '1.2.0' && SiteState::SCHEMA === 12, 'version and compatible schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 ok119($key instanceof OpenSSLAsymmetricKey, 'RSA key generation');
 $details=openssl_pkey_get_details($key);
@@ -194,4 +194,4 @@ try {
     putenv('CAJEER_OIDC_CLIENT_ID'); putenv('CAJEER_OIDC_CLIENT_SECRET');
     del119($root);
 }
-echo "Lite 1.1.9 signed OIDC/logout, migrations 9-12, owner, devices, SSO-only, backup and CLI recovery OK\n";
+echo "Lite 1.2.0 signed OIDC/logout, migrations 9-12, owner, devices, SSO-only, backup and CLI recovery OK\n";

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy};
+use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
@@ -469,6 +469,23 @@ try {
                     '<button>Изменить способ входа</button>');
         } else {
             $html.='<p>Изменение режима недоступно: сначала привяжите аккаунт владельца и настройте HTTPS OIDC.</p>';
+        }
+        $html.='</section>';
+        // On-demand local release diagnostics. No IdP requests from a page view,
+        // and detailed results are visible only to a valid admin session.
+        $html.='<section><h2>SkiF4er ID — приёмка 1.2.0</h2>'.
+            '<p>Сетевую проверку Discovery, JWKS и публичного HTTPS запускайте через CLI: '.
+            '<code>php bin/cajeer auth release-check --live --json</code>. '.
+            'Успешная диагностика не заменяет реальный вход и выход на staging.</p>'.
+            '<p><a href="/admin?auth_acceptance=1">Проверить локальную готовность</a></p>';
+        if (($_GET['auth_acceptance'] ?? null) === '1') {
+            $report=StableAcceptance::run($app->root,$d);
+            $html.='<p>Статус: <strong>'.e($report['status']).'</strong>; '.
+                'окончательная приёмка требует проверки на staging.</p><ul>';
+            foreach ($report['checks'] as $check) {
+                $html.='<li>'.e(strtoupper($check['status']).' '.$check['id'].' — '.$check['message']).'</li>';
+            }
+            $html.='</ul>';
         }
         $html.='</section>';
         $devices=$sessions->devices($_SESSION,$d);

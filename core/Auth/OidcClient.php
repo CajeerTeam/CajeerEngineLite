@@ -104,6 +104,14 @@ final class OidcClient
             preg_match('/[\x00-\x20\x7f]/', $accessToken) ||
             !is_string($response['token_type'] ?? null) || strcasecmp($response['token_type'], 'Bearer') !== 0) throw new \RuntimeException('Invalid OIDC token response');
         $claims = $this->verifyIdToken($idToken, $transaction['nonce'], $accessToken);
+        // Some providers include c_hash even in a code-flow token response.
+        // When present it binds the signed identity to this exact authorization code.
+        if (array_key_exists('c_hash', $claims)) {
+            $expectedHash = self::b64(substr(hash('sha256', $code, true), 0, 16));
+            if (!is_string($claims['c_hash']) || !hash_equals($expectedHash, $claims['c_hash'])) {
+                throw new \RuntimeException('Invalid authorization code binding');
+            }
+        }
         if (($transaction['mode'] ?? 'login') !== 'login' &&
             (!is_int($claims['auth_time'] ?? null) || $claims['auth_time'] > time()+60 ||
                 $claims['auth_time'] < time()-300)) {
@@ -223,6 +231,49 @@ final class OidcClient
             throw new \RuntimeException('Invalid OIDC Logout Token claims');
         }
         return $claims;
+    }
+
+    /** Live, read-only provider capability test. This does not authenticate a user.
+     * Only exact built-in SkiF4er ID endpoints can be contacted; no secrets are logged.
+     * @return array{issuer:string,redirect_uri:string,signing_keys:int,logout:bool,backchannel_advertised:bool}
+     */
+    public function probeProvider(): array
+    {
+        $metadata = $this->discovery();
+        if (($metadata['end_session_endpoint'] ?? null) !== self::LOGOUT ||
+            (isset($metadata['id_token_signing_alg_values_supported']) &&
+             (!is_array($metadata['id_token_signing_alg_values_supported']) ||
+              !in_array('RS256', $metadata['id_token_signing_alg_values_supported'], true)))) {
+            throw new \RuntimeException('SkiF4er ID does not advertise the required logout and RS256 capabilities');
+        }
+        $jwks = $this->request(self::JWKS);
+        $keys = $jwks['keys'] ?? null;
+        if (!is_array($keys) || !array_is_list($keys) || count($keys) > 40) {
+            throw new \RuntimeException('Invalid SkiF4er ID signing keys');
+        }
+        $usable = 0;
+        $kids = [];
+        foreach ($keys as $key) {
+            if (!is_array($key) || ($key['kty'] ?? null) !== 'RSA' ||
+                (isset($key['use']) && $key['use'] !== 'sig') ||
+                (isset($key['alg']) && $key['alg'] !== 'RS256')) continue;
+            $kid = $key['kid'] ?? null;
+            if (!is_string($kid) || strlen($kid) < 1 || strlen($kid) > 128 || isset($kids[$kid])) {
+                throw new \RuntimeException('Ambiguous SkiF4er ID signing key');
+            }
+            if (preg_match('/[^\x21-\x7e]/', $kid) ||
+                (isset($key['key_ops']) && (!is_array($key['key_ops']) ||
+                    !in_array('verify', $key['key_ops'], true)))) {
+                throw new \RuntimeException('Invalid signing key attributes');
+            }
+            $kids[$kid] = true;
+            self::rsaPublicKey($key); // Validate a real RSA 2048+ public key, not a declaration.
+            ++$usable;
+        }
+        if ($usable === 0) throw new \RuntimeException('No usable SkiF4er ID RS256 signing keys');
+        return ['issuer' => self::ISSUER, 'redirect_uri' => $this->redirectUri,
+            'signing_keys' => $usable, 'logout' => true,
+            'backchannel_advertised' => ($metadata['backchannel_logout_supported'] ?? false) === true];
     }
 
     /** Provider-controlled logout destination, never a user-supplied URL. */
@@ -355,6 +406,9 @@ final class OidcClient
         $pem = "-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($spki), 64)."-----END PUBLIC KEY-----\n";
         $key = openssl_pkey_get_public($pem);
         if (!$key instanceof \OpenSSLAsymmetricKey) throw new \RuntimeException('Invalid RSA public key');
+        $details=openssl_pkey_get_details($key);
+        if (!is_array($details) || ($details['type'] ?? null)!==OPENSSL_KEYTYPE_RSA ||
+            ($details['bits'] ?? 0)<2048) throw new \RuntimeException('RSA signing key is too weak');
         return $key;
     }
 }

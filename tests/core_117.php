@@ -17,7 +17,7 @@ function rm117(string $path): void {
     if (is_dir($path)) { foreach (new DirectoryIterator($path) as $entry) if (!$entry->isDot()) rm117($entry->getPathname()); rmdir($path); }
 }
 
-assert117(Lite::VERSION==='1.1.9' && SiteState::SCHEMA===12,'application version and schema');
+assert117(Lite::VERSION==='1.2.0' && SiteState::SCHEMA===12,'application version and schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 assert117($key instanceof OpenSSLAsymmetricKey,'RSA test key');
 $details=openssl_pkey_get_details($key);

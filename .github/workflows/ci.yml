@@ -39,9 +39,11 @@ jobs:
       - run: php tests/core_117.php
       - run: php tests/core_118.php
       - run: php tests/core_119.php
+      - run: php tests/core_120.php
       - run: php tests/auth_concurrency_119.php
       - run: bash tests/auth_hardening_http.sh
       - run: bash tests/auth_acceptance_http.sh
+      - run: bash tests/auth_release_http.sh
       - run: bash tests/auth_policy_http.sh
       - run: bash tests/recovery_cli.sh
       - run: bash tests/http.sh
