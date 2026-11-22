@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
+use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
@@ -101,6 +102,29 @@ try {
                         $d['integrations']['matomo'] = $config;
                         return $d;
                     }); go('/admin');
+                }
+                elseif ($action==='analytics_settings') {
+                    $config=ReportConfig::fromPost($_POST);
+                    $app->change(static function(array $state) use ($config): array {
+                        $state['reporting']=$config;
+                        return $state;
+                    });
+                    go('/admin?analytics=1');
+                }
+                elseif ($action==='analytics_refresh') {
+                    $days=filter_var($_POST['days']??null,FILTER_VALIDATE_INT);
+                    if ($days===false) throw new InvalidArgumentException('Invalid report days');
+                    ReportService::days($days);
+                    // Administrator-triggered only; bounded provider calls, errors isolated per provider.
+                    $state=$app->load();
+                    $cache=new ReportCache($app->root);
+                    $previous=$cache->read($state,$days);
+                    if ($previous===null || $previous['cache_age_seconds']>=60) {
+                        $service=new ReportService(new HttpClient(),$app->root);
+                        $reports=$service->collect($state,$days);
+                        $cache->save($state,$days,$reports);
+                    }
+                    go('/admin?analytics=1&days='.$days);
                 }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
@@ -240,6 +264,17 @@ try {
             $html.='<p class="notice">Требуется проверка в кабинете провайдера: '.e($step).'</p>';
         }
         $html.='<p>CLI: php bin/cajeer release check --json. Отчёт не подтверждает доставку данных.</p></section>';
+        $html.=DashboardView::settings($d,$_SESSION['csrf']);
+        if (isset($_GET['analytics'])) {
+            $days=filter_var($_GET['days']??'7',FILTER_VALIDATE_INT);
+            if ($days===false || !in_array($days,[3,7,14,30,90],true)) stop(400,'Invalid reporting period');
+            try { $snapshot=(new ReportCache($app->root))->read($d,$days); }
+            catch (RuntimeException|JsonException $exception) {
+                error_log('Analytics cache: '.$exception->getMessage()); $snapshot=null;
+                $html.='<p class="error">Кэш аналитики недоступен: проверьте права или пересоздайте отчёт.</p>';
+            }
+            $html.=DashboardView::render($d,$snapshot,$_SESSION['csrf'],$days);
+        }
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }

@@ -23,7 +23,7 @@ try {
     }
     $app = new Lite($root);
     $app->install('ExtremelyStrongPassword123','https://lite.example.org','Production acceptance');
-    assert110(Lite::VERSION==='1.1.0' && SiteState::SCHEMA===8,'unexpected release baseline');
+    assert110(Lite::VERSION==='1.1.1' && SiteState::SCHEMA===9,'unexpected release baseline');
     $report=ProductionAcceptance::run($root,$app->load());
     assert110($report['ok'] && $report['manual']===[], 'inactive install readiness');
 
@@ -62,7 +62,7 @@ try {
     assert110(ProductionAcceptance::run($root,$app->load())['ok'],'cannot recover after fixing permissions');
     $raw=file_get_contents($app->file());
     $snapshot=$app->backups()->create();
-    assert110($app->backups()->verify($snapshot)['schema']===8,'backup not verified');
+    assert110($app->backups()->verify($snapshot)['schema']===9,'backup not verified');
     $app->change(static function(array $s): array { $s['integrations']['matomo']['enabled']=false; return $s; });
     assert110($app->load()['integrations']['matomo']['enabled']===false,'mutation failed');
     $app->backups()->restore($snapshot);
@@ -76,6 +76,6 @@ try {
     $fail=ProductionAcceptance::run($root,$noConsent);
     assert110(!$fail['ok'],'analytics release without consent accepted');
 
-    assert110($app->load()['schema']===8 && !$app->migrate(),'release changed JSON schema');
+    assert110($app->load()['schema']===9 && !$app->migrate(),'release changed JSON schema');
     echo "Lite 1.1.0 production acceptance/backup/configuration regression OK\n";
 } finally { clean110($root); }

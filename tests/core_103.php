@@ -26,7 +26,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123', 'https://lite.example.org', 'Тестовый сайт');
     $site=$app->load();
-    ok103(Lite::VERSION === '1.1.0' && SiteState::SCHEMA === 8 && $site['schema'] === 8, 'version or schema');
+    ok103(Lite::VERSION === '1.1.1' && SiteState::SCHEMA === 9 && $site['schema'] === 9, 'version or schema');
     ok103($site['consent'] === ConsentConfig::DEFAULTS, 'new installation policy');
     ok103(str_contains((new Lite(dirname(__DIR__)))->render($site, $site['pages']['/']), 'data-consent-action="accept"'), 'initial banner is missing');
 
@@ -73,7 +73,7 @@ try {
     OperationFiles::write($app->file(),$raw,0600);
     ok103($app->migrate(), 'v2 migration did not run');
     $site=$app->load();
-    ok103($site['schema'] === 8 && $site['consent'] === ConsentConfig::DEFAULTS, 'migration v2->v3 wrong');
+    ok103($site['schema'] === 9 && $site['consent'] === ConsentConfig::DEFAULTS, 'migration v2->v3 wrong');
     ok103($site['pages'] === $before['pages'] && $site['settings'] === $before['settings'] && $site['password'] === $before['password'], 'migration changed existing content or auth');
     $backupName=null;
     foreach ($app->backups()->names() as $name) {
@@ -83,7 +83,7 @@ try {
     ok103($backupName !== null, 'v2 snapshot not backed up');
     ok103(str_contains((string)file_get_contents($root.'/storage/backups/'.$backupName),base64_encode($raw)), 'backup lost original bytes');
     $app->backups()->restore($backupName);
-    ok103($app->load()['schema'] === 8 && $app->load()['consent'] === ConsentConfig::DEFAULTS, 'restore v2 did not upgrade');
+    ok103($app->load()['schema'] === 9 && $app->load()['consent'] === ConsentConfig::DEFAULTS, 'restore v2 did not upgrade');
     $state=$app->load();
     $state['consent']['days']=400;
     throws103(fn()=>$app->change(fn()=> $state), 'invalid durable policy');

@@ -30,8 +30,8 @@ if get / | grep_all '<nav'; then echo 'Disabled navigation still shown' >&2; exi
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep_all "$base/"
 get / | grep_all '<nav'
-php bin/cajeer doctor | grep_all 'schema 8'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 8.' ]]
+php bin/cajeer doctor | grep_all 'schema 9'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 9.' ]]
 php bin/cajeer module disable robots | grep_all disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep_all enabled
@@ -177,5 +177,23 @@ curl -fsSI "$base/admin" | grep_all -i 'Permissions-Policy: camera=()'
 curl -fsSI "$base/admin" | grep_all -i 'Cross-Origin-Opener-Policy: same-origin'
 curl -fsSI "$base/" | grep_all -i "script-src-attr 'none'"
 curl -fsSI "$base/admin" | grep_all -i "script-src 'none'"
+# 1.1.1 Analytics Dashboard: authenticated reporting configuration and explicit refresh only.
+[[ $(status -b "$tmp/cookies" "$base/admin?analytics=1&days=5") == 400 ]]
+[[ $(status -b "$tmp/cookies" -d "action=analytics_settings&csrf=bad&ga4_property_id=123" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=analytics_settings&csrf=$csrf&ga4_property_id=123&metrica_goal_id=&gsc_site_url=http://private/&yandex_webmaster_user_id=&yandex_webmaster_host_id=" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=analytics_settings&csrf=$csrf&ga4_property_id=123456&metrica_goal_id=300&gsc_site_url=sc-domain:example.org&yandex_webmaster_user_id=123&yandex_webmaster_host_id=https:example.org:443" "$base/admin") == 303 ]]
+curl -fsS -b "$tmp/cookies" "$base/admin?analytics=1" > "$tmp/report-empty"
+grep_all 'Analytics Dashboard 1.1.1' "$tmp/report-empty"
+grep_all 'Нет сохранённого отчёта' "$tmp/report-empty"
+[[ $(status -b "$tmp/cookies" -d "action=analytics_refresh&csrf=bad&days=7" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=analytics_refresh&csrf=$csrf&days=5" "$base/admin") == 422 ]]
+# Report fetch is deliberately explicit, with independent provider failures and no hardcoded stats.
+[[ $(status -b "$tmp/cookies" -d "action=analytics_refresh&csrf=$csrf&days=7" "$base/admin") == 303 ]]
+curl -fsS -b "$tmp/cookies" "$base/admin?analytics=1" > "$tmp/report-stored"
+grep_all 'Google Search Console' "$tmp/report-stored"
+grep_all 'Не настроен доступ к API' "$tmp/report-stored"
+php bin/cajeer analytics status --days=7 | php -r '$d=json_decode(stream_get_contents(STDIN),true); if(!isset($d["providers"]["gsc"]))exit(1);'
+[[ $(status "$base/analytics") == 404 ]]
+curl -fsSI "$base/admin?analytics=1" | grep_all -i "script-src 'none'"
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

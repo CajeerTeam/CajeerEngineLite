@@ -6,17 +6,18 @@ use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig};
 use CajeerEngine\Public\PublicPath;
+use CajeerEngine\Analytics\ReportConfig;
 
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
 {
-    public const SCHEMA = 8;
+    public const SCHEMA = 9;
     public const LIMIT = 4_000_000;
 
     public static function validate(array $state): void
     {
         $version = $state['schema'] ?? null;
-        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8], true)) throw new \RuntimeException('Unsupported site schema');
+        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9], true)) throw new \RuntimeException('Unsupported site schema');
         $settings = $state['settings'] ?? null;
         if (!is_array($settings) || !is_string($settings['name'] ?? null) || trim($settings['name']) === '' ||
             !is_string($settings['url'] ?? null) || !is_string($settings['email'] ?? null) ||
@@ -77,6 +78,10 @@ final class SiteState
             if (!is_array($state['integrations']['matomo'] ?? null)) throw new \RuntimeException('Missing Matomo configuration');
             MatomoConfig::validate($state['integrations']['matomo']);
         }
+        if ($version >= 9) {
+            if (!is_array($state['reporting'] ?? null)) throw new \RuntimeException('Missing reporting settings');
+            ReportConfig::validate($state['reporting']);
+        }
     }
 
     public static function migrate(array $state): array
@@ -109,6 +114,10 @@ final class SiteState
         if ($state['schema'] === 7) {
             $state['integrations']['matomo'] = MatomoConfig::DEFAULTS;
             $state['schema'] = 8;
+        }
+        if ($state['schema'] === 8) {
+            $state['reporting'] = ReportConfig::DEFAULTS;
+            $state['schema'] = 9;
         }
         self::validate($state);
         return $state;

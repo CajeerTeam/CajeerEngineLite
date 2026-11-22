@@ -3,6 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
@@ -56,6 +57,26 @@ try {
             }
             if (!$report['ok']) exit(1);
             break;
+        case 'analytics':
+            $operation=$argv[2]??'';
+            if (!in_array($operation,['refresh','status'],true) || count($argv)>4) {
+                throw new InvalidArgumentException('Usage: analytics refresh|status [--days=7]');
+            }
+            $days=7;
+            if (isset($argv[3])) {
+                if (!preg_match('/^--days=(3|7|14|30|90)$/D',$argv[3])) {
+                    throw new InvalidArgumentException('Allowed --days: 3,7,14,30,90');
+                }
+                $days=(int)substr($argv[3],7);
+            }
+            $state=$app->load();
+            $cache=new ReportCache($app->root);
+            if ($operation==='refresh') {
+                $report=(new ReportService(new HttpClient(),$app->root))->collect($state,$days);
+                $cache->save($state,$days,$report);
+            } else $report=$cache->read($state,$days);
+            echo json_encode($report??['status'=>'no_cache'],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+            break;
         case 'migrate':
             echo $app->migrate() ? "Migrated site to schema ".\CajeerEngine\Storage\SiteState::SCHEMA." (backup saved).\n" : "Already at schema ".\CajeerEngine\Storage\SiteState::SCHEMA.".\n"; break;
         case 'module':
@@ -93,6 +114,6 @@ try {
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
                  "php bin/cajeer integrations check [--json]\n".
-                 "php bin/cajeer release check [--json]\n";
+                 "php bin/cajeer release check [--json]\nphp bin/cajeer analytics refresh|status [--days=7]\n";
     }
 } catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

@@ -30,6 +30,7 @@ jobs:
       - run: php tests/core_108.php
       - run: php tests/core_109.php
       - run: php tests/core_110.php
+      - run: php tests/core_111.php
       - run: bash tests/http.sh
   browser:
     runs-on: ubuntu-latest
