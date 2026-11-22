@@ -5,7 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
-use CajeerEngine\Integrations\GA4Config;
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig};
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -72,6 +72,13 @@ try {
                         return $d;
                     }); go('/admin');
                 }
+                elseif ($action==='metrica') {
+                    $config = MetricaConfig::fromPost($_POST);
+                    $app->change(static function(array $d) use ($config): array {
+                        $d['integrations']['metrica'] = $config;
+                        return $d;
+                    }); go('/admin');
+                }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
                     $app->change(function($d)use($p,$old,$revision){
@@ -126,7 +133,21 @@ try {
         }
         if (!$c['enabled']) $ga4Form.='<p class="error">Cookie Consent отключён. Отслеживание GA4 останется заблокированным до его включения.</p>';
         $ga4Form.='<button>Сохранить GA4</button>';
-        $html.=form('ga4',$ga4Form); shell('Управление сайтом',$html);
+        $html.=form('ga4',$ga4Form);
+        $m=$d['integrations']['metrica'];
+        $metricaForm='<h2>Яндекс Метрика</h2>';
+        $metricaForm.='<p>Счётчик, цели для контактов и Вебвизор. Сбор начинается только после согласия посетителя. Для Вебвизора и карты кликов требуется также разрешение «Запись сессий».</p>';
+        $metricaForm.='<label><input type="checkbox" name="enabled" value="1" '.($m['enabled']?'checked':'').'> Включить Яндекс Метрику</label>';
+        $metricaForm.=input('counter_id',$m['counter_id']).'<p>Числовой ID счётчика из Яндекс Метрики. Не вставляйте HTML-код счётчика.</p>';
+        foreach (['page_views'=>'Учитывать просмотры страниц', 'accurate_bounce'=>'Точный показатель отказов', 'clickmap'=>'Карта кликов (только с согласием на запись)', 'webvisor'=>'Вебвизор (только с согласием на запись)', 'contact_goals'=>'Отправлять цели при кликах по email и телефону'] as $key=>$caption) {
+            $metricaForm.='<label><input type="checkbox" name="'.e($key).'" value="1" '.($m[$key]?'checked':'').'> '.e($caption).'</label>';
+        }
+        $metricaForm.=input('email_goal',$m['email_goal']).input('phone_goal',$m['phone_goal']);
+        $metricaForm.='<p>Создайте в Яндекс Метрике JavaScript-цели с указанными идентификаторами. При записи сессий изменение или отзыв разрешения приводит к перезагрузке страницы для немедленного прекращения записи.</p>';
+        if (!$c['enabled']) $metricaForm.='<p class="error">Cookie Consent выключен. Метрика останется заблокированной.</p>';
+        $metricaForm.='<button>Сохранить Яндекс Метрику</button>';
+        $html.=form('metrica',$metricaForm);
+        shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
     if ($path==='/robots.txt' && ModuleConfig::enabled($d, 'robots')) { header('Content-Type: text/plain; charset=utf-8'); echo "User-agent: *\nDisallow: /admin\n"; if (ModuleConfig::enabled($d, 'sitemap')) echo "Sitemap: ".$d['settings']['url']."/sitemap.xml\n"; exit; }
@@ -135,13 +156,43 @@ try {
     if ($path!==$raw) { header('Location: '.$path,true,301); exit; }
     // Personalized consent state must never be shared via a public intermediary cache.
     header('Cache-Control: private, no-store');
-    // Keep /admin script-free; public pages may run only the shipped first-party consent runtime.
-    // Only explicitly configured public GA4 pages get a Google tag CSP allowlist.
-    // Runtime still blocks loading the external tag until analytics opt-in.
+    // The admin area remains script-free. Public provider allowlists are emitted only
+    // for configured integrations; first-party runtimes still require visitor opt-in
+    // before requesting any third-party endpoint.
+    $scripts=["'self'"]; $connections=["'self'"]; $images=["'self'"];
+    $frame="frame-src 'none'"; $child="child-src 'none'";
+    $frameAncestors="frame-ancestors 'none'";
     if (GA4Config::active($d)) {
-        header("Content-Security-Policy: default-src 'self'; script-src 'self' https://www.googletagmanager.com; connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://www.google.com; img-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.google.com; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
-    } else {
-        header("Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+        $scripts[]='https://www.googletagmanager.com';
+        array_push($connections,'https://www.googletagmanager.com','https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
+        array_push($images,'https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
     }
+    if (MetricaConfig::active($d)) {
+        // Official provider endpoints include regional hosts and Webvisor domains.
+        $mc=['mc.yandex.ru','mc.yandex.az','mc.yandex.by','mc.yandex.co.il',
+            'mc.yandex.com','mc.yandex.com.am','mc.yandex.com.ge','mc.yandex.com.tr',
+            'mc.yandex.ee','mc.yandex.fr','mc.yandex.kg','mc.yandex.kz',
+            'mc.yandex.lt','mc.yandex.lv','mc.yandex.md','mc.yandex.tj',
+            'mc.yandex.tm','mc.yandex.uz','mc.webvisor.com','mc.webvisor.org'];
+        foreach ($mc as $host) {
+            $url='https://'.$host;
+            $connections[]=$url; $connections[]='wss://'.$host; $images[]=$url;
+            $scripts[]=$url;
+        }
+        $scripts[]='https://yastatic.net';
+        $frame="frame-src blob: https://mc.yandex.ru https://mc.webvisor.com https://mc.webvisor.org";
+        $child="child-src blob: https://mc.yandex.ru https://mc.webvisor.com https://mc.webvisor.org";
+        if ($d['integrations']['metrica']['webvisor']) {
+            // Yandex's official CSP guidance requires its replay interfaces to
+            // frame PUBLIC pages. Never relax the admin response headers.
+            header_remove('X-Frame-Options');
+            $frameAncestors="frame-ancestors 'self' https://metrika.yandex.ru https://metrica.yandex.ru https://metrica.yandex.com https://metrika.yandex.com https://metrika.yandex.kz https://metrica.yandex.kz https://metrika.yandex.by https://metrica.yandex.by https://metrika.yandex.com.tr https://metrica.yandex.com.tr https://metrica.ya.ru https://metrika.ya.ru";
+        }
+    }
+    header("Content-Security-Policy: default-src 'self'; script-src ".implode(' ',array_unique($scripts)).
+        "; connect-src ".implode(' ',array_unique($connections)).
+        "; img-src ".implode(' ',array_unique($images)).
+        "; style-src 'self'; ".$frame.'; '.$child.
+        "; object-src 'none'; base-uri 'none'; ".$frameAncestors."; form-action 'self'");
     echo $app->render($d,$d['pages'][$path]);
 } catch(Throwable $ex) { error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }

@@ -27,8 +27,8 @@ if get / | grep -q '<nav'; then echo 'Disabled navigation still shown' >&2; exit
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep -q "$base/"
 get / | grep -q '<nav'
-php bin/cajeer doctor | grep -q 'schema 4'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 4.' ]]
+php bin/cajeer doctor | grep -q 'schema 5'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 5.' ]]
 php bin/cajeer module disable robots | grep -q disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep -q enabled
@@ -71,5 +71,24 @@ get / | grep -vq '/assets/ga4.js'
 if curl -fsSI "$base/" | grep -qi 'googletagmanager.com'; then echo 'GA4 CSP allowed without Cookie Consent' >&2; exit 1; fi
 [[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&enabled=1&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
 get / | grep -q '/assets/ga4.js'
+# Yandex Metrica: enabled independently of GA4, validated counter and goals.
+get / | grep -vq '/assets/metrica.js'
+[[ $(status -b "$tmp/cookies" -d "action=metrica&csrf=$csrf&enabled=1&counter_id=<script>&page_views=1&accurate_bounce=1&clickmap=1&webvisor=1&contact_goals=1&email_goal=contact_email&phone_goal=contact_phone" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=metrica&csrf=$csrf&enabled=1&counter_id=12345678&page_views=1&accurate_bounce=1&clickmap=1&webvisor=1&contact_goals=1&email_goal=contact_email&phone_goal=contact_phone" "$base/admin") == 303 ]]
+get / | grep -q 'data-metrica-id="12345678"'
+get /assets/metrica.js | grep -q 'reachGoal'
+curl -fsSI "$base/" | grep -qi 'script-src.*https://mc.yandex.ru'
+curl -fsSI "$base/" | grep -qi 'connect-src.*https://mc.webvisor.com'
+curl -fsSI "$base/admin" | grep -qi "script-src 'none'"
+curl -fsSI "$base/" | grep -qi 'frame-ancestors.*https://metrika.yandex.ru'
+if curl -fsSI "$base/" | grep -qi 'X-Frame-Options: DENY'; then echo 'Webvisor frame embedding blocked' >&2; exit 1; fi
+curl -fsSI "$base/admin" | grep -qi 'X-Frame-Options: DENY'
+[[ $(status -b "$tmp/cookies" -d "action=metrica&csrf=$csrf&enabled=1&counter_id=0&email_goal=contact_email&phone_goal=contact_phone" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=metrica&csrf=$csrf&enabled=1&counter_id=12345678&email_goal=<img>&phone_goal=contact_phone" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep -vq '/assets/metrica.js'
+if curl -fsSI "$base/" | grep -qi 'mc.yandex.ru'; then echo 'Metrica CSP allowed without Cookie Consent' >&2; exit 1; fi
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&enabled=1&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep -q '/assets/metrica.js'
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK' 

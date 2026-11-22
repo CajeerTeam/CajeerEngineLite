@@ -15,11 +15,13 @@ jobs:
       - run: php -l bin/cajeer
       - run: node --check public/assets/consent.js
       - run: node --check public/assets/ga4.js
+      - run: node --check public/assets/metrica.js
       - run: php tests/smoke.php
       - run: php tests/core_210.php
       - run: php tests/core_102.php
       - run: php tests/core_103.php
       - run: php tests/core_104.php
+      - run: php tests/core_105.php
       - run: bash tests/http.sh
   browser:
     runs-on: ubuntu-latest
@@ -35,3 +37,4 @@ jobs:
       - run: python -m pip install playwright
       - run: python -m playwright install --with-deps chromium
       - run: python tests/browser_104.py
+      - run: python tests/browser_105.py

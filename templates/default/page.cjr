@@ -68,4 +68,7 @@
 @if ($ga4_active)
 <script defer src="/assets/ga4.js?v=104" data-ga4-id="{{ $ga4['measurement_id'] }}" data-ga4-pageviews="{{ $ga4['page_views'] }}" data-ga4-contacts="{{ $ga4['contact_clicks'] }}" data-ga4-debug="{{ $ga4['debug_mode'] }}"></script>
 @endif
+@if ($metrica_active)
+<script defer src="/assets/metrica.js?v=105" data-metrica-id="{{ $metrica['counter_id'] }}" data-metrica-pageviews="{{ $metrica['page_views'] }}" data-metrica-bounce="{{ $metrica['accurate_bounce'] }}" data-metrica-webvisor="{{ $metrica['webvisor'] }}" data-metrica-clickmap="{{ $metrica['clickmap'] }}" data-metrica-contacts="{{ $metrica['contact_goals'] }}" data-metrica-email-goal="{{ $metrica['email_goal'] }}" data-metrica-phone-goal="{{ $metrica['phone_goal'] }}"></script>
+@endif
 </body></html>
