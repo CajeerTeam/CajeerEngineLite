@@ -72,7 +72,7 @@ try {
     $app=new Lite($root);
     $app->install('ExtremelyStrongPassword123','https://lite.example.test','Owner binding');
     $state=$app->load();
-    ok113(Lite::VERSION==='1.1.6' && SiteState::SCHEMA===11 && $state['schema']===11,'release baseline');
+    ok113(Lite::VERSION==='1.1.7' && SiteState::SCHEMA===12 && $state['schema']===12,'release baseline');
     $gen0=$state['identity']['generation'];
     ok113(preg_match('/^[a-f0-9]{48}$/D',$gen0)===1 && $state['identity']['owner']===null,'fresh identity');
     $old=['iss'=>$issuer,'sub'=>'old-owner'];
@@ -122,7 +122,7 @@ try {
     $oldSchema['identity']=['owner'=>$new]; $oldSchema['schema']=10;
     file_put_contents($app->file(),SiteState::encode($oldSchema));
     $migrated=$app->load();
-    ok113($migrated['schema']===11 && $migrated['identity']['owner']===$new &&
+    ok113($migrated['schema']===12 && $migrated['identity']['owner']===$new &&
         preg_match('/^[a-f0-9]{48}$/D',$migrated['identity']['generation'])===1,'existing bound schema 10 preserved');
     $backups=$app->backups()->names();
     $found=false;

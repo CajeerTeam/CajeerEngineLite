@@ -20,7 +20,7 @@ final class OidcFlow
     {
         $tx = $session['cajeer_oidc_transaction'] ?? null;
         unset($session['cajeer_oidc_transaction']); // consumed even on errors or network failures
-        if (!is_array($tx) || !in_array($tx['mode'] ?? null, ['login', 'bind', 'replace_current', 'replace_new', 'unbind'], true)) {
+        if (!is_array($tx) || !in_array($tx['mode'] ?? null, ['login', 'bind', 'replace_current', 'replace_new', 'unbind', 'auth_policy'], true)) {
             throw new \RuntimeException('OIDC login was not initiated in this browser');
         }
         return ['mode' => $tx['mode'], 'identity' => $client->complete($tx, $query),

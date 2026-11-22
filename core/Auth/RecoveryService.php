@@ -171,6 +171,7 @@ final class RecoveryService
                 }
                 $current['password'] = $hash;
                 $current['login'] = ['count' => 0, 'until' => 0];
+                $current = AuthPolicy::recover($current);
                 $current['identity']['owner'] = null; // Owner must rebind with a fresh verified OIDC login.
                 $current['identity']['generation'] = OwnerIdentity::generation();
                 // Protect recovered credentials against a later restore of pre-recovery site backups.
@@ -210,9 +211,16 @@ final class RecoveryService
     private function protectCredentials(array $site): void
     {
         OperationFiles::json($this->path('recovery-protected.json'), [
-            'version'=>1, 'password'=>$site['password'], 'identity'=>$site['identity'],
+            'version'=>2, 'password'=>$site['password'], 'identity'=>$site['identity'],
+            'auth_policy'=>$site['auth_policy'],
             'protected_at'=>time(),
         ], 0600);
+    }
+
+    private static function validProtectedPolicy(array $policy): bool
+    {
+        try { AuthPolicy::validate($policy); return true; }
+        catch (\RuntimeException) { return false; }
     }
 
     /** Restores may recover content but must never reinstate pre-recovery credentials. */
@@ -222,8 +230,12 @@ final class RecoveryService
         $raw = self::secureRead($path, 4096);
         if ($raw === null) return null;
         $saved = json_decode($raw, true, 8, JSON_THROW_ON_ERROR);
-        if (!is_array($saved) || array_keys($saved) !== ['version','password','identity','protected_at'] ||
-            $saved['version'] !== 1 || !is_int($saved['protected_at']) ||
+        if (!is_array($saved) ||
+            !in_array($saved['version'] ?? null, [1,2], true) ||
+            array_keys($saved) !== ($saved['version'] === 2 ?
+                ['version','password','identity','auth_policy','protected_at'] :
+                ['version','password','identity','protected_at']) ||
+            ($saved['version'] === 2 && (!is_array($saved['auth_policy']) || !self::validProtectedPolicy($saved['auth_policy']))) || !is_int($saved['protected_at']) ||
             !is_string($saved['password']) || password_get_info($saved['password'])['algo'] === null ||
             !is_array($saved['identity']) || array_keys($saved['identity']) !== ['owner','generation'] ||
             !is_string($saved['identity']['generation']) ||
@@ -234,7 +246,8 @@ final class RecoveryService
         // A valid live site may contain newer legitimate binds / password updates.
         $source = $live ?? $saved;
         return ['password'=>$source['password'], 'identity'=>$source['identity'],
-            'login'=>['count'=>0,'until'=>0]];
+            'login'=>['count'=>0,'until'=>0],
+            'auth_policy'=>$source['auth_policy'] ?? AuthPolicy::DEFAULTS];
     }
 
     private function clearGrant(): void

@@ -138,6 +138,9 @@ final class SessionRegistry
     /** Create a new authenticated device lease after password/OIDC authentication. */
     public function issue(array &$session, array $site, array $server=[], ?int $clock=null): string
     {
+        if (!AuthPolicy::sessionAllowed($site, $session)) {
+            throw new \RuntimeException('Sign-in method is disabled by authentication policy');
+        }
         $secret=bin2hex(random_bytes(32)); $id=hash('sha256',hex2bin($secret));
         $agent=$server['HTTP_USER_AGENT']??''; $agent=is_string($agent)?substr(preg_replace('/[^\x20-\x7e]/','',$agent),0,180):'';
         $ip=$server['REMOTE_ADDR']??'';
@@ -165,6 +168,7 @@ final class SessionRegistry
     /** Revocations are enforced on the very next protected HTTP request. */
     public function valid(array $session, array $site, ?int $clock=null): bool
     {
+        if (!AuthPolicy::sessionAllowed($site, $session)) return false;
         $id=self::key($session);
         if ($id===null) return false; // Legacy PHP-only sessions must reauthenticate.
         return $this->locked(static function(array &$items,int $time)use($id): bool {

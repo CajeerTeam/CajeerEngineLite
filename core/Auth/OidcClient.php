@@ -50,7 +50,7 @@ final class OidcClient
     /** @return array{state:string,nonce:string,verifier:string,created:int,mode:string,url:string} */
     public function begin(string $mode): array
     {
-        if (!in_array($mode, ['login', 'bind', 'replace_current', 'replace_new', 'unbind'], true)) throw new \InvalidArgumentException('Invalid OIDC flow mode');
+        if (!in_array($mode, ['login', 'bind', 'replace_current', 'replace_new', 'unbind', 'auth_policy'], true)) throw new \InvalidArgumentException('Invalid OIDC flow mode');
         $this->discovery(); // fail closed if provider metadata is unavailable or unexpected
         $state = self::random();
         $nonce = self::random();

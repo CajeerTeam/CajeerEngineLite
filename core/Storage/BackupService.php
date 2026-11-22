@@ -138,6 +138,14 @@ final class BackupService
                 $state['password'] = $credentials['password'];
                 $state['identity'] = $credentials['identity'];
                 $state['login'] = $credentials['login'];
+                $state['auth_policy'] = $credentials['auth_policy'];
+            } elseif ($live !== null) {
+                // Content backups cannot roll back a linked owner, password or SSO-only policy.
+                // These are live authentication controls, not site content.
+                $state['password'] = $live['password'];
+                $state['identity'] = $live['identity'];
+                $state['login'] = $live['login'];
+                $state['auth_policy'] = $live['auth_policy'];
             }
             // A damaged live JSON can be recovered: preserve its raw bytes first.
             $rescue = $this->site->raw() === null ? '' : $this->createLocked('pre-restore');

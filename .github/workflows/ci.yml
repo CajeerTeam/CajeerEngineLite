@@ -36,6 +36,8 @@ jobs:
       - run: php tests/core_114.php
       - run: php tests/core_115.php
       - run: php tests/core_116.php
+      - run: php tests/core_117.php
+      - run: bash tests/auth_policy_http.sh
       - run: bash tests/recovery_cli.sh
       - run: bash tests/http.sh
   browser:

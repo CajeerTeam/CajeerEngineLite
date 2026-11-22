@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry};
+use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
@@ -64,6 +64,7 @@ try {
             time() >= $_SESSION['seen'] && time()-$_SESSION['seen']<3600 &&
             is_string($_SESSION['owner_generation'] ?? null) &&
             hash_equals($d['identity']['generation'], $_SESSION['owner_generation']);
+        if ($auth && !AuthPolicy::sessionAllowed($d, $_SESSION)) $auth=false;
         if ($auth && isset($_SESSION['oidc_identity'])) {
             $auth = OwnerIdentity::matches($d['identity']['owner'] ?? null, $_SESSION['oidc_identity']);
         }
@@ -117,6 +118,17 @@ try {
                         $previous=$context['previous_owner'];
                         $d=$app->change(static fn(array $site): array =>
                             OwnerIdentity::replace($site, $previous, $identity, $expectedGeneration));
+                    } elseif ($mode==='auth_policy') {
+                        if (!$auth || !is_string($expectedGeneration) ||
+                            !is_int($context['revision'] ?? null) ||
+                            !is_string($context['target'] ?? null) ||
+                            !OwnerIdentity::matches($d['identity']['owner'] ?? null, $identity)) {
+                            stop(403, 'Fresh linked owner verification required');
+                        }
+                        $target=$context['target'];
+                        $revision=$context['revision'];
+                        $d=$app->change(static fn(array $site): array =>
+                            AuthPolicy::switch($site, $target, $expectedGeneration, $revision, $identity));
                     } elseif ($mode!=='login' || !OwnerIdentity::matches($d['identity']['owner'] ?? null, $identity)) {
                         stop(403, 'SkiF4er ID is not authorized for this site');
                     }
@@ -142,9 +154,36 @@ try {
             $action=$_POST['action']??'';
             try {
                 if ($action==='login' && !$auth) {
+                    if (!AuthPolicy::localAllowed($d)) stop(403, 'Local sign-in disabled by authentication policy');
                     if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32)),'owner_generation'=>$d['identity']['generation']]; $sessions->issue($_SESSION,$d,$_SERVER); go('/admin'); }
                     http_response_code(401); $error='Неверный пароль или временная блокировка. Повторите через 5 минут.';
                 } elseif (!$auth) stop(403,'Login required');
+                elseif ($action==='auth_policy') {
+                    $target=$_POST['auth_mode'] ?? null;
+                    $confirmation=$_POST['confirm_auth_mode'] ?? null;
+                    $password=$_POST['auth_password'] ?? null;
+                    if (!is_string($target) || !in_array($target,[AuthPolicy::HYBRID,AuthPolicy::OIDC_ONLY],true) ||
+                        $target===$d['auth_policy']['mode'] || $confirmation!=='1') {
+                        throw new InvalidArgumentException('Choose a different login mode and confirm the change');
+                    }
+                    if (!OwnerIdentity::validSubject($d['identity']['owner'] ?? null) ||
+                        !OidcClient::enabled($d['settings']['url'])) {
+                        throw new InvalidArgumentException('Link the owner and configure HTTPS OIDC before changing login mode');
+                    }
+                    if (!is_string($password) || !$app->login($password)) {
+                        throw new InvalidArgumentException('Confirm with the local administrator password');
+                    }
+                    try {
+                        // Fresh interactive IdP login is mandatory even for an already signed-in OIDC session.
+                        $url=OidcFlow::start($_SESSION, OidcClient::fromEnvironment($d['settings']['url']),
+                            'auth_policy', ['generation'=>$d['identity']['generation'],
+                                'revision'=>$d['auth_policy']['revision'], 'target'=>$target]);
+                    } catch (\Throwable $exception) {
+                        error_log('SkiF4er authentication policy: '.get_class($exception));
+                        throw new InvalidArgumentException('SkiF4er ID is unavailable; login policy was not changed');
+                    }
+                    header('Location: '.$url, true, 303); exit;
+                }
                 elseif ($action==='oidc_bind') {
                     if (isset($_SESSION['oidc_identity']) || ($d['identity']['owner'] ?? null)!==null) {
                         throw new InvalidArgumentException('Only an unlinked local owner can connect SkiF4er ID');
@@ -166,6 +205,9 @@ try {
                     header('Location: '.$url, true, 303); exit;
                 }
                 elseif ($action==='oidc_replace' || $action==='oidc_unbind') {
+                    if ($action==='oidc_unbind' && !AuthPolicy::localAllowed($d)) {
+                        throw new InvalidArgumentException('Switch to local + SkiF4er ID mode before unlinking the only SSO owner');
+                    }
                     if (!OidcClient::enabled($d['settings']['url']) || ($d['identity']['owner'] ?? null) === null) {
                         throw new InvalidArgumentException('A linked owner and configured SkiF4er ID are required');
                     }
@@ -327,7 +369,12 @@ try {
         $html=$error!==''?'<p class="error" role="alert">'.e($error).'</p>':'';
         if (!$auth) {
             if (($_GET['logout']??null)==='provider_unavailable') $html.='<p role="alert">Локальный сеанс завершён, но недоступен сервер SkiF4er ID. Закройте браузер и завершите SSO-сеанс отдельно.</p>';
-            $loginHtml=$html.form('login',input('password','','password').'<button>Войти</button>');
+            $loginHtml=$html;
+            if (AuthPolicy::localAllowed($d)) {
+                $loginHtml.=form('login',input('password','','password').'<button>Войти по паролю</button>');
+            } else {
+                $loginHtml.='<p>Вход по локальному паролю отключён владельцем. Для аварийного восстановления используйте серверный CLI.</p>';
+            }
             if (OidcClient::enabled($d['settings']['url']) && ($d['identity']['owner'] ?? null) !== null) {
                 $loginHtml.='<section><h2>SkiF4er ID</h2><p>Войти через привязанный аккаунт владельца.</p>'.
                     '<a href="/admin/oidc/login">Войти через SkiF4er ID</a></section>';
@@ -353,11 +400,34 @@ try {
                 $html.=form('oidc_replace', input('oidc_password','','password').
                     '<label><input type="checkbox" name="confirm_owner_change" value="1" required> Подтверждаю смену привязанного аккаунта</label>'.
                     '<button>Сменить аккаунт владельца</button>');
-                $html.='<p>Отвязка требует локальный пароль и повторный вход в текущий SkiF4er ID. Локальный пароль останется действующим, а предыдущие сеансы будут отозваны.</p>';
-                $html.=form('oidc_unbind', input('oidc_password','','password').
-                    '<label><input type="checkbox" name="confirm_owner_change" value="1" required> Подтверждаю отвязку аккаунта владельца</label>'.
-                    '<button>Отвязать SkiF4er ID</button>');
+                if (AuthPolicy::localAllowed($d)) {
+                    $html.='<p>Отвязка требует локальный пароль и повторный вход в текущий SkiF4er ID. Локальный пароль останется действующим, а предыдущие сеансы будут отозваны.</p>';
+                    $html.=form('oidc_unbind', input('oidc_password','','password').
+                        '<label><input type="checkbox" name="confirm_owner_change" value="1" required> Подтверждаю отвязку аккаунта владельца</label>'.
+                        '<button>Отвязать SkiF4er ID</button>');
+                } else {
+                    $html.='<p>Для отвязки сначала переключитесь с SSO-only на совместный режим входа.</p>';
+                }
             }
+        }
+        $html.='</section>';
+        $policy=$d['auth_policy'];
+        $policyReady=OwnerIdentity::validSubject($identity) && OidcClient::enabled($d['settings']['url']);
+        $html.='<section><h2>Управление способами входа</h2>'.
+            '<p>Текущий режим: <strong>'.e($policy['mode']===AuthPolicy::OIDC_ONLY?
+                'Только SkiF4er ID':'Локальный пароль и SkiF4er ID').'</strong>. Ревизия: '.e((string)$policy['revision']).'.</p>';
+        if ($policyReady) {
+            $modeOptions='<label><input type="radio" name="auth_mode" value="hybrid" '.
+                ($policy['mode']===AuthPolicy::HYBRID?'checked':'').'> Локальный пароль + SkiF4er ID</label>'.
+                '<label><input type="radio" name="auth_mode" value="oidc_only" '.
+                ($policy['mode']===AuthPolicy::OIDC_ONLY?'checked':'').'> Только SkiF4er ID (SSO-only)</label>';
+            $html.='<p>Для смены способа входа нужны локальный пароль и новый интерактивный вход в привязанный SkiF4er ID. ' .
+                'После переключения старые сессии будут отозваны. При недоступности провайдера восстановите доступ через CLI.</p>'.
+                form('auth_policy',$modeOptions.input('auth_password','','password').
+                    '<label><input type="checkbox" name="confirm_auth_mode" value="1" required> Подтверждаю смену режима и отзыв существующих сеансов</label>'.
+                    '<button>Изменить способ входа</button>');
+        } else {
+            $html.='<p>Изменение режима недоступно: сначала привяжите аккаунт владельца и настройте HTTPS OIDC.</p>';
         }
         $html.='</section>';
         $devices=$sessions->devices($_SESSION,$d);
