@@ -7,12 +7,24 @@ final class OidcFlow
 {
     public static function start(array &$session, OidcClient $client, string $mode, array $context = []): string
     {
-        // Prevent two tabs replacing a pending login without an explicit new start.
+        // A second tab must never replace the PKCE verifier/state of a live transaction.
+        $pending = $session['cajeer_oidc_transaction'] ?? null;
+        if (is_array($pending) && is_int($pending['created'] ?? null) &&
+            $pending['created'] <= time() + 30 && time() - $pending['created'] < 300) {
+            throw new \RuntimeException('An OIDC authorization is already in progress; cancel it before retrying');
+        }
+        unset($session['cajeer_oidc_transaction']);
         $tx = $client->begin($mode);
         // Internal context is set by trusted PHP handlers, never from callback query data.
         if ($context !== []) $tx['context'] = $context;
         $session['cajeer_oidc_transaction'] = $tx;
         return $tx['url'];
+    }
+
+    /** Cancel an abandoned transaction only from a CSRF-protected POST handler. */
+    public static function cancel(array &$session): void
+    {
+        unset($session['cajeer_oidc_transaction']);
     }
 
     /** @return array{mode:string,identity:array{iss:string,sub:string}} */

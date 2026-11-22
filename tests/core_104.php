@@ -22,7 +22,7 @@ try {
     $app=new Lite($root);
     $app->install('TestPassword123','https://example.org','GA4 example');
     $d=$app->load();
-    assert104(Lite::VERSION==='1.1.7' && SiteState::SCHEMA===12 && $d['schema']===12,'version/schema');
+    assert104(Lite::VERSION==='1.1.8' && SiteState::SCHEMA===12 && $d['schema']===12,'version/schema');
     assert104($d['integrations']['ga4']===GA4Config::DEFAULTS,'default GA4 settings');
     assert104(!str_contains((new Lite(dirname(__DIR__)))->render($d,$d['pages']['/']),'/assets/ga4.js'),'disabled GA4 rendered');
     reject104(fn()=>GA4Config::fromPost(['enabled'=>'1','measurement_id'=>'G-NOT!SAFE']), 'injection ID');

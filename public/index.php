@@ -31,6 +31,23 @@ try {
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
     if ($path==='/admin' || str_starts_with($path, '/admin/oidc/')) {
+        // Never trust user-provided X-Forwarded-Proto or Host for administrative
+        // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
+        if (str_starts_with($d['settings']['url'], 'https://')) {
+            if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') {
+                stop(403, 'Administrative access requires HTTPS');
+            }
+            $expectedHost=parse_url($d['settings']['url'],PHP_URL_HOST);
+            $expectedPort=parse_url($d['settings']['url'],PHP_URL_PORT) ?? 443;
+            $received=$_SERVER['HTTP_HOST'] ?? '';
+            $host=is_string($received) ? parse_url('https://'.$received, PHP_URL_HOST) : null;
+            $port=is_string($received) ? (parse_url('https://'.$received, PHP_URL_PORT) ?? 443) : null;
+            if (!is_string($expectedHost) || !is_string($host) ||
+                !hash_equals(strtolower($expectedHost),strtolower($host)) || $port!==$expectedPort) {
+                stop(421,'Unrecognized admin hostname');
+            }
+            header('Strict-Transport-Security: max-age=31536000');
+        }
         header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
         if ($path==='/admin/oidc/backchannel-logout') {
             if ($method!=='POST') {header('Allow: POST'); stop(405,'Method not allowed');}
@@ -41,11 +58,19 @@ try {
             if (!is_string($jwt) || strlen($jwt)<100 || strlen($jwt)>16000) stop(400,'Invalid logout request');
             try {
                 $claims=OidcClient::fromEnvironment($d['settings']['url'])->verifyLogoutToken($jwt);
+            } catch (\Throwable $exception) {
+                error_log('SkiF4er logout token verification: '.get_class($exception));
+                stop(400,'Invalid logout request');
+            }
+            try {
                 (new SessionRegistry($app->root))->backchannelLogout($claims,$d);
                 header('Content-Type: text/plain; charset=utf-8'); echo 'OK'; exit;
             } catch (\Throwable $exception) {
-                error_log('SkiF4er backchannel logout: '.get_class($exception));
-                stop(400,'Invalid logout request');
+                // Storage failure or a full replay cache is temporary: ask the IdP
+                // to retry, rather than acknowledging an unperformed revocation.
+                error_log('SkiF4er logout revocation unavailable: '.get_class($exception));
+                header('Retry-After: 60');
+                stop(503,'Logout revocation temporarily unavailable');
             }
         }
         if ($path==='/admin/oidc/logged-out') {
@@ -76,9 +101,8 @@ try {
             try {
                 $client=OidcClient::fromEnvironment($d['settings']['url']);
                 if ($path==='/admin/oidc/login') {
-                    if ($auth || ($d['identity']['owner'] ?? null) === null) stop(403, 'SkiF4er ID owner is not linked');
-                    $url=OidcFlow::start($_SESSION, $client, 'login');
-                    header('Location: '.$url, true, 302); exit;
+                    // OIDC login initiation is POST/CSRF-only via /admin.
+                    stop(405, 'Use the sign-in form');
                 }
                 if ($path==='/admin/oidc/callback') {
                     $hadLocalAuth=$auth && !isset($_SESSION['oidc_identity']);
@@ -153,7 +177,18 @@ try {
             if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
             $action=$_POST['action']??'';
             try {
-                if ($action==='login' && !$auth) {
+                if ($action==='oidc_cancel') {
+                    OidcFlow::cancel($_SESSION);
+                    go('/admin');
+                }
+                elseif ($action==='oidc_login' && !$auth) {
+                    if (($d['identity']['owner'] ?? null) === null || !OidcClient::enabled($d['settings']['url'])) {
+                        stop(403, 'SkiF4er ID owner is not linked');
+                    }
+                    $url=OidcFlow::start($_SESSION, OidcClient::fromEnvironment($d['settings']['url']), 'login');
+                    header('Location: '.$url, true, 303); exit;
+                }
+                elseif ($action==='login' && !$auth) {
                     if (!AuthPolicy::localAllowed($d)) stop(403, 'Local sign-in disabled by authentication policy');
                     if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32)),'owner_generation'=>$d['identity']['generation']]; $sessions->issue($_SESSION,$d,$_SERVER); go('/admin'); }
                     http_response_code(401); $error='Неверный пароль или временная блокировка. Повторите через 5 минут.';
@@ -377,9 +412,15 @@ try {
             }
             if (OidcClient::enabled($d['settings']['url']) && ($d['identity']['owner'] ?? null) !== null) {
                 $loginHtml.='<section><h2>SkiF4er ID</h2><p>Войти через привязанный аккаунт владельца.</p>'.
-                    '<a href="/admin/oidc/login">Войти через SkiF4er ID</a></section>';
+                    form('oidc_login','<button>Войти через SkiF4er ID</button>').'</section>';
+            }
+            if (isset($_SESSION['cajeer_oidc_transaction'])) {
+                $loginHtml.='<p>Авторизация SkiF4er ID уже начата.</p>'.form('oidc_cancel','<button>Отменить незавершённый вход</button>');
             }
             shell('Вход в админ-панель', $loginHtml);
+        }
+        if (isset($_SESSION['cajeer_oidc_transaction'])) {
+            $html.='<p>Незавершённая OIDC-авторизация.</p>'.form('oidc_cancel','<button>Отменить авторизацию</button>');
         }
         $identity=$d['identity']['owner'] ?? null;
         $html.='<section><h2>SkiF4er ID</h2>';

@@ -124,7 +124,12 @@ final class SessionRegistry
             $replays=$data['replays']; $oldReplays=$replays; $time=$clock??time();
             foreach ($replays as $jti=>$expiry) if ($expiry <= $time) unset($replays[$jti]);
             foreach ($items as $id=>$record) {
+                // If the clock rolls backwards or a record has impossible timestamps,
+                // expire it instead of extending the lease indefinitely.
                 if (($record['method']==='oidc' && !isset($record['oidc_subject'])) ||
+                    $record['created']>$time+60 || $record['seen']>$time+60 ||
+                    $record['created']>$record['seen'] ||
+                    $record['expires']-$record['created']>self::MAX_SECONDS ||
                     $record['expires']<=$time || $record['seen']+self::IDLE_SECONDS<=$time ||
                     !hash_equals($site['identity']['generation'],$record['generation']) ||
                     !hash_equals(hash('sha256',$site['password']),$record['proof'])) unset($items[$id]);
@@ -209,9 +214,10 @@ final class SessionRegistry
         $sid=isset($claims['sid'])?hash('sha256',$claims['iss']."\0".$claims['sid']):null;
         return $this->locked(static function(array &$items,int $time,array &$replays)use($jti,$subject,$sid,$claims): int {
             if (isset($replays[$jti])) return 0; // retries are idempotent
+            // Never evict a still-valid jti: doing so would allow a previously
+            // processed, correctly signed logout token to revoke future sessions.
             if (count($replays)>=self::MAX_REPLAYS) {
-                asort($replays,SORT_NUMERIC);
-                array_shift($replays);
+                throw new \RuntimeException('Logout replay cache is full; retry after expiry');
             }
             $count=0;
             foreach ($items as $id=>$row) {

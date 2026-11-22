@@ -13,6 +13,15 @@ final class RecoveryService
 
     public function __construct(private readonly Lite $app) {}
 
+    private static function requireCli(): void
+    {
+        // Never allow a future HTTP controller to accidentally expose the
+        // privileged recovery service as a web-accessible operation.
+        if (PHP_SAPI !== 'cli') {
+            throw new \RuntimeException('Access recovery requires a trusted server CLI');
+        }
+    }
+
     private function path(string $name): string
     {
         return OperationFiles::path($this->app->root, 'storage/auth/'.$name);
@@ -112,6 +121,7 @@ final class RecoveryService
     /** Token is returned only to the trusted CLI process; only its digest is persisted. */
     public function issue(?int $clock = null): string
     {
+        self::requireCli();
         return $this->locked(function () use ($clock): string {
             $site = $this->app->load();
             $now = $clock ?? time();
@@ -127,6 +137,7 @@ final class RecoveryService
     /** Finalizing consumes the grant before credential mutation. A crash requires a fresh grant. */
     public function complete(string $token, string $password, ?int $clock = null): void
     {
+        self::requireCli();
         $this->locked(function () use ($token, $password, $clock): void {
             $now = $clock ?? time();
             $grant = $this->grant();
@@ -185,6 +196,7 @@ final class RecoveryService
 
     public function cancel(?int $clock = null): void
     {
+        self::requireCli();
         $this->locked(function () use ($clock): void {
             $grant = $this->grant();
             $now = $clock ?? time();
@@ -198,6 +210,7 @@ final class RecoveryService
 
     public function status(?int $clock = null): array
     {
+        self::requireCli();
         return $this->locked(function () use ($clock): array {
             $state = $this->grant();
             $now = $clock ?? time();

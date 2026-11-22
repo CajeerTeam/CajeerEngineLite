@@ -75,6 +75,11 @@ final class OidcClient
             $transaction['created'] > time()+30 || time()-$transaction['created'] > 300) {
             throw new \RuntimeException('OIDC transaction expired');
         }
+        // RFC 9207: when the provider supplies the authorization response issuer,
+        // reject a mismatching issuer before any token endpoint request.
+        if (array_key_exists('iss', $query) && $query['iss'] !== self::ISSUER) {
+            throw new \RuntimeException('Untrusted authorization response issuer');
+        }
         $state = $query['state'] ?? null;
         $code = $query['code'] ?? null;
         if (!is_string($state) || !hash_equals($transaction['state'], $state) ||
@@ -143,6 +148,13 @@ final class OidcClient
         } catch (\JsonException) {
             throw new \RuntimeException('Invalid ID token JSON');
         }
+        // Nested, remote-key and critical JOSE headers are not used by this client.
+        // Explicitly reject them instead of silently ignoring unsupported semantics.
+        foreach (['crit', 'jku', 'jwk', 'x5u', 'x5c', 'b64', 'zip', 'cty'] as $untrusted) {
+            if (array_key_exists($untrusted, $header)) {
+                throw new \RuntimeException('Unsupported JWT header');
+            }
+        }
         if (($header['alg'] ?? null) !== 'RS256' || !is_string($header['kid'] ?? null) ||
             strlen($header['kid']) < 1 || strlen($header['kid']) > 128 ||
             (isset($header['typ']) && !in_array($header['typ'], $logout ? ['JWT','application/jwt','logout+jwt'] : ['JWT','application/jwt'], true))) {
@@ -157,7 +169,11 @@ final class OidcClient
             if ($key !== null) throw new \RuntimeException('Ambiguous OIDC signing key');
             if (($candidate['kty'] ?? null) !== 'RSA' ||
                 (isset($candidate['use']) && $candidate['use'] !== 'sig') ||
-                (isset($candidate['alg']) && $candidate['alg'] !== 'RS256')) throw new \RuntimeException('Invalid OIDC signing key');
+                (isset($candidate['alg']) && $candidate['alg'] !== 'RS256') ||
+                (isset($candidate['key_ops']) && (!is_array($candidate['key_ops']) ||
+                    !in_array('verify', $candidate['key_ops'], true)))) {
+                throw new \RuntimeException('Invalid OIDC signing key');
+            }
             $key = $candidate;
         }
         if ($key === null) throw new \RuntimeException('OIDC signing key not found');
@@ -226,9 +242,14 @@ final class OidcClient
             ($doc['authorization_endpoint'] ?? null) !== self::AUTH ||
             ($doc['token_endpoint'] ?? null) !== self::TOKEN ||
             ($doc['jwks_uri'] ?? null) !== self::JWKS ||
-            (isset($doc['code_challenge_methods_supported']) &&
-                (!is_array($doc['code_challenge_methods_supported']) ||
-                    !in_array('S256', $doc['code_challenge_methods_supported'], true)))) {
+            !is_array($doc['code_challenge_methods_supported'] ?? null) ||
+            !in_array('S256', $doc['code_challenge_methods_supported'], true) ||
+            (isset($doc['response_types_supported']) &&
+                (!is_array($doc['response_types_supported']) ||
+                    !in_array('code', $doc['response_types_supported'], true))) ||
+            (isset($doc['grant_types_supported']) &&
+                (!is_array($doc['grant_types_supported']) ||
+                    !in_array('authorization_code', $doc['grant_types_supported'], true)))) {
             throw new \RuntimeException('Unexpected SkiF4er OIDC metadata');
         }
         return $doc;

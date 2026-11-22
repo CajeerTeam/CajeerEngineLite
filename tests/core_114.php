@@ -18,7 +18,7 @@ $root=sys_get_temp_dir().'/cajeer-session-'.bin2hex(random_bytes(8)); mkdir($roo
 try {
     $app=new Lite($root); $app->install('StrongPasswordForSessions123','https://lite.example.test','Sessions');
     $site=$app->load();
-    assert114(Lite::VERSION==='1.1.7' && SiteState::SCHEMA===12 && $site['schema']===12,'release baseline, schema unchanged');
+    assert114(Lite::VERSION==='1.1.8' && SiteState::SCHEMA===12 && $site['schema']===12,'release baseline, schema unchanged');
     $store=new SessionRegistry($root);
     $first=[]; $second=['oidc_identity'=>['iss'=>'https://id.skif4er.ru/realms/skif4er','sub'=>'test-sub']];
     $now=1800000000;

@@ -22,7 +22,7 @@ try {
     $app = new Lite($root);
     $app->install('SomeVeryStrongPassword123', 'https://lite.example.org', 'Security regression');
     $d = $app->load();
-    ok109(Lite::VERSION === '1.1.7' && $d['schema'] === SiteState::SCHEMA, 'version mismatch');
+    ok109(Lite::VERSION === '1.1.8' && $d['schema'] === SiteState::SCHEMA, 'version mismatch');
     $report=IntegrationDiagnostics::run($root,$d);
     ok109($report['ok'] && count($report['checks']) >= 10, 'clean install diagnostics failed');
     ok109(!str_contains(PublicCsp::headers($d)['policy'],'https://www.googletagmanager.com'), 'disabled Google source exposed');
