@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.2.3
+# CajeerEngine Lite Edition 1.2.4
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -1034,3 +1034,52 @@ using a local injected test transport, validates quota accounting, draft creatio
 metadata updates, concurrent revisions and malformed AI responses. The HTTP test
 exercises authenticated admin routes and CSRF with no API key configured. End-to-end
 response delivery from a live OpenAI project requires staging credentials.
+
+
+## AI Page Editor — 1.2.4
+
+Open `/admin/ai/editor` (also linked beside each page in `/admin`) after signing in.
+Select an existing page and the field to edit: full body text, title, SEO description,
+or all three. Choose improve, proofread, shorten, expand, change tone, rewrite, or
+custom instructions. The server sends the selected page context to the configured
+OpenAI Responses API with Structured Outputs, `store: false`, TLS verification and
+the existing atomic usage quotas. Each AI request can incur provider charges.
+
+The response is **only a preview**. The original and proposed fields are displayed
+side by side, and the proposed text can be edited before approval. The admin must
+explicitly check the confirmation and click Apply. A proposed edit is valid for
+30 minutes, is bound to the current owner generation, and cannot overwrite a page
+changed since its generation. Paths, publishing status and menu visibility are never
+modified by the AI editor. Changes to published pages become public after approval.
+The existing plaintext renderer continues to escape HTML and JavaScript.
+
+Before applying a change, Lite saves a durable copy of the *previous* page in
+`storage/ai/page-history/<owner-generation>/<sha256-of-path>/<snapshot-id>.json`.
+These private files use 0700 directories and 0600 files and are protected against
+symlink/hardlink substitution. Up to 20 revisions per page are retained. Open the
+same editor page, expand a history entry and confirm Restore to roll back. Restoring
+also snapshots the currently live page, enabling undo of a restore. A restore
+fails if the page was modified after the restoration form was opened. Other manual
+editor changes are not versioned retroactively.
+
+History is scoped to the active owner generation, stored separately from
+`storage/site.json`, and not included in ordinary site backups. Back up the
+`storage/ai/page-history/` directory independently if archival retention is needed.
+Changing owners isolates earlier revision history. Do not place `storage/` under a
+public web root. If the page text exceeds configured AI context limits, the editor
+rejects the request rather than silently sending a truncated page. Increase
+`max_input_chars` carefully and check expected token costs.
+
+Upgrade from 1.2.3 by replacing patch files, then run:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_124.php
+bash tests/ai_page_editor_http.sh
+python tests/browser_124.py
+```
+
+The site JSON schema remains 13; no migration is needed. Local tests use a test
+transport for provider responses. Live generation requires a configured API key,
+network access and an available Structured Outputs-compatible model.

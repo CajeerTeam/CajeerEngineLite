@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView};
+use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -31,7 +31,7 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin' || $path==='/admin/ai' || $path==='/admin/ai/content' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -96,6 +96,71 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path === '/admin/ai/editor') {
+            if (!$auth) stop(403, 'Administrator login required');
+            $chosen=$method==='POST' ? ($_POST['path']??null) : ($_GET['path']??null);
+            if ($chosen===null) $chosen=array_key_first($d['pages']);
+            if (!is_string($chosen) || !isset($d['pages'][$chosen])) stop(400, 'Invalid editor page');
+            $history=new PageHistory($app->root,$d['identity']['generation']);
+            $proposal=$_SESSION['ai_editor_proposal']??null;
+            if (!is_array($proposal) || !is_int($proposal['created']??null) ||
+                $proposal['created']>time() || time()-$proposal['created']>1800 ||
+                !is_string($proposal['owner_generation']??null) ||
+                !hash_equals($d['identity']['generation'],$proposal['owner_generation'])) {
+                unset($_SESSION['ai_editor_proposal']);
+                $proposal=null;
+            }
+            if ($method==='GET' || $method==='HEAD') {
+                shell('AI — редактор страниц',PageEditorView::render($d,$_SESSION['csrf'],
+                    $proposal,$history->all($chosen),OpenAIClient::configured(),$chosen));
+            }
+            if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) {
+                stop(403,'Invalid CSRF token');
+            }
+            $action=$_POST['action']??null;
+            if (!is_string($action) || !in_array($action,['generate','apply','discard','restore'],true)) {
+                stop(400,'Invalid AI editor action');
+            }
+            $error='';
+            try {
+                if ($action==='discard') {
+                    unset($_SESSION['ai_editor_proposal']);
+                    go('/admin/ai/editor?path='.rawurlencode($chosen));
+                }
+                if ($action==='generate') {
+                    if (!$d['ai']['enabled'] || !OpenAIClient::configured()) stop(503,'OpenAI is not configured');
+                    unset($_SESSION['ai_editor_proposal']);
+                    $proposal=PageEditor::prepare($_POST,$d,new OpenAIClient(),new UsageLimiter($app->root));
+                    $_SESSION['ai_editor_proposal']=$proposal;
+                    go('/admin/ai/editor?path='.rawurlencode($chosen));
+                }
+                if ($action==='apply') {
+                    if ($proposal===null || $proposal['path']!==$chosen ||
+                        !is_string($_POST['id']??null) || !hash_equals($proposal['id'],$_POST['id'])) {
+                        stop(409,'Editor preview is unavailable or expired');
+                    }
+                    PageEditor::apply($app,$history,$proposal,$_POST);
+                    unset($_SESSION['ai_editor_proposal']);
+                    go('/admin/ai/editor?path='.rawurlencode($chosen));
+                }
+                if (($_POST['confirm_restore']??null)!=='1' ||
+                    !is_string($_POST['snapshot_id']??null) || !is_string($_POST['revision']??null)) {
+                    throw new InvalidArgumentException('Confirm the history revision to restore');
+                }
+                $history->restore($app,$chosen,$_POST['snapshot_id'],$_POST['revision']);
+                unset($_SESSION['ai_editor_proposal']);
+                go('/admin/ai/editor?path='.rawurlencode($chosen));
+            } catch (InvalidArgumentException $failure) {
+                http_response_code(422);$error=$failure->getMessage();
+            } catch (RuntimeException $failure) {
+                http_response_code(502);$error='AI editor is temporarily unavailable. Check API limits or storage.';
+                error_log('Cajeer AI editor: '.get_class($failure));
+            }
+            $latest=$app->load();
+            shell('AI — редактор страниц',PageEditorView::render($latest,$_SESSION['csrf'],
+                $_SESSION['ai_editor_proposal']??null,$history->all($chosen),
+                OpenAIClient::configured(),$chosen,$error));
+        }
         if ($path === '/admin/ai/content') {
             if (!$auth) stop(403, 'Administrator login required');
             $proposal = $_SESSION['ai_content_proposal'] ?? null;
@@ -597,6 +662,7 @@ try {
         $ai=$d['ai'];
         $html.='<p><a href="/admin/ai">Cajeer AI Assistant — открыть чат</a></p>';
         $html.='<p><a href="/admin/ai/content">AI Content Generation — создать страницу, заголовок или описание</a></p>';
+        $html.='<p><a href="/admin/ai/editor">AI Page Editor — улучшить существующие страницы и восстановить версии</a></p>';
         $html.='<section id="ai"><h2>OpenAI — серверная интеграция</h2>'.
             '<p>Responses API. Запросы выполняются только сервером, API-ключ недоступен браузеру. ' .
             'Пробная генерация расходует токены. Ключ задаётся переменной CAJEER_OPENAI_API_KEY.</p>';
@@ -725,7 +791,7 @@ try {
             $html.=form('logout_global','<button>Выйти из Lite и SkiF4er ID</button>');
         }
         $html.='<section><h2>Страницы</h2><ul>';
-        foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').'</li>';
+        foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').' — <a href="/admin/ai/editor?path='.rawurlencode($p['path']).'">AI-редактор</a></li>';
         $html.='</ul><a href="/admin?new=1">Создать страницу</a></section>';
         $edit=$_GET['edit']??null;
         if ((is_string($edit) && isset($d['pages'][$edit])) || isset($_GET['new'])) {

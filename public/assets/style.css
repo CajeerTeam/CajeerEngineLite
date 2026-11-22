@@ -20,3 +20,10 @@ main section table{display:block;overflow-x:auto}
 .ai-chat-messages .ai-message-user{background:#e9f1fe}.ai-chat-messages .ai-message p{margin:5px 0 0;white-space:pre-wrap}
 .ai-chat-actions{display:flex;gap:10px;align-items:center}.ai-danger{background:#7e2930}.ai-chat #ai-chat-status{font-size:.92rem;color:#526378}
 @media(max-width:650px){.ai-chat-layout{grid-template-columns:1fr}.ai-chat-sidebar{border-right:0;border-bottom:1px solid #dce3ec;padding:0 0 12px}}
+
+/* AI page editor: side-by-side, text-only comparison without executable previews. */
+.ai-edit-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+.ai-edit-columns > div { min-width:0; padding:.6rem; border:1px solid #adb5bd; border-radius:.4rem; }
+.ai-edit-columns pre, #ai-editor-history pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:24rem; overflow-y:auto; }
+#ai-editor-history details { margin:.8rem 0; padding:.6rem; border:1px solid #adb5bd; border-radius:.4rem; }
+@media(max-width:720px) { .ai-edit-columns { grid-template-columns:1fr; } }
