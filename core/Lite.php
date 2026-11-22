@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace CajeerEngine;
 use CajeerEngine\Public\PublicPath;
+use CajeerEngine\AI\AIConfig;
 use CajeerEngine\Analytics\ReportConfig;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\{ConsentConfig,ConsentCookie};
@@ -11,7 +12,7 @@ use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.2.1';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
@@ -49,7 +50,7 @@ final class Lite
         $this->change(function($d) use($password,$settings) {
             if ($d!==null) throw new \InvalidArgumentException('Already installed');
             $home=self::page(['path'=>'/','title'=>'Добро пожаловать','description'=>'Сайт на CajeerEngine Lite','body'=>'Расскажите о себе, своих услугах и контактах. Измените эту страницу в административной панели.','published'=>'1','menu'=>'1']);
-            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'reporting'=>ReportConfig::DEFAULTS,'identity'=>['owner'=>null,'generation'=>\CajeerEngine\Auth\OwnerIdentity::generation()],'auth_policy'=>\CajeerEngine\Auth\AuthPolicy::DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS,'metrica'=>MetricaConfig::DEFAULTS,'gtm'=>GTMConfig::DEFAULTS,'clarity'=>ClarityConfig::DEFAULTS,'matomo'=>MatomoConfig::DEFAULTS]];
+            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'reporting'=>ReportConfig::DEFAULTS,'identity'=>['owner'=>null,'generation'=>\CajeerEngine\Auth\OwnerIdentity::generation()],'auth_policy'=>\CajeerEngine\Auth\AuthPolicy::DEFAULTS,'ai'=>AIConfig::DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS,'metrica'=>MetricaConfig::DEFAULTS,'gtm'=>GTMConfig::DEFAULTS,'clarity'=>ClarityConfig::DEFAULTS,'matomo'=>MatomoConfig::DEFAULTS]];
         });
     }
     public function login(string $password): bool {

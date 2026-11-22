@@ -3,6 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\AI\{OpenAIClient,UsageLimiter};
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
@@ -11,6 +12,16 @@ $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
     switch ($cmd) {
+        case 'ai':
+            if (($argv[2]??'')!=='status' || count($argv)!==3) {
+                throw new InvalidArgumentException('Usage: ai status');
+            }
+            $state=$app->load();
+            $usage=(new UsageLimiter($app->root))->status();
+            echo json_encode(['enabled'=>$state['ai']['enabled'],'model'=>$state['ai']['model'],
+                'key_configured'=>OpenAIClient::configured(),'limits'=>$state['ai'],'usage'=>$usage],
+                JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+            break;
         case 'install':
             $password=getenv('CAJEER_ADMIN_PASSWORD');
             if ($password===false) { fwrite(STDERR,"Admin password (input is visible): "); $password=rtrim((string)fgets(STDIN),"\r\n"); }
@@ -22,6 +33,9 @@ try {
             $state=$app->load();
             if (\CajeerEngine\Auth\OidcClient::enabled($state['settings']['url']) && !extension_loaded('openssl')) {
                 throw new RuntimeException('SkiF4er ID requires the OpenSSL extension');
+            }
+            if ($state['ai']['enabled'] && (!extension_loaded('openssl') || !filter_var(ini_get('allow_url_fopen'),FILTER_VALIDATE_BOOLEAN))) {
+                throw new RuntimeException('OpenAI requires OpenSSL and allow_url_fopen=On');
             }
             if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable');
             $report=IntegrationDiagnostics::run($app->root, $state);
@@ -173,6 +187,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
+                 "php bin/cajeer ai status\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".

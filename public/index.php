@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -305,6 +306,42 @@ try {
                     }
                     go('/admin');
                 }
+                elseif ($action==='ai_settings') {
+                    $config=AIConfig::fromPost($_POST);
+                    $app->change(static function(array $site)use($config):array {
+                        $site['ai']=$config; return $site;
+                    });
+                    go('/admin?ai=1');
+                }
+                elseif ($action==='ai_models') {
+                    if (time()-(int)($_SESSION['ai_models_at']??0)<30) {
+                        throw new InvalidArgumentException('Повторите запрос моделей не ранее чем через 30 секунд');
+                    }
+                    $_SESSION['ai_models_at']=time();
+                    try {
+                        $models=(new OpenAIClient())->models();
+                        $_SESSION['ai_result']=['kind'=>'models','models'=>$models];
+                    } catch (RuntimeException $failure) {
+                        $_SESSION['ai_result']=['kind'=>'error','message'=>$failure->getMessage()];
+                    }
+                    go('/admin?ai=1');
+                }
+                elseif ($action==='ai_test') {
+                    $prompt=$_POST['ai_prompt']??null;
+                    if (!is_string($prompt) || $prompt==='' || strlen($prompt)>$d['ai']['max_input_chars'] ||
+                        !preg_match('//u',$prompt) || str_contains($prompt,"\0")) {
+                        throw new InvalidArgumentException('Неверный запрос или превышено ограничение длины');
+                    }
+                    try {
+                        $result=(new UsageLimiter($app->root))->generate(new OpenAIClient(),$d['ai'],$prompt);
+                        $_SESSION['ai_result']=['kind'=>'response','text'=>substr($result['text'],0,12000),
+                            'input'=>$result['input_tokens'],'output'=>$result['output_tokens'],
+                            'model'=>$result['model']];
+                    } catch (RuntimeException $failure) {
+                        $_SESSION['ai_result']=['kind'=>'error','message'=>$failure->getMessage()];
+                    }
+                    go('/admin?ai=1');
+                }
                 elseif ($action==='settings') { $settings=Lite::settings($_POST); $app->change(function($d)use($settings){$d['settings']=$settings;return $d;}); go('/admin'); }
                 elseif ($action==='modules') {
                     $submitted = $_POST['module'] ?? [];
@@ -423,6 +460,47 @@ try {
             $html.='<p>Незавершённая OIDC-авторизация.</p>'.form('oidc_cancel','<button>Отменить авторизацию</button>');
         }
         $identity=$d['identity']['owner'] ?? null;
+        $ai=$d['ai'];
+        $html.='<section id="ai"><h2>OpenAI — серверная интеграция</h2>'.
+            '<p>Responses API. Запросы выполняются только сервером, API-ключ недоступен браузеру. ' .
+            'Пробная генерация расходует токены. Ключ задаётся переменной CAJEER_OPENAI_API_KEY.</p>';
+        $html.='<p>API-ключ: '.(OpenAIClient::configured()?'настроен':'не настроен').'</p>';
+        $fields='<label><input type="checkbox" name="ai_enabled" value="1" '.($ai['enabled']?'checked':'').'> Включить OpenAI</label>';
+        $fields.=input('ai_model',$ai['model']);
+        foreach (['max_input_chars'=>'Макс. байт в запросе','max_output_tokens'=>'Макс. токенов ответа',
+            'daily_requests'=>'Макс. запросов за день','daily_tokens'=>'Макс. токенов за день'] as $key=>$label) {
+            $fields.='<label>'.e($label).'<input type="number" name="ai_'.e($key).'" value="'.e((string)$ai[$key]).'" required></label>';
+        }
+        $html.=form('ai_settings',$fields.'<button>Сохранить настройки OpenAI</button>');
+        $html.=form('ai_models','<button>Проверить доступные модели через API</button>');
+        if ($ai['enabled']) {
+            $html.=form('ai_test','<label>Тестовый запрос (передаётся OpenAI)'.
+                '<textarea name="ai_prompt" maxlength="'.e((string)$ai['max_input_chars']).'" rows="4" required></textarea></label>'.
+                '<button>Сгенерировать тестовый ответ</button>');
+        }
+        try {
+            $usage=(new UsageLimiter($app->root))->status();
+            $html.='<p>UTC '.e($usage['day']).': запросов '.e((string)$usage['requests']).
+                ' / '.e((string)$ai['daily_requests']).', токенов '.e((string)$usage['tokens']).
+                ' (зарезервировано '.e((string)$usage['reserved_tokens']).') / '.e((string)$ai['daily_tokens']).'.</p>';
+        } catch (Throwable $failure) {
+            $html.='<p class="error">Файловый счётчик AI недоступен.</p>';
+        }
+        $report=$_SESSION['ai_result']??null; unset($_SESSION['ai_result']);
+        if (is_array($report)) {
+            if (($report['kind']??null)==='response') {
+                $html.='<h3>Ответ OpenAI</h3><p>Модель: '.e((string)$report['model']).
+                    '; вход: '.e((string)$report['input']).', выход: '.e((string)$report['output']).' токенов</p>'.
+                    '<div class="ai-response">'.nl2br(e((string)$report['text']),false).'</div>';
+            } elseif (($report['kind']??null)==='models') {
+                $html.='<p>Модели GPT, доступные в проекте (список не гарантирует поддержку Responses API):</p><ul>';
+                foreach ($report['models'] as $name) $html.='<li>'.e($name).'</li>';
+                $html.='</ul>';
+            } elseif (($report['kind']??null)==='error') {
+                $html.='<p class="error" role="alert">'.e((string)$report['message']).'</p>';
+            }
+        }
+        $html.='</section>';
         $html.='<section><h2>SkiF4er ID</h2>';
         if ($identity === null) {
             $html.='<p>Аккаунт владельца пока не привязан. Вход через ID не предоставляет права автоматически.</p>';

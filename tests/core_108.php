@@ -23,7 +23,7 @@ try {
     $app = new Lite($root);
     $app->install('VeryStrongPassword123', 'https://example.org', 'Matomo 1.0.8');
     $state = $app->load();
-    check108(Lite::VERSION === '1.2.0' && SiteState::SCHEMA === 12 && $state['schema'] === 12, 'version/schema');
+    check108(Lite::VERSION === '1.2.1' && SiteState::SCHEMA === 13 && $state['schema'] === 13, 'version/schema');
     check108($state['integrations']['matomo'] === MatomoConfig::DEFAULTS, 'missing defaults');
     check108(!str_contains((new Lite(dirname(__DIR__)))->render($state, $state['pages']['/']), '/assets/matomo.js'), 'disabled Matomo published');
     foreach ([
@@ -79,7 +79,7 @@ try {
     OperationFiles::write($app->file(),$raw,0600);
     check108($app->migrate(),'schema 7 migration was skipped');
     $migrated=$app->load();
-    check108($migrated['schema']===12 && $migrated['integrations']['matomo']===MatomoConfig::DEFAULTS,'migration defaults');
+    check108($migrated['schema']===13 && $migrated['integrations']['matomo']===MatomoConfig::DEFAULTS,'migration defaults');
     foreach (['settings','pages','password','login','modules','consent'] as $key) {
         check108($migrated[$key]===$old[$key], 'migration changed '.$key);
     }
@@ -95,7 +95,7 @@ try {
     check108(str_contains(file_get_contents($root.'/storage/backups/'.$snapshot),base64_encode($raw)),'snapshot lost original bytes');
     $app->backups()->restore($snapshot);
     $restored=$app->load();
-    check108($restored['schema']===12 && $restored['integrations']['matomo']===MatomoConfig::DEFAULTS,'restore failed');
+    check108($restored['schema']===13 && $restored['integrations']['matomo']===MatomoConfig::DEFAULTS,'restore failed');
     foreach (['ga4','metrica','gtm','clarity'] as $key) check108($restored['integrations'][$key]===$old['integrations'][$key],'restore changed '.$key);
     check108(!$app->migrate(),'migration not idempotent');
     echo "Lite 1.0.8 Matomo core/migration/backup regression OK\n";

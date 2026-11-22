@@ -17,7 +17,7 @@ function rm117(string $path): void {
     if (is_dir($path)) { foreach (new DirectoryIterator($path) as $entry) if (!$entry->isDot()) rm117($entry->getPathname()); rmdir($path); }
 }
 
-assert117(Lite::VERSION==='1.2.0' && SiteState::SCHEMA===12,'application version and schema');
+assert117(Lite::VERSION==='1.2.1' && SiteState::SCHEMA===13,'application version and schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 assert117($key instanceof OpenSSLAsymmetricKey,'RSA test key');
 $details=openssl_pkey_get_details($key);
@@ -62,7 +62,7 @@ try {
     $app=new Lite($root);
     $app->install('OriginalPassword123!','https://lite.example.test','Policy test');
     $site=$app->load();
-    assert117($site['schema']===12 && $site['auth_policy']===AuthPolicy::DEFAULTS && AuthPolicy::localAllowed($site),'fresh install is hybrid');
+    assert117($site['schema']===13 && $site['auth_policy']===AuthPolicy::DEFAULTS && AuthPolicy::localAllowed($site),'fresh install is hybrid');
     $unbound=$site; $unbound['auth_policy']['mode']=AuthPolicy::OIDC_ONLY;
     reject117(fn()=>SiteState::validate($unbound),'SSO-only without a linked owner');
     foreach (['other','HYBRID',null,12] as $invalid) {
@@ -77,7 +77,7 @@ try {
     $old=$site; $old['schema']=11; unset($old['auth_policy']);
     file_put_contents($app->file(),SiteState::encode($old));
     $migrated=$app->load();
-    assert117($migrated['schema']===12 && $migrated['auth_policy']===AuthPolicy::DEFAULTS &&
+    assert117($migrated['schema']===13 && $migrated['auth_policy']===AuthPolicy::DEFAULTS &&
         $migrated['pages']===$old['pages'] && $migrated['password']===$old['password'],'11->12 migration');
     assert117(count(array_filter($app->backups()->names(),
         fn(string $name): bool => $app->backups()->verify($name)['schema']===11))===1,'migration backup');

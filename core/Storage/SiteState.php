@@ -8,17 +8,18 @@ use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,M
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\ReportConfig;
 use CajeerEngine\Auth\AuthPolicy;
+use CajeerEngine\AI\AIConfig;
 
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
 {
-    public const SCHEMA = 12;
+    public const SCHEMA = 13;
     public const LIMIT = 4_000_000;
 
     public static function validate(array $state): void
     {
         $version = $state['schema'] ?? null;
-        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], true)) throw new \RuntimeException('Unsupported site schema');
+        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], true)) throw new \RuntimeException('Unsupported site schema');
         $settings = $state['settings'] ?? null;
         if (!is_array($settings) || !is_string($settings['name'] ?? null) || trim($settings['name']) === '' ||
             !is_string($settings['url'] ?? null) || !is_string($settings['email'] ?? null) ||
@@ -107,6 +108,10 @@ final class SiteState
                 throw new \RuntimeException('SSO-only mode requires a linked owner');
             }
         }
+        if ($version >= 13) {
+            if (!is_array($state['ai'] ?? null)) throw new \RuntimeException('Missing OpenAI settings');
+            AIConfig::validate($state['ai']);
+        }
     }
 
     public static function migrate(array $state): array
@@ -155,6 +160,10 @@ final class SiteState
         if ($state['schema'] === 11) {
             $state['auth_policy'] = AuthPolicy::DEFAULTS;
             $state['schema'] = 12;
+        }
+        if ($state['schema'] === 12) {
+            $state['ai'] = AIConfig::DEFAULTS;
+            $state['schema'] = 13;
         }
         self::validate($state);
         return $state;
