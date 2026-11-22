@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{OpenAIClient,UsageLimiter};
+use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics};
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
@@ -12,6 +12,20 @@ $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
     switch ($cmd) {
+        case 'support':
+            if (($argv[2]??'')!=='check' || count($argv)>4 ||
+                (isset($argv[3]) && $argv[3]!=='--json')) {
+                throw new InvalidArgumentException('Usage: support check [--json]');
+            }
+            $snapshot=SupportDiagnostics::collect($app->root,$app->load());
+            if (($argv[3]??'')==='--json') {
+                echo json_encode($snapshot,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES)."\n";
+            } else {
+                foreach ($snapshot['checks'] as $id=>$status) echo strtoupper($status).' '.$id."\n";
+                echo 'Totals: '.json_encode($snapshot['counts'],JSON_THROW_ON_ERROR)."\n";
+            }
+            if ($snapshot['counts']['fail']>0) exit(1);
+            break;
         case 'ai':
             if (($argv[2]??'')!=='status' || count($argv)!==3) {
                 throw new InvalidArgumentException('Usage: ai status');
@@ -187,7 +201,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
-                 "php bin/cajeer ai status\n".
+                 "php bin/cajeer ai status\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".

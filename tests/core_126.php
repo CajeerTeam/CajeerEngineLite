@@ -8,7 +8,7 @@ use CajeerEngine\Storage\SiteState;
 function check126(bool $ok,string $msg):void {if(!$ok)throw new RuntimeException('AI analytics 1.2.6: '.$msg);}
 function deny126(callable $f,string $msg):void {try{$f();}catch(RuntimeException|InvalidArgumentException $e){return;}throw new RuntimeException('Accepted unsafe analytics: '.$msg);}
 function clean126(string $dir):void {if(is_link($dir)||is_file($dir)){unlink($dir);return;}if(is_dir($dir)){foreach(new FilesystemIterator($dir) as $p)clean126($p->getPathname());rmdir($dir);}}
-check126(Lite::VERSION==='1.2.6' && SiteState::SCHEMA===13,'release and unchanged schema');
+check126(version_compare(Lite::VERSION,'1.2.6','>=') && SiteState::SCHEMA===13,'release and unchanged schema');
 $root=sys_get_temp_dir().'/cajeer-ai-analytics-'.bin2hex(random_bytes(7));
 mkdir($root.'/templates/default',0700,true);
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');

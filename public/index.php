@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView};
+use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -31,7 +31,7 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -96,6 +96,54 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path === '/admin/ai/support') {
+            if (!$auth) stop(403,'Administrator login required');
+            $rawCategory=$method==='POST' ? ($_POST['category']??'general') : ($_GET['category']??'general');
+            if (!is_string($rawCategory)) stop(400,'Invalid support category');
+            try { $category=SupportDiagnostics::category($rawCategory); }
+            catch (InvalidArgumentException) { stop(400,'Invalid support category'); }
+            $snapshot=SupportDiagnostics::collect($app->root,$d);
+            if ($method!=='POST' && isset($_GET['format'])) {
+                if ($_GET['format']!=='json') stop(400,'Invalid report format');
+                header('Content-Type: application/json; charset=utf-8');
+                header('Content-Disposition: attachment; filename="cajeer-lite-diagnostics.json"');
+                echo json_encode(['category'=>$category,'snapshot'=>$snapshot],
+                    JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES)."\n";exit;
+            }
+            $store=new SupportStore($app->root,$d['identity']['generation']);
+            $error='';$insight=null;
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                $action=$_POST['action']??null;
+                if (!is_string($action) || !in_array($action,['generate','delete'],true)) stop(400,'Invalid support action');
+                try {
+                    if ($action==='delete') { $store->delete($category,$snapshot);go('/admin/ai/support?category='.$category); }
+                    if (empty($d['ai']['enabled']) || !OpenAIClient::configured()) stop(503,'OpenAI is not configured');
+                    // No arbitrary commands, raw logs, user text or server paths reach the provider.
+                    $insight=TechnicalSupport::generate($category,$snapshot,$d,new OpenAIClient(),new UsageLimiter($app->root));
+                    $latest=$app->load();
+                    if (!hash_equals($latest['identity']['generation'],$d['identity']['generation']) ||
+                        !hash_equals(SupportDiagnostics::fingerprint($snapshot),
+                            SupportDiagnostics::fingerprint(SupportDiagnostics::collect($app->root,$latest))) ||
+                        !$sessions->valid($_SESSION,$latest)) stop(409,'Diagnostic state or session changed; retry');
+                    $store->save($category,$snapshot,$insight);
+                    go('/admin/ai/support?category='.$category);
+                } catch (InvalidArgumentException $failure) {
+                    http_response_code(422);$error=$failure->getMessage();
+                } catch (RuntimeException $failure) {
+                    http_response_code(502);
+                    error_log('AI technical support: '.get_class($failure));
+                    $error='Не удалось выполнить AI-анализ. Проверьте подключение OpenAI, лимиты и диагностику.';
+                }
+            }
+            try { $insight=$store->read($category,$snapshot); }
+            catch (RuntimeException $failure) {
+                error_log('AI technical support storage: '.get_class($failure));
+                $error='Ранее сохранённые рекомендации недоступны. Проверьте права файлов.';
+            }
+            shell('AI Technical Support',SupportView::render($category,$snapshot,$insight,
+                $_SESSION['csrf'],!empty($d['ai']['enabled']) && OpenAIClient::configured(),$error));
+        }
         if ($path === '/admin/ai/analytics') {
             if (!$auth) stop(403,'Administrator login required');
             $rawDays=$method==='POST' ? ($_POST['days']??'7') : ($_GET['days']??'7');
@@ -772,6 +820,7 @@ try {
         $html.='<p><a href="/admin/ai/editor">AI Page Editor — улучшить существующие страницы и восстановить версии</a></p>';
         $html.='<p><a href="/admin/ai/seo">AI SEO Assistant — аудит и исправления страниц</a></p>';
         $html.='<p><a href="/admin/ai/analytics">AI Analytics Insights — анализ отчётов и конверсий</a></p>';
+        $html.='<p><a href="/admin/ai/support">AI Technical Support — диагностика и поддержка CMS</a></p>';
         $html.='<section id="ai"><h2>OpenAI — серверная интеграция</h2>'.
             '<p>Responses API. Запросы выполняются только сервером, API-ключ недоступен браузеру. ' .
             'Пробная генерация расходует токены. Ключ задаётся переменной CAJEER_OPENAI_API_KEY.</p>';
