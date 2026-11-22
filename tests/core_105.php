@@ -22,7 +22,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123','https://example.org','Metrica test');
     $s=$app->load();
-    test105(Lite::VERSION==='1.1.5' && SiteState::SCHEMA===11 && $s['schema']===11,'version/schema');
+    test105(Lite::VERSION==='1.1.6' && SiteState::SCHEMA===11 && $s['schema']===11,'version/schema');
     test105($s['integrations']['ga4']===GA4Config::DEFAULTS && $s['integrations']['metrica']===MetricaConfig::DEFAULTS,'new install defaults');
     test105(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']), '/assets/metrica.js'),'disabled embed rendered');
     foreach ([

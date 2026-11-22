@@ -23,7 +23,7 @@ try {
     }
     $app = new Lite($root);
     $app->install('ExtremelyStrongPassword123','https://lite.example.org','Production acceptance');
-    assert110(Lite::VERSION==='1.1.5' && SiteState::SCHEMA===11,'unexpected release baseline');
+    assert110(Lite::VERSION==='1.1.6' && SiteState::SCHEMA===11,'unexpected release baseline');
     $report=ProductionAcceptance::run($root,$app->load());
     assert110($report['ok'] && $report['manual']===[], 'inactive install readiness');
 

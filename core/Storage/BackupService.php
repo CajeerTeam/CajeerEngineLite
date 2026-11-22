@@ -125,6 +125,20 @@ final class BackupService
             $state = json_decode($data['payload'], true, 512, JSON_THROW_ON_ERROR);
             if (!is_array($state)) throw new \RuntimeException('Invalid backup state');
             $state = SiteState::migrate($state);
+            // A content restore must not roll back credentials previously rotated by
+            // a server-console recovery, even when the live site JSON is damaged.
+            $live = null;
+            try { $live = $this->site->read(); }
+            catch (\RuntimeException|\JsonException $exception) { /* damaged live site; protected recovery copy is used */ }
+            if ($live !== null && $live['schema'] !== SiteState::SCHEMA) {
+                $live = SiteState::migrate($live);
+            }
+            $credentials = \CajeerEngine\Auth\RecoveryService::restoredCredentials($this->site->root, $live);
+            if ($credentials !== null) {
+                $state['password'] = $credentials['password'];
+                $state['identity'] = $credentials['identity'];
+                $state['login'] = $credentials['login'];
+            }
             // A damaged live JSON can be recovered: preserve its raw bytes first.
             $rescue = $this->site->raw() === null ? '' : $this->createLocked('pre-restore');
             // Restoring site.json must not resurrect any pre-restore PHP session.

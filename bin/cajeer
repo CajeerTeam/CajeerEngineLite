@@ -3,6 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\Auth\RecoveryService;
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
@@ -92,6 +93,23 @@ try {
                 echo $argv[3].': '.$action."d\n";
             } else throw new InvalidArgumentException('Usage: module list | module enable|disable <name>');
             break;
+        case 'recovery':
+            $operation=$argv[2] ?? '';
+            $recovery=new RecoveryService($app);
+            if ($operation==='issue' && count($argv)===3) {
+                $token=$recovery->issue();
+                echo "ONE-TIME RECOVERY TOKEN (expires in 10 minutes; save privately):\n".$token."\n";
+            } elseif ($operation==='status' && count($argv)===3) {
+                echo json_encode($recovery->status(),JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";
+            } elseif ($operation==='cancel' && count($argv)===3) {
+                $recovery->cancel(); echo "Recovery grant cancelled.\n";
+            } elseif ($operation==='complete' && count($argv)===5) {
+                $token=RecoveryService::readInput($app->root,$argv[3],128);
+                $password=RecoveryService::readInput($app->root,$argv[4],128);
+                $recovery->complete($token,$password);
+                echo "Access recovered. All sessions revoked; sign in locally and rebind SkiF4er ID.\n";
+            } else throw new InvalidArgumentException('Usage: recovery issue|status|cancel | recovery complete <absolute-private-token-file> <absolute-private-password-file>');
+            break;
         case 'backup':
             $action=$argv[2]??'';
             $backup=$app->backups();
@@ -116,6 +134,7 @@ try {
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
+                 "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
                  "php bin/cajeer release check [--json]\nphp bin/cajeer analytics refresh|status [--days=7]\n";
     }
