@@ -45,6 +45,13 @@ if CAJEER_RESTORE_CONFIRM=wrong php bin/cajeer backup restore "$backup_file" >/d
 fi
 CAJEER_RESTORE_CONFIRM="$backup_file" php bin/cajeer backup restore "$backup_file" | grep_all 'Restored:'
 get /sitemap.xml | grep_all "$base/"
+# Backup restoration revokes every administrative lease. Reauthenticate.
+curl -fsS -b "$tmp/cookies" -c "$tmp/cookies" "$base/admin" > "$tmp/relogin-restore"
+grep_all 'Вход в админ-панель' "$tmp/relogin-restore"
+csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/relogin-restore")
+[[ $(status -b "$tmp/cookies" -c "$tmp/cookies" -d "action=login&csrf=$csrf&password=TestPassword123" "$base/admin") == 303 ]]
+curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/after-restore-login"
+csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/after-restore-login")
 # Cookie Consent: public-only JavaScript, strict admin CSP, runtime config, consent expiry.
 get / | grep_all 'data-consent-action="accept"'
 get / | grep_all 'src="/assets/consent.js?v=110"'
@@ -206,5 +213,31 @@ grep_all 'Аккаунт владельца пока не привязан' "$tm
 [[ $(status -b "$tmp/cookies" -d "action=oidc_replace&csrf=invalid&oidc_password=TestPassword123&confirm_owner_change=1" "$base/admin") == 403 ]]
 [[ $(status -b "$tmp/cookies" -d "action=oidc_replace&csrf=$csrf&oidc_password=TestPassword123&confirm_owner_change=1" "$base/admin") == 422 ]]
 [[ $(status -b "$tmp/cookies" -d "action=oidc_unbind&csrf=$csrf&oidc_password=TestPassword123&confirm_owner_change=1" "$base/admin") == 422 ]]
+# 1.1.4: multiple independent HTTP clients, server-side revocation and session visibility.
+curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/devices-one"
+grep_all 'Активные сеансы и устройства' "$tmp/devices-one"
+grep_all 'текущий сеанс' "$tmp/devices-one"
+[[ $(status "$base/storage/auth/sessions.json") == 404 ]]
+[[ $(status -b "$tmp/cookies" -d "action=session_revoke_others&csrf=invalid" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=session_revoke&csrf=$csrf&session_id=bogus" "$base/admin") == 422 ]]
+curl -fsS -c "$tmp/cookies2" "$base/admin" > "$tmp/login-second"
+csrf2=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/login-second")
+[[ $(status -b "$tmp/cookies2" -c "$tmp/cookies2" -d "action=login&csrf=$csrf2&password=TestPassword123" "$base/admin") == 303 ]]
+curl -fsS -b "$tmp/cookies2" "$base/admin" > "$tmp/devices-second"
+grep_all 'Активные сеансы и устройства' "$tmp/devices-second"
+[[ $(status -b "$tmp/cookies" -d "action=session_revoke_others&csrf=$csrf" "$base/admin") == 303 ]]
+[[ $(status -b "$tmp/cookies2" "$base/admin?new=1") == 200 ]]
+curl -fsS -b "$tmp/cookies2" "$base/admin?new=1" | grep_all 'Вход в админ-панель'
+[[ $(status -b "$tmp/cookies2" -d "action=save&csrf=$csrf2&path=/hacked&title=Hacked" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=session_revoke_all&csrf=$csrf&session_password=wrong" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=session_revoke_all&csrf=$csrf&session_password=TestPassword123" "$base/admin") == 303 ]]
+curl -fsS -b "$tmp/cookies" "$base/admin" | grep_all 'Вход в админ-панель'
+[[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/hacked&title=Hacked" "$base/admin") == 403 ]]
+# Login again to verify ordinary logout removes the durable device lease.
+curl -fsS -b "$tmp/cookies" -c "$tmp/cookies" "$base/admin" > "$tmp/relogin"
+csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/relogin")
+[[ $(status -b "$tmp/cookies" -c "$tmp/cookies" -d "action=login&csrf=$csrf&password=TestPassword123" "$base/admin") == 303 ]]
+curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/relogged"
+csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/relogged")
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

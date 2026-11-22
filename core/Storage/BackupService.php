@@ -127,6 +127,8 @@ final class BackupService
             $state = SiteState::migrate($state);
             // A damaged live JSON can be recovered: preserve its raw bytes first.
             $rescue = $this->site->raw() === null ? '' : $this->createLocked('pre-restore');
+            // Restoring site.json must not resurrect any pre-restore PHP session.
+            (new \CajeerEngine\Auth\SessionRegistry($this->site->root))->invalidateAll($state);
             $this->site->commit($state);
             return $rescue;
         });

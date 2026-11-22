@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity};
+use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
@@ -34,6 +34,9 @@ try {
         header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
         $secure=str_starts_with($d['settings']['url'],'https://') || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
         ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
+        ini_set('session.gc_maxlifetime',(string)SessionRegistry::MAX_SECONDS);
+        $sessions=new SessionRegistry($app->root);
+        session_save_path($sessions->phpSessionDirectory());
         session_name('CajeerLite'); session_set_cookie_params(['path'=>'/','httponly'=>true,'secure'=>$secure,'samesite'=>'Lax']); session_start();
         $_SESSION['csrf']??=bin2hex(random_bytes(32));
         $auth=isset($_SESSION['auth'],$_SESSION['seen']) && is_string($_SESSION['auth']) &&
@@ -44,6 +47,7 @@ try {
         if ($auth && isset($_SESSION['oidc_identity'])) {
             $auth = OwnerIdentity::matches($d['identity']['owner'] ?? null, $_SESSION['oidc_identity']);
         }
+        if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
         if (str_starts_with($path, '/admin/oidc/')) {
             if ($method !== 'GET') { header('Allow: GET'); stop(405, 'Method not allowed'); }
@@ -98,6 +102,7 @@ try {
                     $_SESSION=['auth'=>hash('sha256',$d['password']), 'seen'=>time(),
                         'csrf'=>bin2hex(random_bytes(32)), 'owner_generation'=>$d['identity']['generation']];
                     if ($mode!=='unbind') $_SESSION['oidc_identity']=$identity;
+                    $sessions->issue($_SESSION,$d,$_SERVER);
                     go('/admin');
                 }
                 stop(404, 'Not found');
@@ -112,7 +117,7 @@ try {
             $action=$_POST['action']??'';
             try {
                 if ($action==='login' && !$auth) {
-                    if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32)),'owner_generation'=>$d['identity']['generation']]; go('/admin'); }
+                    if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32)),'owner_generation'=>$d['identity']['generation']]; $sessions->issue($_SESSION,$d,$_SERVER); go('/admin'); }
                     http_response_code(401); $error='Неверный пароль или временная блокировка. Повторите через 5 минут.';
                 } elseif (!$auth) stop(403,'Login required');
                 elseif ($action==='oidc_bind') {
@@ -159,10 +164,29 @@ try {
                     header('Location: '.$url, true, 303); exit;
                 }
                 elseif ($action==='logout') {
+                    $sessions->revoke($_SESSION,$d,'one',SessionRegistry::currentId($_SESSION));
                     $_SESSION=[];
                     session_destroy();
                     setcookie(session_name(), '', ['expires'=>time()-3600, 'path'=>'/', 'httponly'=>true,
                         'secure'=>$secure, 'samesite'=>'Lax']);
+                    go('/admin');
+                }
+                elseif ($action==='session_revoke' || $action==='session_revoke_others' || $action==='session_revoke_all') {
+                    if ($action==='session_revoke_all' && (!is_string($_POST['session_password']??null) ||
+                        !$app->login($_POST['session_password']))) {
+                        throw new InvalidArgumentException('Подтвердите завершение всех сеансов локальным паролем');
+                    }
+                    $scope=match($action) {
+                        'session_revoke'=>'one','session_revoke_others'=>'others',default=>'all'
+                    };
+                    $target=$scope==='one' ? ($_POST['session_id']??null) : null;
+                    if ($target!==null && !is_string($target)) throw new InvalidArgumentException('Invalid session identifier');
+                    if ($sessions->revoke($_SESSION,$d,$scope,$target)) {
+                        $_SESSION=[]; session_destroy();
+                        setcookie(session_name(), '', ['expires'=>time()-3600, 'path'=>'/',
+                            'httponly'=>true, 'secure'=>$secure, 'samesite'=>'Lax']);
+                        go('/admin');
+                    }
                     go('/admin');
                 }
                 elseif ($action==='settings') { $settings=Lite::settings($_POST); $app->change(function($d)use($settings){$d['settings']=$settings;return $d;}); go('/admin'); }
@@ -295,6 +319,24 @@ try {
                     '<button>Отвязать SkiF4er ID</button>');
             }
         }
+        $html.='</section>';
+        $devices=$sessions->devices($_SESSION,$d);
+        $html.='<section><h2>Активные сеансы и устройства</h2>';
+        $html.='<p>Сеансы хранятся на сервере; браузер получает только HttpOnly cookie сеанса. '.
+            'Бездействие: 60 минут, абсолютный срок: 24 часа. Отзыв блокирует следующий защищённый запрос.</p>';
+        $html.='<table><thead><tr><th>Устройство</th><th>Тип входа</th><th>Адрес</th><th>Последняя активность (UTC)</th><th>Действие</th></tr></thead><tbody>';
+        foreach ($devices as $device) {
+            $html.='<tr><td>'.e($device['agent']!==''?$device['agent']:'Неизвестное устройство').
+                ($device['current']?' <strong>(текущий сеанс)</strong>':'').'</td><td>'.e($device['method']).
+                '</td><td>'.e($device['ip']!==''?$device['ip']:'—').'</td><td>'.
+                e(gmdate('Y-m-d H:i:s',$device['seen'])).'</td><td>'.
+                form('session_revoke','<input type="hidden" name="session_id" value="'.e($device['id']).'">'.
+                    '<button>Завершить</button>').'</td></tr>';
+        }
+        $html.='</tbody></table>';
+        $html.=form('session_revoke_others','<button>Завершить остальные сеансы</button>');
+        $html.=form('session_revoke_all',input('session_password','','password').
+            '<button>Завершить все сеансы (включая текущий)</button>');
         $html.='</section>';
         $html.=form('logout','<button>Выйти</button>').'<section><h2>Страницы</h2><ul>';
         foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').'</li>';
