@@ -18,5 +18,29 @@ curl -fsS -b "$tmp/cookies" "$base/admin?new=1" > "$tmp/admin"; csrf=$(sed -n 's
 [[ $(status -b "$tmp/cookies" --data-urlencode 'body=<script>alert(1)</script>' -d "action=save&csrf=$csrf&path=/about&title=About&published=1&menu=1" "$base/admin") == 303 ]]
 get /about | grep -q '&lt;script&gt;'; get /sitemap.xml | grep -q '/about'; get / | grep -q '/about'
 [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/draft&title=Draft" "$base/admin") == 303 ]]; [[ $(status "$base/draft") == 404 ]]
+# Runtime module configuration from authenticated admin UI.
+[[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1" "$base/admin") == 303 ]]
+[[ $(status "$base/sitemap.xml") == 404 ]]
+get /robots.txt | grep -vq 'Sitemap:'
+if get / | grep -q '<nav'; then echo 'Disabled navigation still shown' >&2; exit 1; fi
+[[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=0" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
+get /sitemap.xml | grep -q "$base/"
+get / | grep -q '<nav'
+php bin/cajeer doctor | grep -q 'schema 2'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 2.' ]]
+php bin/cajeer module disable robots | grep -q disabled
+[[ $(status "$base/robots.txt") == 404 ]]
+php bin/cajeer module enable robots | grep -q enabled
+backup_file=$(php bin/cajeer backup create | sed -n 's/^Backup created: //p')
+[[ -n "$backup_file" ]]
+php bin/cajeer backup verify "$backup_file" | grep -q 'verified'
+php bin/cajeer module disable sitemap | grep -q disabled
+[[ $(status "$base/sitemap.xml") == 404 ]]
+if CAJEER_RESTORE_CONFIRM=wrong php bin/cajeer backup restore "$backup_file" >/dev/null 2>&1; then
+    echo 'Restore missing confirmation succeeded' >&2; exit 1
+fi
+CAJEER_RESTORE_CONFIRM="$backup_file" php bin/cajeer backup restore "$backup_file" | grep -q 'Restored:'
+get /sitemap.xml | grep -q "$base/"
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
-echo 'HTTP smoke OK'
+echo 'HTTP smoke OK' 

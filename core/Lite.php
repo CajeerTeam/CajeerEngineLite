@@ -2,39 +2,24 @@
 declare(strict_types=1);
 namespace CajeerEngine;
 use CajeerEngine\Public\PublicPath;
-use CajeerEngine\Update\{OperationFiles,OperationLock};
+use CajeerEngine\Modules\ModuleConfig;
+use CajeerEngine\Storage\{SiteRepository,BackupService,SiteState};
 use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.0.1';
+    public const VERSION = '1.0.2';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
+    private function repository(): SiteRepository { return new SiteRepository($this->root); }
     public function file(): string { return $this->root.'/storage/site.json'; }
-    public function load(): array {
-        // Reject a substituted state file or a symlinked storage path.
-        $path = OperationFiles::path($this->root, 'storage/site.json');
-        $d = OperationFiles::read($path);
-        if (!is_array($d) || ($d['schema'] ?? null) !== 1) throw new \RuntimeException('Invalid site schema');
-        return $d;
-    }
-    // A stable lock file serializes read-modify-write transactions; atomic rename protects readers.
-    public function change(callable $fn): array {
-        $dir = dirname($this->file());
-        // CajeerEngine 2.1.0 primitives reject symlinks in *ancestor* directories,
-        // and bind the lock descriptor to the on-disk regular-file identity.
-        OperationFiles::dir($dir, 0700);
-        $lock = OperationLock::openLockFile($dir.'/site.lock', 0600);
-        try {
-            if (!flock($lock, LOCK_EX)) throw new \RuntimeException('Cannot lock');
-            if (is_link($this->file())) throw new \RuntimeException('Unsafe storage');
-            $data = $fn(is_file($this->file()) ? $this->load() : null);
-            $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
-            if (strlen($json)>4_000_000) throw new \InvalidArgumentException('Site exceeds 4 MB');
-            OperationFiles::write($this->file(), $json, 0600);
-            return $data;
-        } finally { flock($lock, LOCK_UN); fclose($lock); }
+    public function load(): array { return $this->repository()->load(); }
+    public function change(callable $fn): array { return $this->repository()->transaction($fn); }
+    public function migrate(): bool { return $this->repository()->migrate(); }
+    public function backups(): BackupService { return new BackupService($this->repository()); }
+    public function module(string $name, bool $enabled): void {
+        $this->change(static fn(array $state): array => ModuleConfig::set($state, $name, $enabled));
     }
     public static function esc(string $s): string { return htmlspecialchars($s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
     public static function field(array $a,string $key,int $max,bool $required=false): string {
@@ -61,7 +46,7 @@ final class Lite
         $this->change(function($d) use($password,$settings) {
             if ($d!==null) throw new \InvalidArgumentException('Already installed');
             $home=self::page(['path'=>'/','title'=>'Добро пожаловать','description'=>'Сайт на CajeerEngine Lite','body'=>'Расскажите о себе, своих услугах и контактах. Измените эту страницу в административной панели.','published'=>'1','menu'=>'1']);
-            return ['schema'=>1,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0]];
+            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS];
         });
     }
     public function login(string $password): bool {
@@ -75,7 +60,7 @@ final class Lite
     }
     public function render(array $d,array $p): string {
         $engine=new CajeerTemplateEngine(new TemplateSandbox($this->root.'/templates'),$this->root.'/templates');
-        $nav=array_values(array_filter($d['pages'],fn($p)=>$p['published']&&$p['menu']));
+        $nav=ModuleConfig::enabled($d, 'navigation') ? array_values(array_filter($d['pages'],fn($p)=>$p['published']&&$p['menu'])) : [];
         return $engine->renderName('default.page',['page'=>$p,'site'=>$d['settings'],'navigation'=>$nav,'canonical'=>$d['settings']['url'].$p['path'],'body_html'=>nl2br(self::esc($p['body']),false)]);
     }
 }

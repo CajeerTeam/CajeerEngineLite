@@ -2,17 +2,58 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
-$app=new CajeerEngine\Lite(dirname(__DIR__));
+use CajeerEngine\Lite;
+use CajeerEngine\Modules\ModuleConfig;
+$app=new Lite(dirname(__DIR__));
 try {
-    switch ($argv[1]??'help') {
+    $cmd = $argv[1] ?? 'help';
+    switch ($cmd) {
         case 'install':
             $password=getenv('CAJEER_ADMIN_PASSWORD');
             if ($password===false) { fwrite(STDERR,"Admin password (input is visible): "); $password=rtrim((string)fgets(STDIN),"\r\n"); }
-            $app->install($password,$argv[2]??'http://127.0.0.1:8080',$argv[3]??'Мой сайт'); echo "Installed. /admin\n"; break;
+            $app->install($password,$argv[2]??'http://127.0.0.1:8080',$argv[3]??'Мой сайт');
+            echo "Installed. /admin\n"; break;
         case 'doctor':
             if (version_compare(PHP_VERSION,'8.4.1','<')) throw new RuntimeException('PHP 8.4.1+ required');
-            if (!is_file($app->file())) throw new RuntimeException('Not installed');
-            $app->load(); if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable'); echo "OK (Lite ".CajeerEngine\Lite::VERSION.", core baseline ".CajeerEngine\Lite::ENGINE_BASE_VERSION.")\n"; break;
-        default: echo "CajeerEngine Lite ".CajeerEngine\Lite::VERSION." (CajeerEngine core ".CajeerEngine\Lite::ENGINE_BASE_VERSION.")\nphp bin/cajeer install [url] [name]\nphp bin/cajeer doctor\n";
+            foreach (['json','filter','hash'] as $extension) if (!extension_loaded($extension)) throw new RuntimeException('Missing extension '.$extension);
+            $state=$app->load();
+            if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable');
+            echo "OK (Lite ".Lite::VERSION.", core baseline ".Lite::ENGINE_BASE_VERSION.", schema ".$state['schema'].")\n"; break;
+        case 'migrate':
+            echo $app->migrate() ? "Migrated site to schema 2 (backup saved).\n" : "Already at schema 2.\n"; break;
+        case 'module':
+            $action=$argv[2]??'list';
+            if ($action==='list' && count($argv)===3) {
+                $state=$app->load();
+                foreach(ModuleConfig::DEFAULTS as $key=>$_) echo $key.': '.(ModuleConfig::enabled($state,$key)?'enabled':'disabled')."\n";
+            } elseif (in_array($action,['enable','disable'],true) && count($argv)===4) {
+                $app->module($argv[3],$action==='enable');
+                echo $argv[3].': '.$action."d\n";
+            } else throw new InvalidArgumentException('Usage: module list | module enable|disable <name>');
+            break;
+        case 'backup':
+            $action=$argv[2]??'';
+            $backup=$app->backups();
+            if ($action==='create' && count($argv)===3) echo "Backup created: ".$backup->create()."\n";
+            elseif ($action==='list' && count($argv)===3) {
+                foreach ($backup->names() as $name) {
+                    try {
+                        $info=$backup->verify($name);
+                        echo $name.' '.$info['reason'].' schema='.$info['schema']." verified\n";
+                    } catch(Throwable $e) { echo $name." INVALID: ".$e->getMessage()."\n"; }
+                }
+            } elseif ($action==='verify' && count($argv)===4) {
+                $backup->verify($argv[3]); echo "Backup verified: ".$argv[3]."\n";
+            } elseif ($action==='restore' && count($argv)===4) {
+                if (getenv('CAJEER_RESTORE_CONFIRM') !== $argv[3]) throw new InvalidArgumentException('Set CAJEER_RESTORE_CONFIRM to the backup file name. Stop web workers before restoring.');
+                $rescue=$backup->restore($argv[3]);
+                echo "Restored: ".$argv[3].($rescue!==''?' (previous state: '.$rescue.')':'')."\n";
+            } else throw new InvalidArgumentException('Usage: backup create | backup list | backup verify <name> | backup restore <name>');
+            break;
+        default:
+            echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
+                 "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
+                 "php bin/cajeer module list|enable|disable [name]\n".
+                 "php bin/cajeer backup create|list|verify|restore [filename]\n";
     }
 } catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

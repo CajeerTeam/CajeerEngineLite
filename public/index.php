@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
+use CajeerEngine\Modules\ModuleConfig;
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -42,6 +43,20 @@ try {
                 } elseif (!$auth) stop(403,'Login required');
                 elseif ($action==='logout') { $_SESSION=[]; session_destroy(); go('/admin'); }
                 elseif ($action==='settings') { $settings=Lite::settings($_POST); $app->change(function($d)use($settings){$d['settings']=$settings;return $d;}); go('/admin'); }
+                elseif ($action==='modules') {
+                    $submitted = $_POST['module'] ?? [];
+                    if (!is_array($submitted) || array_diff(array_keys($submitted), array_keys(ModuleConfig::DEFAULTS))) {
+                        throw new InvalidArgumentException('Invalid module settings');
+                    }
+                    $app->change(static function(array $d) use ($submitted): array {
+                        foreach (ModuleConfig::DEFAULTS as $key => $_) {
+                            $value = $submitted[$key] ?? null;
+                            if ($value !== null && $value !== '1') throw new InvalidArgumentException('Invalid module flag');
+                            $d = ModuleConfig::set($d, $key, $value === '1');
+                        }
+                        return $d;
+                    }); go('/admin');
+                }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
                     $app->change(function($d)use($p,$old,$revision){
@@ -72,11 +87,16 @@ try {
             $html.=form('save','<h2>Редактор страницы</h2>'.$hidden.input('path',$p['path']).input('title',$p['title']).input('description',$p['description']).'<label>Текст<textarea name="body">'.e($p['body']).'</textarea></label><label><input type="checkbox" name="published" value="1" '.($p['published']?'checked':'').'> Опубликовано</label><label><input type="checkbox" name="menu" value="1" '.($p['menu']?'checked':'').'> В меню</label><button>Сохранить</button>');
             if ($old!==''&&$old!=='/') $html.=form('delete',$hidden.'<button>Удалить страницу</button>');
         }
-        $s=$d['settings']; $html.=form('settings','<h2>Настройки сайта</h2>'.input('name',$s['name']).input('url',$s['url']).input('email',$s['email'],'email').input('phone',$s['phone']).'<button>Сохранить настройки</button>'); shell('Управление сайтом',$html);
+        $s=$d['settings']; $html.=form('settings','<h2>Настройки сайта</h2>'.input('name',$s['name']).input('url',$s['url']).input('email',$s['email'],'email').input('phone',$s['phone']).'<button>Сохранить настройки</button>');
+        $flags='<h2>Модули</h2>';
+        foreach (ModuleConfig::DEFAULTS as $name => $_) {
+            $flags.='<label><input type="checkbox" name="module['.e($name).']" value="1" '.(ModuleConfig::enabled($d,$name)?'checked':'').'> '.e($name).'</label>';
+        }
+        $html.=form('modules',$flags.'<button>Сохранить модули</button>'); shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
-    if ($path==='/robots.txt') { header('Content-Type: text/plain; charset=utf-8'); echo "User-agent: *\nDisallow: /admin\nSitemap: ".$d['settings']['url']."/sitemap.xml\n"; exit; }
-    if ($path==='/sitemap.xml') { header('Content-Type: application/xml; charset=utf-8'); echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'; foreach($d['pages'] as $p) if($p['published']) echo '<url><loc>'.e($d['settings']['url'].$p['path']).'</loc></url>'; echo '</urlset>'; exit; }
+    if ($path==='/robots.txt' && ModuleConfig::enabled($d, 'robots')) { header('Content-Type: text/plain; charset=utf-8'); echo "User-agent: *\nDisallow: /admin\n"; if (ModuleConfig::enabled($d, 'sitemap')) echo "Sitemap: ".$d['settings']['url']."/sitemap.xml\n"; exit; }
+    if ($path==='/sitemap.xml' && ModuleConfig::enabled($d, 'sitemap')) { header('Content-Type: application/xml; charset=utf-8'); echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'; foreach($d['pages'] as $p) if($p['published']) echo '<url><loc>'.e($d['settings']['url'].$p['path']).'</loc></url>'; echo '</urlset>'; exit; }
     if (!isset($d['pages'][$path]) || !$d['pages'][$path]['published']) stop(404,'Страница не найдена');
     if ($path!==$raw) { header('Location: '.$path,true,301); exit; }
     echo $app->render($d,$d['pages'][$path]);

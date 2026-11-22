@@ -15,4 +15,5 @@ jobs:
       - run: php -l bin/cajeer
       - run: php tests/smoke.php
       - run: php tests/core_210.php
+      - run: php tests/core_102.php
       - run: bash tests/http.sh
