@@ -4,6 +4,7 @@ require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
+use CajeerEngine\Consent\ConsentConfig;
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -57,6 +58,12 @@ try {
                         return $d;
                     }); go('/admin');
                 }
+                elseif ($action==='consent') {
+                    $app->change(static function(array $d): array {
+                        $d['consent'] = ConsentConfig::fromPost($_POST, $d['consent']);
+                        return $d;
+                    }); go('/admin');
+                }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
                     $app->change(function($d)use($p,$old,$revision){
@@ -92,12 +99,23 @@ try {
         foreach (ModuleConfig::DEFAULTS as $name => $_) {
             $flags.='<label><input type="checkbox" name="module['.e($name).']" value="1" '.(ModuleConfig::enabled($d,$name)?'checked':'').'> '.e($name).'</label>';
         }
-        $html.=form('modules',$flags.'<button>Сохранить модули</button>'); shell('Управление сайтом',$html);
+        $html.=form('modules',$flags.'<button>Сохранить модули</button>');
+        $c=$d['consent'];
+        $consentForm='<h2>Cookie Consent</h2><p>Версия политики: '.e((string)$c['revision']).'. При изменении настроек ранее сохранённые разрешения истекают.</p>';
+        $consentForm.='<label><input type="checkbox" name="enabled" value="1" '.($c['enabled']?'checked':'').'> Показывать баннер и настройки cookie</label>';
+        $consentForm.=input('title',$c['title']).'<label>Описание<textarea name="description" maxlength="1000">'.e($c['description']).'</textarea></label>';
+        $consentForm.=input('days',(string)$c['days'],'number').input('privacy_url',$c['privacy_url']);
+        $consentForm.='<p>Срок действия в днях (1–365). Ссылка на политику — локальный путь (например, /privacy) или пустое поле. Категории: необходимые, аналитика, маркетинг, запись сессий.</p><button>Сохранить Cookie Consent</button>';
+        $html.=form('consent',$consentForm); shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
     if ($path==='/robots.txt' && ModuleConfig::enabled($d, 'robots')) { header('Content-Type: text/plain; charset=utf-8'); echo "User-agent: *\nDisallow: /admin\n"; if (ModuleConfig::enabled($d, 'sitemap')) echo "Sitemap: ".$d['settings']['url']."/sitemap.xml\n"; exit; }
     if ($path==='/sitemap.xml' && ModuleConfig::enabled($d, 'sitemap')) { header('Content-Type: application/xml; charset=utf-8'); echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'; foreach($d['pages'] as $p) if($p['published']) echo '<url><loc>'.e($d['settings']['url'].$p['path']).'</loc></url>'; echo '</urlset>'; exit; }
     if (!isset($d['pages'][$path]) || !$d['pages'][$path]['published']) stop(404,'Страница не найдена');
     if ($path!==$raw) { header('Location: '.$path,true,301); exit; }
+    // Personalized consent state must never be shared via a public intermediary cache.
+    header('Cache-Control: private, no-store');
+    // Keep /admin script-free; public pages may run only the shipped first-party consent runtime.
+    header("Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     echo $app->render($d,$d['pages'][$path]);
 } catch(Throwable $ex) { error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }

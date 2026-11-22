@@ -20,7 +20,7 @@ try {
             if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable');
             echo "OK (Lite ".Lite::VERSION.", core baseline ".Lite::ENGINE_BASE_VERSION.", schema ".$state['schema'].")\n"; break;
         case 'migrate':
-            echo $app->migrate() ? "Migrated site to schema 2 (backup saved).\n" : "Already at schema 2.\n"; break;
+            echo $app->migrate() ? "Migrated site to schema ".\CajeerEngine\Storage\SiteState::SCHEMA." (backup saved).\n" : "Already at schema ".\CajeerEngine\Storage\SiteState::SCHEMA.".\n"; break;
         case 'module':
             $action=$argv[2]??'list';
             if ($action==='list' && count($argv)===3) {

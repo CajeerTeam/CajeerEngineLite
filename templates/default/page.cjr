@@ -28,5 +28,41 @@
 @if (!empty($site['phone']))
 <a href="tel:{{ $site['phone'] }}">{{ $site['phone'] }}</a>
 @endif
-<span>Работает на CajeerEngine Lite</span></footer>
+<span>Работает на CajeerEngine Lite</span>
+@if ($consent['enabled'])
+<button type="button" class="cookie-footer-button" data-consent-open>Настройки cookie</button>
+@endif
+</footer>
+@if ($consent['enabled'])
+<section id="cookie-consent" class="cookie-consent" role="region" aria-labelledby="cookie-consent-heading" data-revision="{{ $consent['revision'] }}" data-days="{{ $consent['days'] }}" data-mask="{{ $consent_mask }}" @if ($consent_saved) hidden @endif>
+  <div data-consent-summary>
+    <h2 id="cookie-consent-heading">{{ $consent['title'] }}</h2>
+    <p>{{ $consent['description'] }}</p>
+    @if (!empty($consent['privacy_url']))
+    <p><a href="{{ $consent['privacy_url'] }}">Политика конфиденциальности</a></p>
+    @endif
+    <div class="cookie-actions">
+      <button type="button" data-consent-action="accept">Принять все</button>
+      <button type="button" class="cookie-secondary" data-consent-action="reject">Отклонить необязательные</button>
+      <button type="button" class="cookie-secondary" data-consent-action="settings">Настроить</button>
+    </div>
+  </div>
+  <div data-consent-editor hidden>
+    <h2 id="cookie-settings-heading">Выбор категорий cookie</h2>
+    <p>Необходимые cookie обеспечивают работу сайта и всегда включены.</p>
+    <label class="cookie-option"><input type="checkbox" checked disabled> Необходимые <small>Всегда активны</small></label>
+    <label class="cookie-option"><input type="checkbox" data-consent-category="analytics"> Аналитика <small>Статистика посещаемости</small></label>
+    <label class="cookie-option"><input type="checkbox" data-consent-category="marketing"> Маркетинг <small>Реклама и измерение кампаний</small></label>
+    <label class="cookie-option"><input type="checkbox" data-consent-category="recordings"> Запись сессий <small>Карты кликов и воспроизведение действий</small></label>
+    <div class="cookie-actions">
+      <button type="button" data-consent-action="save">Сохранить выбор</button>
+      <button type="button" class="cookie-secondary" data-consent-action="reject">Отозвать необязательные разрешения</button>
+      <button type="button" class="cookie-secondary" data-consent-action="cancel">Назад</button>
+    </div>
+  </div>
+  <p data-consent-error class="cookie-error" role="alert" hidden></p>
+  <noscript><p>Для сохранения выбора cookie необходимо включить JavaScript. Необязательная аналитика без согласия не запускается.</p></noscript>
+</section>
+<script defer src="/assets/consent.js?v=103"></script>
+@endif
 </body></html>

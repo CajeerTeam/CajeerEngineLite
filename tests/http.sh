@@ -27,8 +27,8 @@ if get / | grep -q '<nav'; then echo 'Disabled navigation still shown' >&2; exit
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep -q "$base/"
 get / | grep -q '<nav'
-php bin/cajeer doctor | grep -q 'schema 2'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 2.' ]]
+php bin/cajeer doctor | grep -q 'schema 3'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 3.' ]]
 php bin/cajeer module disable robots | grep -q disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep -q enabled
@@ -42,5 +42,19 @@ if CAJEER_RESTORE_CONFIRM=wrong php bin/cajeer backup restore "$backup_file" >/d
 fi
 CAJEER_RESTORE_CONFIRM="$backup_file" php bin/cajeer backup restore "$backup_file" | grep -q 'Restored:'
 get /sitemap.xml | grep -q "$base/"
+# Cookie Consent: public-only JavaScript, strict admin CSP, runtime config, consent expiry.
+get / | grep -q 'data-consent-action="accept"'
+get / | grep -q 'src="/assets/consent.js?v=103"'
+get /assets/consent.js | grep -q 'cajeer:consentchange'
+curl -fsSI "$base/" | grep -qi "Content-Security-Policy:.*script-src 'self'"
+curl -fsSI "$base/admin" | grep -qi "Content-Security-Policy:.*script-src 'none'"
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&enabled=1&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=https://invalid.example" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&enabled=1&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep -q 'Cookie choices'
+get / | grep -q 'data-revision="2"'
+now=$(date +%s)
+# Old policy revision is rejected; current revision is honored by server-rendered markup.
+curl -fsS -H "Cookie: cajeer_lite_consent=v1.1.$now.7" "$base/" | grep -q 'data-mask="0"'
+curl -fsS -H "Cookie: cajeer_lite_consent=v1.2.$now.5" "$base/" | grep -q 'data-mask="5"  hidden'
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK' 

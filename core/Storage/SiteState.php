@@ -3,18 +3,19 @@ declare(strict_types=1);
 namespace CajeerEngine\Storage;
 
 use CajeerEngine\Modules\ModuleConfig;
+use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Public\PublicPath;
 
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
 {
-    public const SCHEMA = 2;
+    public const SCHEMA = 3;
     public const LIMIT = 4_000_000;
 
     public static function validate(array $state): void
     {
         $version = $state['schema'] ?? null;
-        if ($version !== 1 && $version !== 2) throw new \RuntimeException('Unsupported site schema');
+        if (!in_array($version, [1, 2, 3], true)) throw new \RuntimeException('Unsupported site schema');
         $settings = $state['settings'] ?? null;
         if (!is_array($settings) || !is_string($settings['name'] ?? null) || trim($settings['name']) === '' ||
             !is_string($settings['url'] ?? null) || !is_string($settings['email'] ?? null) ||
@@ -45,9 +46,13 @@ final class SiteState
             }
         }
         if ($pages['/']['published'] !== true) throw new \RuntimeException('Home page must be published');
-        if ($version === 2) {
+        if ($version >= 2) {
             if (!is_array($state['modules'] ?? null)) throw new \RuntimeException('Missing modules');
             ModuleConfig::validate($state['modules']);
+        }
+        if ($version >= 3) {
+            if (!is_array($state['consent'] ?? null)) throw new \RuntimeException('Missing consent settings');
+            ConsentConfig::validate($state['consent']);
         }
     }
 
@@ -57,6 +62,10 @@ final class SiteState
         if ($state['schema'] === 1) {
             $state['modules'] = ModuleConfig::DEFAULTS;
             $state['schema'] = 2;
+        }
+        if ($state['schema'] === 2) {
+            $state['consent'] = ConsentConfig::DEFAULTS;
+            $state['schema'] = 3;
         }
         self::validate($state);
         return $state;

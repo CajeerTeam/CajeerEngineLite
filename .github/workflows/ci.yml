@@ -13,7 +13,9 @@ jobs:
           coverage: none
       - run: find . -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: php -l bin/cajeer
+      - run: node --check public/assets/consent.js
       - run: php tests/smoke.php
       - run: php tests/core_210.php
       - run: php tests/core_102.php
+      - run: php tests/core_103.php
       - run: bash tests/http.sh
