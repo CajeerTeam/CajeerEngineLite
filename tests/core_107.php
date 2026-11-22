@@ -23,7 +23,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123','https://example.org','Clarity test');
     $s=$app->load();
-    check107(Lite::VERSION==='1.0.7' && SiteState::SCHEMA===7 && $s['schema']===7,'version/schema');
+    check107(Lite::VERSION==='1.0.8' && SiteState::SCHEMA===8 && $s['schema']===8,'version/schema');
     check107($s['integrations']['clarity']===ClarityConfig::DEFAULTS,'defaults');
     check107(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/clarity.js'),'disabled tracker rendered');
     foreach ([
@@ -65,12 +65,12 @@ try {
     // Take a real 1.0.6 schema-6 site with configured GA4, GTM and Metrica.
     $old=$s;
     $old['schema']=6;
-    unset($old['integrations']['clarity']);
+    unset($old['integrations']['clarity'], $old['integrations']['matomo']);
     $raw=SiteState::encode($old);
     OperationFiles::write($app->file(),$raw,0600);
     check107($app->migrate(),'schema 6 upgrade skipped');
     $migrated=$app->load();
-    check107($migrated['schema']===7 && $migrated['integrations']['clarity']===ClarityConfig::DEFAULTS,'migrate defaults');
+    check107($migrated['schema']===8 && $migrated['integrations']['clarity']===ClarityConfig::DEFAULTS,'migrate defaults');
     foreach (['settings','pages','password','login','modules','consent'] as $key) {
         check107($migrated[$key]===$old[$key], 'migration changed '.$key);
     }
@@ -86,7 +86,7 @@ try {
     check107(str_contains((string)file_get_contents($root.'/storage/backups/'.$snapshot),base64_encode($raw)),'source bytes changed');
     $app->backups()->restore($snapshot);
     $restored=$app->load();
-    check107($restored['schema']===7 && $restored['integrations']['clarity']===ClarityConfig::DEFAULTS,'restore failed');
+    check107($restored['schema']===8 && $restored['integrations']['clarity']===ClarityConfig::DEFAULTS,'restore failed');
     foreach(['ga4','gtm','metrica'] as $key) check107($restored['integrations'][$key]===$old['integrations'][$key],'restore changed '.$key);
     check107(!$app->migrate(),'no-op migration changed state');
     echo "Lite 1.0.7 Clarity core/migration regression OK\n";

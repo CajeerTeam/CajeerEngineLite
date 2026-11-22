@@ -77,4 +77,7 @@
 @if ($clarity_active)
 <script defer src="/assets/clarity.js?v=107" data-clarity-id="{{ $clarity['project_id'] }}" data-clarity-contacts="{{ $clarity['contact_events'] }}"></script>
 @endif
+@if ($matomo_active)
+<script defer src="/assets/matomo.js?v=108" data-matomo-mode="{{ $matomo['mode'] }}" data-matomo-url="{{ $matomo['server_url'] }}" data-matomo-site="{{ $matomo['site_id'] }}" data-matomo-pageviews="{{ $matomo['page_views'] }}" data-matomo-contacts="{{ $matomo['contact_events'] }}"></script>
+@endif
 </body></html>

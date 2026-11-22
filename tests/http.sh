@@ -28,8 +28,8 @@ if get / | grep_all '<nav'; then echo 'Disabled navigation still shown' >&2; exi
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep_all "$base/"
 get / | grep_all '<nav'
-php bin/cajeer doctor | grep_all 'schema 7'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 7.' ]]
+php bin/cajeer doctor | grep_all 'schema 8'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 8.' ]]
 php bin/cajeer module disable robots | grep_all disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep_all enabled
@@ -136,5 +136,32 @@ if curl -fsSI "$base/" | grep_all -i 'clarity.ms'; then echo 'Clarity CSP allowe
 get / | grep_all '/assets/clarity.js'
 [[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&project_id=abc123&recordings=1" "$base/admin") == 303 ]]
 get / | grep_all -v '/assets/clarity.js'
+# Matomo Cloud + On-Premise: strict HTTPS validation, exact-origin CSP,
+# admin CSRF, fail-closed consent and preserving the other integrations.
+get / | grep_all -v '/assets/matomo.js'
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&enabled=1&mode=cloud&server_url=http://example.matomo.cloud/&site_id=1" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&enabled=1&mode=cloud&server_url=https://evil.test/&site_id=1" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&enabled=1&mode=cloud&server_url=https://site.matomo.cloud/&site_id=<script>" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&enabled=1&mode=cloud&server_url=https://site.matomo.cloud/&site_id=9&page_views=1&contact_events=1" "$base/admin") == 303 ]]
+get / | grep_all 'data-matomo-mode="cloud"'
+get / | grep_all 'data-matomo-url="https://site.matomo.cloud/"'
+get / | grep_all 'data-matomo-site="9"'
+get /assets/matomo.js | grep_all 'requireConsent'
+curl -fsSI "$base/" | grep_all -i 'script-src.*https://cdn.matomo.cloud'
+curl -fsSI "$base/" | grep_all -i 'connect-src.*https://site.matomo.cloud'
+curl -fsSI "$base/admin" | grep_all -i "script-src 'none'"
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=wrong&enabled=1&mode=cloud&server_url=https://site.matomo.cloud/&site_id=9" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&enabled=1&mode=onpremise&server_url=https://stats.example.org/matomo/&site_id=5&page_views=1" "$base/admin") == 303 ]]
+get / | grep_all 'data-matomo-mode="onpremise"'
+get / | grep_all 'data-matomo-url="https://stats.example.org/matomo/"'
+curl -fsSI "$base/" | grep_all -i 'script-src.*https://stats.example.org'
+if curl -fsSI "$base/" | grep_all -i 'cdn.matomo.cloud'; then echo 'Matomo Cloud CSP leaked after mode switch' >&2; exit 1; fi
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep_all -v '/assets/matomo.js'
+if curl -fsSI "$base/" | grep_all -i 'stats.example.org'; then echo 'Matomo CSP allowed without consent UI' >&2; exit 1; fi
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&enabled=1&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep_all '/assets/matomo.js'
+[[ $(status -b "$tmp/cookies" -d "action=matomo&csrf=$csrf&mode=onpremise&server_url=https://stats.example.org/matomo/&site_id=5" "$base/admin") == 303 ]]
+get / | grep_all -v '/assets/matomo.js'
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

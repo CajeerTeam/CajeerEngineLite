@@ -22,7 +22,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123','https://example.org','Metrica test');
     $s=$app->load();
-    test105(Lite::VERSION==='1.0.7' && SiteState::SCHEMA===7 && $s['schema']===7,'version/schema');
+    test105(Lite::VERSION==='1.0.8' && SiteState::SCHEMA===8 && $s['schema']===8,'version/schema');
     test105($s['integrations']['ga4']===GA4Config::DEFAULTS && $s['integrations']['metrica']===MetricaConfig::DEFAULTS,'new install defaults');
     test105(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']), '/assets/metrica.js'),'disabled embed rendered');
     foreach ([
@@ -57,14 +57,14 @@ try {
     // Real 1.0.4 schema 4 backup, including configured GA4, pages and consent.
     $old=$s;
     $old['schema']=4;
-    unset($old['integrations']['metrica'], $old['integrations']['gtm'], $old['integrations']['clarity']);
+    unset($old['integrations']['metrica'], $old['integrations']['gtm'], $old['integrations']['clarity'], $old['integrations']['matomo']);
     $old['integrations']['ga4']=GA4Config::fromPost([
        'enabled'=>'1','measurement_id'=>'G-1234567890','page_views'=>'1','contact_clicks'=>'1']);
     $raw=SiteState::encode($old);
     OperationFiles::write($app->file(),$raw,0600);
     test105($app->migrate(),'schema 4 migration not executed');
     $updated=$app->load();
-    test105($updated['schema']===7 && $updated['integrations']['metrica']===MetricaConfig::DEFAULTS,'new Metrica defaults');
+    test105($updated['schema']===8 && $updated['integrations']['metrica']===MetricaConfig::DEFAULTS,'new Metrica defaults');
     foreach (['settings','pages','password','login','modules','consent'] as $key) test105($updated[$key]===$old[$key],'migration modified '.$key);
     test105($updated['integrations']['ga4']===$old['integrations']['ga4'],'GA4 settings lost');
     $backup=null;
@@ -75,7 +75,7 @@ try {
     test105(is_string($backup),'migration backup absent');
     test105(str_contains((string)file_get_contents($root.'/storage/backups/'.$backup),base64_encode($raw)),'original bytes not preserved');
     $app->backups()->restore($backup);
-    test105($app->load()['schema']===7 && $app->load()['integrations']['ga4']===$old['integrations']['ga4'],'restoring 1.0.4 failed');
+    test105($app->load()['schema']===8 && $app->load()['integrations']['ga4']===$old['integrations']['ga4'],'restoring 1.0.4 failed');
     test105(!$app->migrate(),'no-op migration was not a no-op');
     echo "Lite 1.0.5 Metrica core/migration regression OK\n";
 } finally { cleanup105($root); }

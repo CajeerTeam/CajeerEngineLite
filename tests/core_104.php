@@ -22,7 +22,7 @@ try {
     $app=new Lite($root);
     $app->install('TestPassword123','https://example.org','GA4 example');
     $d=$app->load();
-    assert104(Lite::VERSION==='1.0.7' && SiteState::SCHEMA===7 && $d['schema']===7,'version/schema');
+    assert104(Lite::VERSION==='1.0.8' && SiteState::SCHEMA===8 && $d['schema']===8,'version/schema');
     assert104($d['integrations']['ga4']===GA4Config::DEFAULTS,'default GA4 settings');
     assert104(!str_contains((new Lite(dirname(__DIR__)))->render($d,$d['pages']['/']),'/assets/ga4.js'),'disabled GA4 rendered');
     reject104(fn()=>GA4Config::fromPost(['enabled'=>'1','measurement_id'=>'G-NOT!SAFE']), 'injection ID');
@@ -54,7 +54,7 @@ try {
     OperationFiles::write($app->file(),$raw,0600);
     assert104($app->migrate(),'schema 3->5 migration missing');
     $up=$app->load();
-    assert104($up['schema']===7 && $up['integrations']['ga4']===GA4Config::DEFAULTS,'3->5 defaults');
+    assert104($up['schema']===8 && $up['integrations']['ga4']===GA4Config::DEFAULTS,'3->5 defaults');
     foreach (['settings','pages','password','login','modules','consent'] as $key) assert104($up[$key]===$old[$key], 'migration changed '.$key);
     $backupName=null;
     foreach ($app->backups()->names() as $name) {
@@ -63,7 +63,7 @@ try {
     assert104($backupName!==null,'original schema 3 not backed up');
     assert104(str_contains(file_get_contents($root.'/storage/backups/'.$backupName),base64_encode($raw)), 'backup did not preserve original JSON');
     $app->backups()->restore($backupName);
-    assert104($app->load()['schema']===7 && $app->load()['integrations']['ga4']===GA4Config::DEFAULTS,'restore schema 3 failed');
+    assert104($app->load()['schema']===8 && $app->load()['integrations']['ga4']===GA4Config::DEFAULTS,'restore schema 3 failed');
     assert104(!$app->migrate(),'same schema migration should be no-op');
     echo "Lite 1.0.4 GA4 core regression OK\n";
 } finally { remove104($root); }

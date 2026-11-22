@@ -5,7 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
-use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig};
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig};
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -90,6 +90,13 @@ try {
                     $config = ClarityConfig::fromPost($_POST);
                     $app->change(static function(array $d) use ($config): array {
                         $d['integrations']['clarity'] = $config;
+                        return $d;
+                    }); go('/admin');
+                }
+                elseif ($action==='matomo') {
+                    $config = MatomoConfig::fromPost($_POST);
+                    $app->change(static function(array $d) use ($config): array {
+                        $d['integrations']['matomo'] = $config;
                         return $d;
                     }); go('/admin');
                 }
@@ -184,6 +191,19 @@ try {
         if (!$cl['recordings']) $clarityForm.='<p>Запись выключена: вместе с ней отключена загрузка Clarity. Сервис не поддерживает отдельный режим тепловых карт без сбора взаимодействий.</p>';
         $clarityForm.='<button>Сохранить Microsoft Clarity</button>';
         $html.=form('clarity',$clarityForm);
+        $mt=$d['integrations']['matomo'];
+        $matomoForm='<h2>Matomo Analytics (Cloud / On-Premise)</h2>';
+        $matomoForm.='<p>Аналитика Matomo загружается только при разрешении категории «Аналитика». Без согласия внешние запросы к Matomo не выполняются. Для Matomo Cloud укажите https://ваш-сайт.matomo.cloud/, для On-Premise — HTTPS-адрес установки, включая подкаталог при необходимости.</p>';
+        $matomoForm.='<label><input type="checkbox" name="enabled" value="1" '.($mt['enabled']?'checked':'').'> Включить Matomo</label>';
+        $matomoForm.='<label>Режим<select name="mode"><option value="onpremise" '.($mt['mode']==='onpremise'?'selected':'').'>On-Premise (свой сервер)</option><option value="cloud" '.($mt['mode']==='cloud'?'selected':'').'>Matomo Cloud</option></select></label>';
+        $matomoForm.=input('server_url',$mt['server_url'],'url').input('site_id',$mt['site_id']);
+        $matomoForm.='<p>Site ID — положительное число из настроек сайта Matomo. URL должен использовать HTTPS, без логина, параметров или фрагментов. Для Matomo Cloud используется официальный CDN, для On-Premise — matomo.js на вашем сервере.</p>';
+        $matomoForm.='<label><input type="checkbox" name="page_views" value="1" '.($mt['page_views']?'checked':'').'> Отправлять просмотры страниц</label>';
+        $matomoForm.='<label><input type="checkbox" name="contact_events" value="1" '.($mt['contact_events']?'checked':'').'> События кликов по email и телефону (без отправки адреса и номера)</label>';
+        $matomoForm.='<p>Произвольные события и цели можно отправлять через CajeerMatomo.event() / CajeerMatomo.goal() после согласия. Не подключайте тот же трекер Matomo второй раз через GTM. При отзыве согласия загрузка сторонних скриптов прекращается после перезагрузки.</p>';
+        if (!$c['enabled']) $matomoForm.='<p class="error">Cookie Consent выключен: Matomo останется заблокированным.</p>';
+        $matomoForm.='<button>Сохранить Matomo</button>';
+        $html.=form('matomo',$matomoForm);
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
@@ -210,6 +230,18 @@ try {
         $connections[]='https://www.clarity.ms';
         $images[]='https://*.clarity.ms';
         $images[]='https://www.clarity.ms';
+    }
+    if (MatomoConfig::active($d)) {
+        $mt = $d['integrations']['matomo'];
+        $scriptUrl = MatomoConfig::scriptUrl($mt);
+        $trackerUrl = MatomoConfig::trackerUrl($mt);
+        $scriptParts = parse_url($scriptUrl);
+        $trackerParts = parse_url($trackerUrl);
+        $scriptOrigin = $scriptParts['scheme'].'://'.$scriptParts['host'].(isset($scriptParts['port']) ? ':'.$scriptParts['port'] : '');
+        $trackerOrigin = $trackerParts['scheme'].'://'.$trackerParts['host'].(isset($trackerParts['port']) ? ':'.$trackerParts['port'] : '');
+        $scripts[] = $scriptOrigin;
+        $connections[] = $trackerOrigin;
+        $images[] = $trackerOrigin;
     }
     if (MetricaConfig::active($d)) {
         // Official provider endpoints include regional hosts and Webvisor domains.

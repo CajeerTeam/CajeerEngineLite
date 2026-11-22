@@ -18,6 +18,7 @@ jobs:
       - run: node --check public/assets/metrica.js
       - run: node --check public/assets/gtm.js
       - run: node --check public/assets/clarity.js
+      - run: node --check public/assets/matomo.js
       - run: php tests/smoke.php
       - run: php tests/core_210.php
       - run: php tests/core_102.php
@@ -26,6 +27,7 @@ jobs:
       - run: php tests/core_105.php
       - run: php tests/core_106.php
       - run: php tests/core_107.php
+      - run: php tests/core_108.php
       - run: bash tests/http.sh
   browser:
     runs-on: ubuntu-latest
@@ -44,3 +46,4 @@ jobs:
       - run: python tests/browser_105.py
       - run: python tests/browser_106.py
       - run: python tests/browser_107.py
+      - run: python tests/browser_108.py
