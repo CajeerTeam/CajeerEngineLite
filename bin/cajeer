@@ -19,6 +19,9 @@ try {
             if (version_compare(PHP_VERSION,'8.4.1','<')) throw new RuntimeException('PHP 8.4.1+ required');
             foreach (['json','filter','hash'] as $extension) if (!extension_loaded($extension)) throw new RuntimeException('Missing extension '.$extension);
             $state=$app->load();
+            if (\CajeerEngine\Auth\OidcClient::enabled($state['settings']['url']) && !extension_loaded('openssl')) {
+                throw new RuntimeException('SkiF4er ID requires the OpenSSL extension');
+            }
             if (!is_writable(dirname($app->file()))) throw new RuntimeException('Storage not writable');
             $report=IntegrationDiagnostics::run($app->root, $state);
             if (!$report['ok']) throw new RuntimeException('Integration runtime diagnostics failed; run integrations check');

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
@@ -29,14 +30,51 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin') {
+    if ($path==='/admin' || str_starts_with($path, '/admin/oidc/')) {
         header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
         $secure=str_starts_with($d['settings']['url'],'https://') || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
         ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
-        session_name('CajeerLite'); session_set_cookie_params(['path'=>'/','httponly'=>true,'secure'=>$secure,'samesite'=>'Strict']); session_start();
+        session_name('CajeerLite'); session_set_cookie_params(['path'=>'/','httponly'=>true,'secure'=>$secure,'samesite'=>'Lax']); session_start();
         $_SESSION['csrf']??=bin2hex(random_bytes(32));
-        $auth=isset($_SESSION['auth'],$_SESSION['seen']) && hash_equals(hash('sha256',$d['password']),$_SESSION['auth']) && time()-$_SESSION['seen']<3600;
+        $auth=isset($_SESSION['auth'],$_SESSION['seen']) && is_string($_SESSION['auth']) &&
+            is_int($_SESSION['seen']) && hash_equals(hash('sha256',$d['password']),$_SESSION['auth']) &&
+            time() >= $_SESSION['seen'] && time()-$_SESSION['seen']<3600;
+        if ($auth && isset($_SESSION['oidc_identity'])) {
+            $auth = OwnerIdentity::matches($d['identity']['owner'] ?? null, $_SESSION['oidc_identity']);
+        }
         if ($auth) $_SESSION['seen']=time();
+        if (str_starts_with($path, '/admin/oidc/')) {
+            if ($method !== 'GET') { header('Allow: GET'); stop(405, 'Method not allowed'); }
+            if (!OidcClient::enabled($d['settings']['url'])) stop(503, 'SkiF4er ID is not configured for HTTPS');
+            try {
+                $client=OidcClient::fromEnvironment($d['settings']['url']);
+                if ($path==='/admin/oidc/login') {
+                    if ($auth || ($d['identity']['owner'] ?? null) === null) stop(403, 'SkiF4er ID owner is not linked');
+                    $url=OidcFlow::start($_SESSION, $client, 'login');
+                    header('Location: '.$url, true, 302); exit;
+                }
+                if ($path==='/admin/oidc/callback') {
+                    $hadLocalAuth=$auth && !isset($_SESSION['oidc_identity']);
+                    $result=OidcFlow::finish($_SESSION, $client, $_GET);
+                    $identity=$result['identity'];
+                    if ($result['mode']==='bind') {
+                        if (!$hadLocalAuth) stop(403, 'Local administrator login is required for account binding');
+                        $app->change(static fn(array $site): array => OwnerIdentity::bind($site, $identity));
+                        $d=$app->load();
+                    } elseif (!OwnerIdentity::matches($d['identity']['owner'] ?? null, $identity)) {
+                        stop(403, 'SkiF4er ID is not authorized for this site');
+                    }
+                    session_regenerate_id(true);
+                    $_SESSION=['auth'=>hash('sha256',$d['password']), 'seen'=>time(),
+                        'csrf'=>bin2hex(random_bytes(32)), 'oidc_identity'=>$identity];
+                    go('/admin');
+                }
+                stop(404, 'Not found');
+            } catch (\Throwable $exception) {
+                error_log('SkiF4er OIDC: '.get_class($exception));
+                stop(403, 'SkiF4er ID authentication failed');
+            }
+        }
         $error='';
         if ($method==='POST') {
             if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
@@ -46,7 +84,32 @@ try {
                     if ($app->login(is_string($_POST['password']??null)?$_POST['password']:'')) { session_regenerate_id(true); $_SESSION=['auth'=>hash('sha256',$d['password']),'seen'=>time(),'csrf'=>bin2hex(random_bytes(32))]; go('/admin'); }
                     http_response_code(401); $error='Неверный пароль или временная блокировка. Повторите через 5 минут.';
                 } elseif (!$auth) stop(403,'Login required');
-                elseif ($action==='logout') { $_SESSION=[]; session_destroy(); go('/admin'); }
+                elseif ($action==='oidc_bind') {
+                    if (isset($_SESSION['oidc_identity']) || ($d['identity']['owner'] ?? null)!==null) {
+                        throw new InvalidArgumentException('Only an unlinked local owner can connect SkiF4er ID');
+                    }
+                    if (!OidcClient::enabled($d['settings']['url'])) {
+                        throw new InvalidArgumentException('Configure HTTPS and SkiF4er OIDC credentials first');
+                    }
+                    $password=$_POST['oidc_password'] ?? null;
+                    if (!is_string($password) || !$app->login($password)) {
+                        throw new InvalidArgumentException('Re-enter the correct local administrator password');
+                    }
+                    try {
+                        $url=OidcFlow::start($_SESSION, OidcClient::fromEnvironment($d['settings']['url']), 'bind');
+                    } catch (RuntimeException $exception) {
+                        error_log('SkiF4er bind initialization failed: '.get_class($exception));
+                        throw new InvalidArgumentException('SkiF4er ID is temporarily unavailable');
+                    }
+                    header('Location: '.$url, true, 303); exit;
+                }
+                elseif ($action==='logout') {
+                    $_SESSION=[];
+                    session_destroy();
+                    setcookie(session_name(), '', ['expires'=>time()-3600, 'path'=>'/', 'httponly'=>true,
+                        'secure'=>$secure, 'samesite'=>'Lax']);
+                    go('/admin');
+                }
                 elseif ($action==='settings') { $settings=Lite::settings($_POST); $app->change(function($d)use($settings){$d['settings']=$settings;return $d;}); go('/admin'); }
                 elseif ($action==='modules') {
                     $submitted = $_POST['module'] ?? [];
@@ -144,7 +207,30 @@ try {
             } catch(InvalidArgumentException $ex) { http_response_code(422); $error=$ex->getMessage(); }
         }
         $html=$error!==''?'<p class="error" role="alert">'.e($error).'</p>':'';
-        if (!$auth) shell('Вход в админ-панель',$html.form('login',input('password','','password').'<button>Войти</button>'));
+        if (!$auth) {
+            $loginHtml=$html.form('login',input('password','','password').'<button>Войти</button>');
+            if (OidcClient::enabled($d['settings']['url']) && ($d['identity']['owner'] ?? null) !== null) {
+                $loginHtml.='<section><h2>SkiF4er ID</h2><p>Войти через привязанный аккаунт владельца.</p>'.
+                    '<a href="/admin/oidc/login">Войти через SkiF4er ID</a></section>';
+            }
+            shell('Вход в админ-панель', $loginHtml);
+        }
+        $identity=$d['identity']['owner'] ?? null;
+        $html.='<section><h2>SkiF4er ID</h2>';
+        if ($identity === null) {
+            $html.='<p>Аккаунт владельца пока не привязан. Вход через ID не предоставляет права автоматически.</p>';
+            if (OidcClient::enabled($d['settings']['url'])) {
+                $html.=form('oidc_bind', input('oidc_password','','password').
+                    '<p>Для привязки подтвердите локальный пароль, затем войдите в SkiF4er ID.</p>'.
+                    '<button>Привязать SkiF4er ID</button>');
+            } else {
+                $html.='<p>Для подключения укажите HTTPS URL сайта и переменные CAJEER_OIDC_CLIENT_ID и CAJEER_OIDC_CLIENT_SECRET на сервере.</p>';
+            }
+        } else {
+            $html.='<p>Владелец привязан к SkiF4er ID. Идентификатор: '.e(substr($identity['sub'],0,12)).'…</p>';
+            if (isset($_SESSION['oidc_identity'])) $html.='<p>Текущий вход: SkiF4er ID.</p>';
+        }
+        $html.='</section>';
         $html.=form('logout','<button>Выйти</button>').'<section><h2>Страницы</h2><ul>';
         foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').'</li>';
         $html.='</ul><a href="/admin?new=1">Создать страницу</a></section>';

@@ -11,13 +11,13 @@ use CajeerEngine\Analytics\ReportConfig;
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
 {
-    public const SCHEMA = 9;
+    public const SCHEMA = 10;
     public const LIMIT = 4_000_000;
 
     public static function validate(array $state): void
     {
         $version = $state['schema'] ?? null;
-        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9], true)) throw new \RuntimeException('Unsupported site schema');
+        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], true)) throw new \RuntimeException('Unsupported site schema');
         $settings = $state['settings'] ?? null;
         if (!is_array($settings) || !is_string($settings['name'] ?? null) || trim($settings['name']) === '' ||
             !is_string($settings['url'] ?? null) || !is_string($settings['email'] ?? null) ||
@@ -82,6 +82,19 @@ final class SiteState
             if (!is_array($state['reporting'] ?? null)) throw new \RuntimeException('Missing reporting settings');
             ReportConfig::validate($state['reporting']);
         }
+        if ($version >= 10) {
+            $identity = $state['identity'] ?? null;
+            if (!is_array($identity) || array_keys($identity) !== ['owner']) {
+                throw new \RuntimeException('Invalid owner identity configuration');
+            }
+            $owner = $identity['owner'];
+            if ($owner !== null && (!is_array($owner) || array_keys($owner) !== ['iss', 'sub'] ||
+                $owner['iss'] !== \CajeerEngine\Auth\OidcClient::ISSUER ||
+                !is_string($owner['sub']) || strlen($owner['sub']) < 1 || strlen($owner['sub']) > 255 ||
+                preg_match('/[\x00-\x1f\x7f]/', $owner['sub']))) {
+                throw new \RuntimeException('Invalid bound owner identity');
+            }
+        }
     }
 
     public static function migrate(array $state): array
@@ -118,6 +131,10 @@ final class SiteState
         if ($state['schema'] === 8) {
             $state['reporting'] = ReportConfig::DEFAULTS;
             $state['schema'] = 9;
+        }
+        if ($state['schema'] === 9) {
+            $state['identity'] = ['owner' => null];
+            $state['schema'] = 10;
         }
         self::validate($state);
         return $state;

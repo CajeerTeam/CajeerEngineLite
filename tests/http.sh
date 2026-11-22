@@ -30,8 +30,8 @@ if get / | grep_all '<nav'; then echo 'Disabled navigation still shown' >&2; exi
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep_all "$base/"
 get / | grep_all '<nav'
-php bin/cajeer doctor | grep_all 'schema 9'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 9.' ]]
+php bin/cajeer doctor | grep_all 'schema 10'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 10.' ]]
 php bin/cajeer module disable robots | grep_all disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep_all enabled
@@ -195,5 +195,10 @@ grep_all 'Не настроен доступ к API' "$tmp/report-stored"
 php bin/cajeer analytics status --days=7 | php -r '$d=json_decode(stream_get_contents(STDIN),true); if(!isset($d["providers"]["gsc"]))exit(1);'
 [[ $(status "$base/analytics") == 404 ]]
 curl -fsSI "$base/admin?analytics=1" | grep_all -i "script-src 'none'"
+# OIDC must be disabled unless HTTPS and client credentials are configured.
+[[ $(status "$base/admin/oidc/login") == 503 ]]
+[[ $(status "$base/admin/oidc/callback?code=invalid&state=invalid") == 503 ]]
+[[ $(status -X POST "$base/admin/oidc/login") == 405 ]]
+[[ $(status "$base/auth/skif4er/login") == 404 ]]
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  
