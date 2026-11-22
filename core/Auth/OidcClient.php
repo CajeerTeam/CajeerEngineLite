@@ -10,6 +10,7 @@ final class OidcClient
     private const AUTH = self::ISSUER.'/protocol/openid-connect/auth';
     private const TOKEN = self::ISSUER.'/protocol/openid-connect/token';
     private const JWKS = self::ISSUER.'/protocol/openid-connect/certs';
+    private const LOGOUT = self::ISSUER.'/protocol/openid-connect/logout';
     private readonly string $redirectUri;
 
     /** Injectable HTTP driver strictly for isolated integration tests. */
@@ -98,11 +99,41 @@ final class OidcClient
                 $claims['auth_time'] < time()-300)) {
             throw new \RuntimeException('Fresh SkiF4er ID authentication is required');
         }
-        return ['iss' => $claims['iss'], 'sub' => $claims['sub']];
+        return ['iss' => $claims['iss'], 'sub' => $claims['sub']] + (isset($claims['sid']) ? ['sid' => $claims['sid']] : []);
     }
 
     /** @return array<string,mixed> */
     public function verifyIdToken(string $jwt, string $nonce, mixed $accessToken = null): array
+    {
+        $claims = $this->signedClaims($jwt, false);
+        $now = time();
+        $aud = $claims['aud'] ?? null;
+        $audiences = is_string($aud) ? [$aud] : $aud;
+        if (($claims['iss'] ?? null) !== self::ISSUER || !is_array($audiences) ||
+            !in_array($this->clientId, $audiences, true) ||
+            (count($audiences) > 1 && ($claims['azp'] ?? null) !== $this->clientId) ||
+            (isset($claims['azp']) && $claims['azp'] !== $this->clientId) ||
+            !is_int($claims['exp'] ?? null) || $claims['exp'] <= $now - 60 ||
+            !is_int($claims['iat'] ?? null) || $claims['iat'] > $now + 60 || $claims['iat'] < $now - 7200 ||
+            (isset($claims['nbf']) && (!is_int($claims['nbf']) || $claims['nbf'] > $now + 60)) ||
+            !is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']) ||
+            !is_string($claims['sub'] ?? null) || strlen($claims['sub']) < 1 || strlen($claims['sub']) > 255 ||
+            preg_match('/[\x00-\x1f\x7f]/', $claims['sub']) ||
+            (isset($claims['sid']) && (!is_string($claims['sid']) || strlen($claims['sid'])<1 || strlen($claims['sid'])>255 || preg_match('/[\x00-\x1f\x7f]/', $claims['sid'])))) {
+            throw new \RuntimeException('Invalid ID token claims');
+        }
+        if (array_key_exists('at_hash', $claims)) {
+            if (!is_string($accessToken) || strlen($accessToken) > 16000 ||
+                !is_string($claims['at_hash']) ||
+                !hash_equals(self::b64(substr(hash('sha256', $accessToken, true), 0, 16)), $claims['at_hash'])) {
+                throw new \RuntimeException('Invalid access token binding');
+            }
+        }
+        return $claims;
+    }
+
+    /** Verify only allowlisted RS256/JWKS signatures. Never trust token header key URLs. */
+    private function signedClaims(string $jwt, bool $logout): array
     {
         if (strlen($jwt) > 16000 || substr_count($jwt, '.') !== 2) throw new \RuntimeException('Invalid ID token format');
         [$encodedHeader, $encodedPayload, $signature] = explode('.', $jwt, 3);
@@ -114,7 +145,7 @@ final class OidcClient
         }
         if (($header['alg'] ?? null) !== 'RS256' || !is_string($header['kid'] ?? null) ||
             strlen($header['kid']) < 1 || strlen($header['kid']) > 128 ||
-            (isset($header['typ']) && !in_array($header['typ'], ['JWT', 'application/jwt'], true))) {
+            (isset($header['typ']) && !in_array($header['typ'], $logout ? ['JWT','application/jwt','logout+jwt'] : ['JWT','application/jwt'], true))) {
             throw new \RuntimeException('Untrusted ID token algorithm');
         }
         $jwks = $this->request(self::JWKS);
@@ -133,29 +164,58 @@ final class OidcClient
         $publicKey = self::rsaPublicKey($key);
         $verified = openssl_verify($encodedHeader.'.'.$encodedPayload, self::decode($signature), $publicKey, OPENSSL_ALGO_SHA256);
         if ($verified !== 1) throw new \RuntimeException('Invalid ID token signature');
-        $now = time();
-        $aud = $claims['aud'] ?? null;
-        $audiences = is_string($aud) ? [$aud] : $aud;
-        if (($claims['iss'] ?? null) !== self::ISSUER || !is_array($audiences) ||
-            !in_array($this->clientId, $audiences, true) ||
-            (count($audiences) > 1 && ($claims['azp'] ?? null) !== $this->clientId) ||
-            (isset($claims['azp']) && $claims['azp'] !== $this->clientId) ||
-            !is_int($claims['exp'] ?? null) || $claims['exp'] <= $now - 60 ||
-            !is_int($claims['iat'] ?? null) || $claims['iat'] > $now + 60 || $claims['iat'] < $now - 7200 ||
-            (isset($claims['nbf']) && (!is_int($claims['nbf']) || $claims['nbf'] > $now + 60)) ||
-            !is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']) ||
-            !is_string($claims['sub'] ?? null) || strlen($claims['sub']) < 1 || strlen($claims['sub']) > 255 ||
-            preg_match('/[\x00-\x1f\x7f]/', $claims['sub'])) {
-            throw new \RuntimeException('Invalid ID token claims');
-        }
-        if (array_key_exists('at_hash', $claims)) {
-            if (!is_string($accessToken) || strlen($accessToken) > 16000 ||
-                !is_string($claims['at_hash']) ||
-                !hash_equals(self::b64(substr(hash('sha256', $accessToken, true), 0, 16)), $claims['at_hash'])) {
-                throw new \RuntimeException('Invalid access token binding');
-            }
+        return $claims;
+    }
+
+    /** Validate an OIDC Back-Channel Logout Token (not an authentication ID Token). */
+    public function verifyLogoutToken(string $jwt): array
+    {
+        $claims=$this->signedClaims($jwt,true);
+        $now=time();
+        $aud=$claims['aud']??null;
+        $audiences=is_string($aud)?[$aud]:$aud;
+        $sub=$claims['sub']??null;
+        $sid=$claims['sid']??null;
+        // A Logout Token event must be a JSON *object*, not an array or scalar.
+        // Check raw JSON shape after its RS256 signature has been verified.
+        $parts=explode('.',$jwt,3);
+        try {
+            $payloadObject=json_decode(self::decode($parts[1]),false,32,JSON_THROW_ON_ERROR);
+        } catch (\JsonException) { throw new \RuntimeException('Invalid logout event JSON'); }
+        $events=is_object($payloadObject)?($payloadObject->events??null):null;
+        $event=$events instanceof \stdClass ? ($events->{'http://schemas.openid.net/event/backchannel-logout'}??null) : null;
+        if (($claims['iss']??null)!==self::ISSUER || !is_array($audiences) ||
+            !in_array($this->clientId,$audiences,true) ||
+            (count($audiences)>1 && ($claims['azp']??null)!==$this->clientId) ||
+            (isset($claims['azp']) && $claims['azp']!==$this->clientId) ||
+            !is_int($claims['iat']??null) || $claims['iat']>$now+60 || $claims['iat']<$now-300 ||
+            !is_int($claims['exp']??null) || $claims['exp']<=$now || $claims['exp']>$now+3600 ||
+            !is_string($claims['jti']??null) || strlen($claims['jti'])<8 || strlen($claims['jti'])>255 ||
+            !preg_match('/\A[\x21-\x7e]+\z/D',$claims['jti']) ||
+            array_key_exists('nonce',$claims) || !($event instanceof \stdClass) ||
+            ($sub===null && $sid===null) ||
+            ($sub!==null && (!is_string($sub)||strlen($sub)<1||strlen($sub)>255||preg_match('/[\x00-\x1f\x7f]/',$sub))) ||
+            ($sid!==null && (!is_string($sid)||strlen($sid)<1||strlen($sid)>255||preg_match('/[\x00-\x1f\x7f]/',$sid)))) {
+            throw new \RuntimeException('Invalid OIDC Logout Token claims');
         }
         return $claims;
+    }
+
+    /** Provider-controlled logout destination, never a user-supplied URL. */
+    public function globalLogoutUrl(string $siteOrigin): string
+    {
+        $metadata=$this->discovery();
+        if (($metadata['end_session_endpoint']??null)!==self::LOGOUT) {
+            throw new \RuntimeException('Unexpected OIDC logout endpoint');
+        }
+        $origin=rtrim($siteOrigin,'/');
+        if ($origin.'/admin/oidc/callback'!==$this->redirectUri) {
+            throw new \RuntimeException('Untrusted post-logout origin');
+        }
+        return self::LOGOUT.'?'.http_build_query([
+            'client_id'=>$this->clientId,
+            'post_logout_redirect_uri'=>$origin.'/admin/oidc/logged-out',
+        ],'', '&',PHP_QUERY_RFC3986);
     }
 
     /** @return array<string,mixed> */

@@ -26,7 +26,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123', 'https://lite.example.org', 'Тестовый сайт');
     $site=$app->load();
-    ok103(Lite::VERSION === '1.1.4' && SiteState::SCHEMA === 11 && $site['schema'] === 11, 'version or schema');
+    ok103(Lite::VERSION === '1.1.5' && SiteState::SCHEMA === 11 && $site['schema'] === 11, 'version or schema');
     ok103($site['consent'] === ConsentConfig::DEFAULTS, 'new installation policy');
     ok103(str_contains((new Lite(dirname(__DIR__)))->render($site, $site['pages']['/']), 'data-consent-action="accept"'), 'initial banner is missing');
 

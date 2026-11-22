@@ -233,11 +233,18 @@ curl -fsS -b "$tmp/cookies2" "$base/admin?new=1" | grep_all 'Вход в адм�
 [[ $(status -b "$tmp/cookies" -d "action=session_revoke_all&csrf=$csrf&session_password=TestPassword123" "$base/admin") == 303 ]]
 curl -fsS -b "$tmp/cookies" "$base/admin" | grep_all 'Вход в админ-панель'
 [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/hacked&title=Hacked" "$base/admin") == 403 ]]
+# 1.1.5: backchannel is POST-only, never uses browser CSRF/session cookies.
+[[ $(status "$base/admin/oidc/backchannel-logout") == 405 ]]
+[[ $(status -X POST -d 'logout_token=nonsense' "$base/admin/oidc/backchannel-logout") == 503 ]]
+[[ $(status -X POST "$base/admin/oidc/logged-out") == 405 ]]
+get /admin/oidc/logged-out | grep_all 'Выход SkiF4er ID'
 # Login again to verify ordinary logout removes the durable device lease.
 curl -fsS -b "$tmp/cookies" -c "$tmp/cookies" "$base/admin" > "$tmp/relogin"
 csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/relogin")
 [[ $(status -b "$tmp/cookies" -c "$tmp/cookies" -d "action=login&csrf=$csrf&password=TestPassword123" "$base/admin") == 303 ]]
 curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/relogged"
 csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/relogged")
+# Only an actual OIDC-authenticated administrator may request global SSO logout.
+[[ $(status -b "$tmp/cookies" -d "action=logout_global&csrf=$csrf" "$base/admin") == 422 ]]
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

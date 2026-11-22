@@ -34,6 +34,7 @@ jobs:
       - run: php tests/core_112.php
       - run: php tests/core_113.php
       - run: php tests/core_114.php
+      - run: php tests/core_115.php
       - run: bash tests/http.sh
   browser:
     runs-on: ubuntu-latest

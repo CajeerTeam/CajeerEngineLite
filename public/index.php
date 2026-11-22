@@ -32,6 +32,26 @@ try {
     $d=$app->load();
     if ($path==='/admin' || str_starts_with($path, '/admin/oidc/')) {
         header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');
+        if ($path==='/admin/oidc/backchannel-logout') {
+            if ($method!=='POST') {header('Allow: POST'); stop(405,'Method not allowed');}
+            if (!OidcClient::enabled($d['settings']['url'])) stop(503,'OIDC unavailable');
+            $type=strtolower(trim(explode(';',$_SERVER['CONTENT_TYPE']??'')[0]));
+            if ($type!=='application/x-www-form-urlencoded' || (int)($_SERVER['CONTENT_LENGTH']??0)>20000) stop(400,'Invalid logout request');
+            $jwt=$_POST['logout_token']??null;
+            if (!is_string($jwt) || strlen($jwt)<100 || strlen($jwt)>16000) stop(400,'Invalid logout request');
+            try {
+                $claims=OidcClient::fromEnvironment($d['settings']['url'])->verifyLogoutToken($jwt);
+                (new SessionRegistry($app->root))->backchannelLogout($claims,$d);
+                header('Content-Type: text/plain; charset=utf-8'); echo 'OK'; exit;
+            } catch (\Throwable $exception) {
+                error_log('SkiF4er backchannel logout: '.get_class($exception));
+                stop(400,'Invalid logout request');
+            }
+        }
+        if ($path==='/admin/oidc/logged-out') {
+            if ($method!=='GET' && $method!=='HEAD') {header('Allow: GET, HEAD'); stop(405,'Method not allowed');}
+            shell('Выход SkiF4er ID','<p>Сеанс Lite завершён. Выход из SkiF4er ID запрошен.</p><p><a href="/admin">Вернуться ко входу</a></p>');
+        }
         $secure=str_starts_with($d['settings']['url'],'https://') || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
         ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
         ini_set('session.gc_maxlifetime',(string)SessionRegistry::MAX_SECONDS);
@@ -63,6 +83,8 @@ try {
                     $hadLocalAuth=$auth && !isset($_SESSION['oidc_identity']);
                     $result=OidcFlow::finish($_SESSION, $client, $_GET);
                     $identity=$result['identity'];
+                    $providerSid=$identity['sid']??null;
+                    unset($identity['sid']); // ownership uses only issuer + subject
                     $mode=$result['mode'];
                     $context=$result['context'];
                     $expectedGeneration=$context['generation'] ?? null;
@@ -101,7 +123,10 @@ try {
                     session_regenerate_id(true);
                     $_SESSION=['auth'=>hash('sha256',$d['password']), 'seen'=>time(),
                         'csrf'=>bin2hex(random_bytes(32)), 'owner_generation'=>$d['identity']['generation']];
-                    if ($mode!=='unbind') $_SESSION['oidc_identity']=$identity;
+                    if ($mode!=='unbind') {
+                        $_SESSION['oidc_identity']=$identity;
+                        if (is_string($providerSid)) $_SESSION['oidc_sid']=$providerSid;
+                    }
                     $sessions->issue($_SESSION,$d,$_SERVER);
                     go('/admin');
                 }
@@ -163,12 +188,26 @@ try {
                     }
                     header('Location: '.$url, true, 303); exit;
                 }
-                elseif ($action==='logout') {
+                elseif ($action==='logout' || $action==='logout_global') {
+                    // Revoke locally before redirecting to the IdP; the redirect may fail or be cancelled.
+                    $global=$action==='logout_global';
+                    if ($global && (!isset($_SESSION['oidc_identity']) || !OidcClient::enabled($d['settings']['url']))) {
+                        throw new InvalidArgumentException('Global logout requires an active SkiF4er ID session');
+                    }
                     $sessions->revoke($_SESSION,$d,'one',SessionRegistry::currentId($_SESSION));
                     $_SESSION=[];
                     session_destroy();
                     setcookie(session_name(), '', ['expires'=>time()-3600, 'path'=>'/', 'httponly'=>true,
                         'secure'=>$secure, 'samesite'=>'Lax']);
+                    if ($global) {
+                        try {
+                            $url=OidcClient::fromEnvironment($d['settings']['url'])->globalLogoutUrl($d['settings']['url']);
+                            header('Location: '.$url,true,303); exit;
+                        } catch (\Throwable $exception) {
+                            error_log('SkiF4er global logout: '.get_class($exception));
+                            go('/admin?logout=provider_unavailable');
+                        }
+                    }
                     go('/admin');
                 }
                 elseif ($action==='session_revoke' || $action==='session_revoke_others' || $action==='session_revoke_all') {
@@ -287,6 +326,7 @@ try {
         }
         $html=$error!==''?'<p class="error" role="alert">'.e($error).'</p>':'';
         if (!$auth) {
+            if (($_GET['logout']??null)==='provider_unavailable') $html.='<p role="alert">Локальный сеанс завершён, но недоступен сервер SkiF4er ID. Закройте браузер и завершите SSO-сеанс отдельно.</p>';
             $loginHtml=$html.form('login',input('password','','password').'<button>Войти</button>');
             if (OidcClient::enabled($d['settings']['url']) && ($d['identity']['owner'] ?? null) !== null) {
                 $loginHtml.='<section><h2>SkiF4er ID</h2><p>Войти через привязанный аккаунт владельца.</p>'.
@@ -338,7 +378,11 @@ try {
         $html.=form('session_revoke_all',input('session_password','','password').
             '<button>Завершить все сеансы (включая текущий)</button>');
         $html.='</section>';
-        $html.=form('logout','<button>Выйти</button>').'<section><h2>Страницы</h2><ul>';
+        $html.=form('logout','<button>Выйти только из Lite</button>');
+        if (isset($_SESSION['oidc_identity']) && OidcClient::enabled($d['settings']['url'])) {
+            $html.=form('logout_global','<button>Выйти из Lite и SkiF4er ID</button>');
+        }
+        $html.='<section><h2>Страницы</h2><ul>';
         foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').'</li>';
         $html.='</ul><a href="/admin?new=1">Создать страницу</a></section>';
         $edit=$_GET['edit']??null;
