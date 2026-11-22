@@ -5,7 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
-use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig};
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig};
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -83,6 +83,13 @@ try {
                     $config = GTMConfig::fromPost($_POST);
                     $app->change(static function(array $d) use ($config): array {
                         $d['integrations']['gtm'] = $config;
+                        return $d;
+                    }); go('/admin');
+                }
+                elseif ($action==='clarity') {
+                    $config = ClarityConfig::fromPost($_POST);
+                    $app->change(static function(array $d) use ($config): array {
+                        $d['integrations']['clarity'] = $config;
                         return $d;
                     }); go('/admin');
                 }
@@ -164,6 +171,19 @@ try {
         if (!$c['enabled']) $gtmForm.='<p class="error">Cookie Consent выключен: GTM останется заблокированным.</p>';
         $gtmForm.='<p>В GTM настройте Consent Settings и триггеры для категорий аналитика / маркетинг / запись сессий. Сторонние пользовательские теги не проверяются Lite автоматически.</p><button>Сохранить GTM</button>';
         $html.=form('gtm',$gtmForm);
+        $cl=$d['integrations']['clarity'];
+        $clarityForm='<h2>Microsoft Clarity</h2>';
+        $clarityForm.='<p>Поведенческая аналитика, тепловые карты и записи сессий. Clarity загружается только при одновременном согласии на аналитику и запись сессий. Без этих двух разрешений запросы к Microsoft не отправляются.</p>';
+        $clarityForm.='<label><input type="checkbox" name="enabled" value="1" '.($cl['enabled']?'checked':'').'> Включить Microsoft Clarity</label>';
+        $clarityForm.=input('project_id',$cl['project_id']);
+        $clarityForm.='<p>Project ID из Settings → Setup → Install manually (только идентификатор, не HTML и не URL).</p>';
+        $clarityForm.='<label><input type="checkbox" name="recordings" value="1" '.($cl['recordings']?'checked':'').'> Разрешить модуль записи сессий (при отключении Clarity полностью не загружается)</label>';
+        $clarityForm.='<label><input type="checkbox" name="contact_events" value="1" '.($cl['contact_events']?'checked':'').'> Отправлять события кликов по контактам (без адресов и номеров)</label>';
+        $clarityForm.='<p>В проекте Clarity включите Consent Mode. Согласие передаётся через Consent API v2. Настройте маскирование чувствительных элементов и исключения страниц в Microsoft Clarity. Не устанавливайте этот же проект Clarity повторно через GTM: это приведёт к дублям.</p>';
+        if (!$c['enabled']) $clarityForm.='<p class="error">Cookie Consent выключен: Microsoft Clarity останется заблокированным.</p>';
+        if (!$cl['recordings']) $clarityForm.='<p>Запись выключена: вместе с ней отключена загрузка Clarity. Сервис не поддерживает отдельный режим тепловых карт без сбора взаимодействий.</p>';
+        $clarityForm.='<button>Сохранить Microsoft Clarity</button>';
+        $html.=form('clarity',$clarityForm);
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
@@ -183,6 +203,13 @@ try {
         $scripts[]='https://www.googletagmanager.com';
         array_push($connections,'https://www.googletagmanager.com','https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
         array_push($images,'https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
+    }
+    if (ClarityConfig::active($d)) {
+        $scripts[]='https://www.clarity.ms';
+        $connections[]='https://*.clarity.ms';
+        $connections[]='https://www.clarity.ms';
+        $images[]='https://*.clarity.ms';
+        $images[]='https://www.clarity.ms';
     }
     if (MetricaConfig::active($d)) {
         // Official provider endpoints include regional hosts and Webvisor domains.

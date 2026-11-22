@@ -20,8 +20,8 @@
 </nav>
 @endif
 </header>
-<main><article><h1>{{ $page['title'] }}</h1><p class="lead">{{ $page['description'] }}</p><div>{!! $body_html !!}</div></article></main>
-<footer>
+<main data-clarity-mask="true"><article><h1>{{ $page['title'] }}</h1><p class="lead">{{ $page['description'] }}</p><div>{!! $body_html !!}</div></article></main>
+<footer data-clarity-mask="true">
 @if (!empty($site['email']))
 <a href="mailto:{{ $site['email'] }}">{{ $site['email'] }}</a>
 @endif
@@ -73,5 +73,8 @@
 @endif
 @if ($gtm_active)
 <script defer src="/assets/gtm.js?v=106" data-gtm-id="{{ $gtm['container_id'] }}" data-gtm-contacts="{{ $gtm['contact_events'] }}"></script>
+@endif
+@if ($clarity_active)
+<script defer src="/assets/clarity.js?v=107" data-clarity-id="{{ $clarity['project_id'] }}" data-clarity-contacts="{{ $clarity['contact_events'] }}"></script>
 @endif
 </body></html>

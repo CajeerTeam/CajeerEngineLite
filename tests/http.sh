@@ -28,8 +28,8 @@ if get / | grep_all '<nav'; then echo 'Disabled navigation still shown' >&2; exi
 [[ $(status -b "$tmp/cookies" -d "action=modules&csrf=$csrf&module[robots]=1&module[sitemap]=1&module[navigation]=1" "$base/admin") == 303 ]]
 get /sitemap.xml | grep_all "$base/"
 get / | grep_all '<nav'
-php bin/cajeer doctor | grep_all 'schema 6'
-[[ "$(php bin/cajeer migrate)" == 'Already at schema 6.' ]]
+php bin/cajeer doctor | grep_all 'schema 7'
+[[ "$(php bin/cajeer migrate)" == 'Already at schema 7.' ]]
 php bin/cajeer module disable robots | grep_all disabled
 [[ $(status "$base/robots.txt") == 404 ]]
 php bin/cajeer module enable robots | grep_all enabled
@@ -112,5 +112,29 @@ get / | grep_all '/assets/gtm.js'
 [[ $(status -b "$tmp/cookies" -d "action=gtm&csrf=$csrf&container_id=GTM-ABCD123&contact_events=1" "$base/admin") == 303 ]]
 get / | grep_all -v '/assets/gtm.js'
 get / | grep_all '/assets/ga4.js'
+# Clarity: strictly validated project ID, consent-gated tag and private admin CSP.
+get / | grep_all -v '/assets/clarity.js'
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&enabled=1&project_id=<script>&recordings=1" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&enabled=1&project_id=ABC123&recordings=1&contact_events=1" "$base/admin") == 303 ]]
+get / | grep_all 'data-clarity-id="abc123"'
+get / | grep_all 'data-clarity-mask="true"'
+get /assets/clarity.js | grep_all 'consentv2'
+curl -fsSI "$base/" | grep_all -i 'script-src.*https://www.clarity.ms'
+curl -fsSI "$base/" | grep_all -i 'connect-src.*clarity.ms'
+curl -fsSI "$base/admin" | grep_all -i "script-src 'none'"
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=wrong&enabled=1&project_id=abc123&recordings=1" "$base/admin") == 403 ]]
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&enabled=1&project_id=abc123&recordings=0" "$base/admin") == 422 ]]
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&enabled=1&project_id=abc123" "$base/admin") == 303 ]]
+get / | grep_all -v '/assets/clarity.js'
+if curl -fsSI "$base/" | grep_all -i 'clarity.ms'; then echo 'Clarity CSP allowed while recordings disabled' >&2; exit 1; fi
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&enabled=1&project_id=abc123&recordings=1" "$base/admin") == 303 ]]
+get / | grep_all '/assets/clarity.js'
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep_all -v '/assets/clarity.js'
+if curl -fsSI "$base/" | grep_all -i 'clarity.ms'; then echo 'Clarity CSP allowed without consent UI' >&2; exit 1; fi
+[[ $(status -b "$tmp/cookies" -d "action=consent&csrf=$csrf&enabled=1&days=12&title=Cookie+choices&description=Visitors+may+choose&privacy_url=" "$base/admin") == 303 ]]
+get / | grep_all '/assets/clarity.js'
+[[ $(status -b "$tmp/cookies" -d "action=clarity&csrf=$csrf&project_id=abc123&recordings=1" "$base/admin") == 303 ]]
+get / | grep_all -v '/assets/clarity.js'
 [[ $(status -b "$tmp/cookies" -d "action=logout&csrf=$csrf" "$base/admin") == 303 ]]; [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/bad&title=Bad" "$base/admin") == 403 ]]
 echo 'HTTP smoke OK'  

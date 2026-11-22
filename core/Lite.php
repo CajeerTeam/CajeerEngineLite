@@ -4,13 +4,13 @@ namespace CajeerEngine;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\{ConsentConfig,ConsentCookie};
-use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig};
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig};
 use CajeerEngine\Storage\{SiteRepository,BackupService,SiteState};
 use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.0.6';
+    public const VERSION = '1.0.7';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
@@ -48,7 +48,7 @@ final class Lite
         $this->change(function($d) use($password,$settings) {
             if ($d!==null) throw new \InvalidArgumentException('Already installed');
             $home=self::page(['path'=>'/','title'=>'Добро пожаловать','description'=>'Сайт на CajeerEngine Lite','body'=>'Расскажите о себе, своих услугах и контактах. Измените эту страницу в административной панели.','published'=>'1','menu'=>'1']);
-            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS,'metrica'=>MetricaConfig::DEFAULTS,'gtm'=>GTMConfig::DEFAULTS]];
+            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS,'metrica'=>MetricaConfig::DEFAULTS,'gtm'=>GTMConfig::DEFAULTS,'clarity'=>ClarityConfig::DEFAULTS]];
         });
     }
     public function login(string $password): bool {
@@ -73,6 +73,7 @@ final class Lite
             'ga4_active'=>GA4Config::active($d) && !GTMConfig::active($d), 'ga4'=>$d['integrations']['ga4'],
             'metrica_active'=>MetricaConfig::active($d), 'metrica'=>$d['integrations']['metrica'],
             'gtm_active'=>GTMConfig::active($d), 'gtm'=>$d['integrations']['gtm'],
+            'clarity_active'=>ClarityConfig::active($d), 'clarity'=>$d['integrations']['clarity'],
         ]);
     }
 }
