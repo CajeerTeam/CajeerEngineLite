@@ -13,7 +13,7 @@ final class PageEditorView
         $e=static fn(string $value):string=>Lite::esc($value);
         $hidden='<input type="hidden" name="csrf" value="'.$e($csrf).'">';
         $html='<p><a href="/admin">Админ-панель</a> · <a href="/admin/ai">AI-чат</a> · '.
-            '<a href="/admin/ai/content">Генерация контента</a></p>';
+            '<a href="/admin/ai/content">Генерация контента</a> · <a href="/admin/ai/seo">SEO-аудит</a></p>';
         if ($error!=='') $html.='<p role="alert" class="error">'.$e($error).'</p>';
         if (!$site['ai']['enabled'] || !$configured) {
             $html.='<p class="error">AI-редактор недоступен: включите OpenAI и настройте серверный API-ключ.</p>';

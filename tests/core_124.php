@@ -8,7 +8,7 @@ use CajeerEngine\Storage\SiteState;
 function assert124(bool $condition,string $message):void {if (!$condition)throw new RuntimeException('1.2.4: '.$message);}
 function rejects124(callable $run,string $message):void {try{$run();}catch(InvalidArgumentException|RuntimeException $e){return;}throw new RuntimeException('Accepted: '.$message);}
 function rm124(string $path):void {if(is_file($path)||is_link($path)){unlink($path);return;}if(is_dir($path)){foreach(new FilesystemIterator($path) as $item)rm124($item->getPathname());rmdir($path);}}
-assert124(Lite::VERSION==='1.2.4' && SiteState::SCHEMA===13,'version and schema');
+assert124(version_compare(Lite::VERSION,'1.2.4','>=') && SiteState::SCHEMA===13,'version and schema');
 $root=sys_get_temp_dir().'/ce124-'.bin2hex(random_bytes(8));
 mkdir($root.'/templates/default',0700,true);
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');

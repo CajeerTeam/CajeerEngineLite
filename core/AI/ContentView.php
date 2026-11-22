@@ -11,7 +11,7 @@ final class ContentView
     {
         $e = static fn(string $value): string => Lite::esc($value);
         $csrfInput = '<input type="hidden" name="csrf" value="'.$e($csrf).'">';
-        $html = '<p><a href="/admin">Админ-панель</a> · <a href="/admin/ai">AI-чат</a></p>';
+        $html = '<p><a href="/admin">Админ-панель</a> · <a href="/admin/ai">AI-чат</a> · <a href="/admin/ai/seo">SEO-аудит</a></p>';
         if ($error !== '') $html .= '<p role="alert" class="error">'.$e($error).'</p>';
         if (!$site['ai']['enabled'] || !$configured) {
             $html .= '<p class="error">OpenAI отключён или API-ключ отсутствует. Включите интеграцию в настройках администратора.</p>';

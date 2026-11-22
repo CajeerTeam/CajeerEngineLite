@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.2.4
+# CajeerEngine Lite Edition 1.2.5
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -1083,3 +1083,47 @@ python tests/browser_124.py
 The site JSON schema remains 13; no migration is needed. Local tests use a test
 transport for provider responses. Live generation requires a configured API key,
 network access and an available Structured Outputs-compatible model.
+
+
+## 1.2.5 — AI SEO Assistant (site audit and approved fixes)
+
+Upgrade from 1.2.4: save a copy of `storage/site.json`, stop the PHP workers,
+apply the changed-files ZIP at the repository root and run:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_125.php
+bash tests/ai_seo_http.sh
+```
+
+Open `/admin/ai/seo` as an authenticated administrator. Local site audit works
+**without an OpenAI key**: it checks published-page title/description duplicates,
+missing or unusually short/long SEO metadata, thin body text, canonical URLs,
+unpublished status, HTTPS, and enabled sitemap/robots modules. Score values
+are heuristic local editorial indicators, **not real search rankings**.
+The canonical address displayed is generated from the site's configured origin
+and page path. The assistant does not silently change server settings or routing.
+
+With OpenAI enabled and a server-side `CAJEER_OPENAI_API_KEY`, select a page and
+request either metadata-only (title + description) or full-text SEO suggestions.
+This makes a real Responses API request with Structured Outputs and uses the
+existing daily request/token limits. For very long pages choose metadata mode;
+full-text mode rejects inputs exceeding the configured context limit rather than
+truncating them silently. The site's current text and audit results are sent
+to OpenAI; do not include personal or confidential text without authorization.
+
+Suggestions are **not saved automatically**. Inspect side-by-side old/new text,
+edit the suggested fields, check the confirmation box, and approve. The server
+checks the owner's identity generation, the page revision and a 30-minute
+preview lifetime inside the site transaction. Metadata-only edits preserve the
+body verbatim; all modes preserve the page URL, publishing flag and menu flag.
+A durable snapshot is written to `storage/ai/page-history/` before each update.
+Use `/admin/ai/editor` to restore a snapshot (also revision checked). Back up
+this private page-history directory separately if you want to retain revision history.
+
+Server-side HTML escaping protects both admin preview and public rendering.
+The API key never reaches the browser. No SQL/Composer/Node dependencies are
+needed for the PHP runtime. CI tests use locally simulated API responses;
+validate actual OpenAI requests on staging with your project key. The JSON
+schema remains **13**; no storage migration occurs with this release.
