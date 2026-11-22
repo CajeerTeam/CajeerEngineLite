@@ -5,7 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
-use CajeerEngine\Integrations\{GA4Config,MetricaConfig};
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig};
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -79,6 +79,13 @@ try {
                         return $d;
                     }); go('/admin');
                 }
+                elseif ($action==='gtm') {
+                    $config = GTMConfig::fromPost($_POST);
+                    $app->change(static function(array $d) use ($config): array {
+                        $d['integrations']['gtm'] = $config;
+                        return $d;
+                    }); go('/admin');
+                }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
                     $app->change(function($d)use($p,$old,$revision){
@@ -147,6 +154,16 @@ try {
         if (!$c['enabled']) $metricaForm.='<p class="error">Cookie Consent выключен. Метрика останется заблокированной.</p>';
         $metricaForm.='<button>Сохранить Яндекс Метрику</button>';
         $html.=form('metrica',$metricaForm);
+        $t=$d['integrations']['gtm'];
+        $gtmForm='<h2>Google Tag Manager (GTM)</h2>';
+        $gtmForm.='<p>Контейнер GTM загружается только после явного разрешения аналитики, маркетинга или записи сессий. Consent Mode v2 и события передаются через dataLayer до загрузки контейнера.</p>';
+        $gtmForm.='<label><input type="checkbox" name="enabled" value="1" '.($t['enabled']?'checked':'').'> Включить Google Tag Manager</label>';
+        $gtmForm.=input('container_id',$t['container_id']);
+        $gtmForm.='<p>ID контейнера GTM-XXXXXXX. Настраивайте разрешения отдельно для каждого тега внутри GTM. При работе GTM прямой загрузчик GA4 отключён во избежание двойных просмотров (настройки GA4 сохраняются).</p>';
+        $gtmForm.='<label><input type="checkbox" name="contact_events" value="1" '.($t['contact_events']?'checked':'').'> Передавать cajeer_contact_click для кликов по email и телефону (без адреса и номера)</label>';
+        if (!$c['enabled']) $gtmForm.='<p class="error">Cookie Consent выключен: GTM останется заблокированным.</p>';
+        $gtmForm.='<p>В GTM настройте Consent Settings и триггеры для категорий аналитика / маркетинг / запись сессий. Сторонние пользовательские теги не проверяются Lite автоматически.</p><button>Сохранить GTM</button>';
+        $html.=form('gtm',$gtmForm);
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
@@ -162,7 +179,7 @@ try {
     $scripts=["'self'"]; $connections=["'self'"]; $images=["'self'"];
     $frame="frame-src 'none'"; $child="child-src 'none'";
     $frameAncestors="frame-ancestors 'none'";
-    if (GA4Config::active($d)) {
+    if (GA4Config::active($d) || GTMConfig::active($d)) {
         $scripts[]='https://www.googletagmanager.com';
         array_push($connections,'https://www.googletagmanager.com','https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');
         array_push($images,'https://www.google-analytics.com','https://region1.google-analytics.com','https://www.google.com');

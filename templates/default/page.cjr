@@ -71,4 +71,7 @@
 @if ($metrica_active)
 <script defer src="/assets/metrica.js?v=105" data-metrica-id="{{ $metrica['counter_id'] }}" data-metrica-pageviews="{{ $metrica['page_views'] }}" data-metrica-bounce="{{ $metrica['accurate_bounce'] }}" data-metrica-webvisor="{{ $metrica['webvisor'] }}" data-metrica-clickmap="{{ $metrica['clickmap'] }}" data-metrica-contacts="{{ $metrica['contact_goals'] }}" data-metrica-email-goal="{{ $metrica['email_goal'] }}" data-metrica-phone-goal="{{ $metrica['phone_goal'] }}"></script>
 @endif
+@if ($gtm_active)
+<script defer src="/assets/gtm.js?v=106" data-gtm-id="{{ $gtm['container_id'] }}" data-gtm-contacts="{{ $gtm['contact_events'] }}"></script>
+@endif
 </body></html>
