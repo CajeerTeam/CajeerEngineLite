@@ -4,7 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Modules\ModuleConfig;
-use CajeerEngine\Integrations\IntegrationDiagnostics;
+use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
@@ -35,6 +35,24 @@ try {
                     echo strtoupper($check['status']).' '.$check['id'].': '.$check['message']."\n";
                 }
                 echo $report['ok'] ? "Integration diagnostics: OK\n" : "Integration diagnostics: FAILED\n";
+            }
+            if (!$report['ok']) exit(1);
+            break;
+        case 'release':
+            if (($argv[2] ?? '') !== 'check' || count($argv) > 4 ||
+                (count($argv) === 4 && $argv[3] !== '--json')) {
+                throw new InvalidArgumentException('Usage: release check [--json]');
+            }
+            $report=ProductionAcceptance::run($app->root, $app->load());
+            if (($argv[3] ?? '') === '--json') {
+                echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
+            } else {
+                foreach ($report['checks'] as $check) {
+                    echo strtoupper($check['status']).' '.$check['id'].': '.$check['message']."\n";
+                }
+                foreach ($report['manual'] as $step) echo 'MANUAL '.$step."\n";
+                echo $report['ok'] ? "Automated production checks: PASS (external verification pending)\n" :
+                    "Automated production checks: FAIL\n";
             }
             if (!$report['ok']) exit(1);
             break;
@@ -74,6 +92,7 @@ try {
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
-                 "php bin/cajeer integrations check [--json]\n";
+                 "php bin/cajeer integrations check [--json]\n".
+                 "php bin/cajeer release check [--json]\n";
     }
 } catch(Throwable $e) { fwrite(STDERR,$e->getMessage()."\n"); exit(1); }

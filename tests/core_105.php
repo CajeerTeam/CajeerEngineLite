@@ -22,7 +22,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123','https://example.org','Metrica test');
     $s=$app->load();
-    test105(Lite::VERSION==='1.0.9' && SiteState::SCHEMA===8 && $s['schema']===8,'version/schema');
+    test105(Lite::VERSION==='1.1.0' && SiteState::SCHEMA===8 && $s['schema']===8,'version/schema');
     test105($s['integrations']['ga4']===GA4Config::DEFAULTS && $s['integrations']['metrica']===MetricaConfig::DEFAULTS,'new install defaults');
     test105(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']), '/assets/metrica.js'),'disabled embed rendered');
     foreach ([
@@ -45,7 +45,7 @@ try {
     $app->change(static function(array $s)use($m): array {$s['integrations']['metrica']=$m; return $s;});
     $s=$app->load();
     $view=(new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']);
-    test105(str_contains($view,'src="/assets/metrica.js?v=109"') && str_contains($view,'data-metrica-id="12345678"'), 'runtime missing');
+    test105(str_contains($view,'src="/assets/metrica.js?v=110"') && str_contains($view,'data-metrica-id="12345678"'), 'runtime missing');
     $s['consent']['enabled']=false;
     test105(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/metrica.js'),'disabled consent failed closed');
     $s['consent']['enabled']=true;

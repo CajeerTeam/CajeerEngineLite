@@ -23,7 +23,7 @@ try {
     $app=new Lite($root);
     $app->install('StrongPassword123','https://example.org','Clarity test');
     $s=$app->load();
-    check107(Lite::VERSION==='1.0.9' && SiteState::SCHEMA===8 && $s['schema']===8,'version/schema');
+    check107(Lite::VERSION==='1.1.0' && SiteState::SCHEMA===8 && $s['schema']===8,'version/schema');
     check107($s['integrations']['clarity']===ClarityConfig::DEFAULTS,'defaults');
     check107(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/clarity.js'),'disabled tracker rendered');
     foreach ([
@@ -48,7 +48,7 @@ try {
     });
     $s=$app->load();
     $page=(new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']);
-    check107(str_contains($page,'src="/assets/clarity.js?v=107"') && str_contains($page,'data-clarity-id="abc0123"'),'tag missing');
+    check107(str_contains($page,'src="/assets/clarity.js?v=110"') && str_contains($page,'data-clarity-id="abc0123"'),'tag missing');
     check107(str_contains($page,'data-clarity-mask="true"'),'sensitive content not masked');
     check107(str_contains($page,'/assets/gtm.js') && str_contains($page,'/assets/metrica.js') && !str_contains($page,'/assets/ga4.js'),'earlier integrations changed');
     $s['integrations']['clarity']['recordings']=false;

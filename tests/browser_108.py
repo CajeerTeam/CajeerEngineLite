@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='lite-108-matomo-') as folder:
             $s=$app->load(); echo $app->render($s,$s['pages']['/']);'''
         raw = subprocess.check_output(['php','-r',program],cwd=root,text=True,
                                       env={**os.environ,'MATOMO_MODE':mode,'MATOMO_URL':url,'MATOMO_SITE':site})
-        match = re.search(r'<script defer src="/assets/matomo.js\?v=108" ([^>]*)></script>',raw)
+        match = re.search(r'<script defer src="/assets/matomo.js\?v=110" ([^>]*)></script>',raw)
         assert match, 'Matomo missing from rendered PHP template'
         attrs = dict(re.findall(r'data-matomo-([a-z-]+)="([^"]*)"',match.group(1)))
         assert attrs == {'mode':mode,'url':url,'site':site,'pageviews':'1','contacts':'1'},attrs

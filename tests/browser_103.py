@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='lite-103-ui-') as folder:
     php = ('require "bootstrap.php"; $app=new \\CajeerEngine\\Lite(getcwd()); '
            '$s=$app->load(); echo $app->render($s,$s["pages"]["/"]);')
     html = subprocess.check_output(['php', '-r', php], cwd=root, text=True)
-    html = re.sub(r'<script defer src="/assets/consent.js\?v=103"></script>', '', html)
+    html = re.sub(r'<script defer src="/assets/consent.js\?v=110"></script>', '', html)
     html = re.sub(r'<link rel="stylesheet" href="/assets/style.css">', '', html)
     js = (root / 'public/assets/consent.js').read_text()
     with sync_playwright() as playwright:

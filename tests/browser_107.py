@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='lite-107-clarity-') as folder:
         $s=$app->load(); echo $app->render($s,$s['pages']['/']);'''
     html = subprocess.check_output(['php', '-r', program],cwd=root,text=True)
     assert 'data-clarity-mask="true"' in html, 'sensitive content missing mask'
-    match=re.search(r'<script defer src="/assets/clarity.js\?v=107" ([^>]*)></script>',html)
+    match=re.search(r'<script defer src="/assets/clarity.js\?v=110" ([^>]*)></script>',html)
     assert match, 'Clarity module missing from rendered PHP HTML'
     attrs = dict(re.findall(r'data-clarity-([a-z-]+)="([^"]*)"',match.group(1)))
     assert attrs=={'id':'abc123xy','contacts':'1'},attrs

@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='lite-106-gtm-') as folder:
         $s=$app->load(); echo $app->render($s,$s['pages']['/']);'''
     html = subprocess.check_output(['php','-r',program],cwd=root,text=True)
     assert '/assets/ga4.js' not in html, 'GTM + direct GA4 would double fire'
-    match = re.search(r'<script defer src="/assets/gtm.js\?v=106" ([^>]*)></script>',html)
+    match = re.search(r'<script defer src="/assets/gtm.js\?v=110" ([^>]*)></script>',html)
     assert match, 'GTM loader missing from PHP render'
     attrs = dict(re.findall(r'data-gtm-([a-z-]+)="([^"]*)"', match.group(1)))
     assert attrs == {'id':'GTM-ABCD123','contacts':'1'},attrs

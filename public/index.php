@@ -5,7 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\ConsentConfig;
-use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics};
+use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
@@ -224,6 +224,22 @@ try {
         }
         $html.='<p>Подробные результаты: php bin/cajeer integrations check --json. '.
             'Проверка не подтверждает доставку событий во внешние сервисы.</p></section>';
+        // Release check is read-only and never contacts analytics vendors.
+        // The admin view must distinguish local readiness from real delivery.
+        $acceptance=ProductionAcceptance::run($app->root,$d);
+        $html.='<section><h2>Production-приёмка 1.1.0</h2>';
+        $html.='<p>'.($acceptance['ok'] ?
+            'Локальные проверки production-конфигурации прошли; внешняя приёмка ещё требуется.' :
+            'Локальная production-приёмка не пройдена. Исправьте ошибки перед публикацией.').'</p>';
+        foreach ($acceptance['checks'] as $check) {
+            if ($check['status']==='pass') continue;
+            $html.='<p class="'.($check['status']==='fail' ? 'error' : 'notice').'">'.
+                e(strtoupper($check['status']).': '.$check['message']).'</p>';
+        }
+        foreach ($acceptance['manual'] as $step) {
+            $html.='<p class="notice">Требуется проверка в кабинете провайдера: '.e($step).'</p>';
+        }
+        $html.='<p>CLI: php bin/cajeer release check --json. Отчёт не подтверждает доставку данных.</p></section>';
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }

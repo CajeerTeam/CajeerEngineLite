@@ -15,7 +15,9 @@ get / | grep_all 'Добро пожаловать'; get /robots.txt | grep_all S
 [[ $(status "$base/storage/site.json") == 404 ]]; [[ $(status "$base/missing") == 404 ]]; [[ $(status -X POST "$base/admin") == 403 ]]
 curl -fsS -c "$tmp/cookies" "$base/admin" > "$tmp/login"; csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/login")
 [[ $(status -b "$tmp/cookies" -c "$tmp/cookies" -d "action=login&csrf=$csrf&password=TestPassword123" "$base/admin") == 303 ]]
-curl -fsS -b "$tmp/cookies" "$base/admin?new=1" > "$tmp/admin"; csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/admin")
+curl -fsS -b "$tmp/cookies" "$base/admin?new=1" > "$tmp/admin"
+grep_all "Production-приёмка 1.1.0" < "$tmp/admin"
+csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/admin")
 [[ $(status -b "$tmp/cookies" --data-urlencode 'body=<script>alert(1)</script>' -d "action=save&csrf=$csrf&path=/about&title=About&published=1&menu=1" "$base/admin") == 303 ]]
 get /about | grep_all '&lt;script&gt;'; get /sitemap.xml | grep_all '/about'; get / | grep_all '/about'
 [[ $(status -b "$tmp/cookies" -d "action=save&csrf=$csrf&path=/draft&title=Draft" "$base/admin") == 303 ]]; [[ $(status "$base/draft") == 404 ]]
@@ -45,7 +47,7 @@ CAJEER_RESTORE_CONFIRM="$backup_file" php bin/cajeer backup restore "$backup_fil
 get /sitemap.xml | grep_all "$base/"
 # Cookie Consent: public-only JavaScript, strict admin CSP, runtime config, consent expiry.
 get / | grep_all 'data-consent-action="accept"'
-get / | grep_all 'src="/assets/consent.js?v=103"'
+get / | grep_all 'src="/assets/consent.js?v=110"'
 get /assets/consent.js | grep_all 'cajeer:consentchange'
 curl -fsSI "$base/" | grep_all -i "Content-Security-Policy:.*script-src 'self'"
 curl -fsSI "$base/admin" | grep_all -i "Content-Security-Policy:.*script-src 'none'"

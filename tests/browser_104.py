@@ -33,15 +33,19 @@ with tempfile.TemporaryDirectory(prefix='lite-104-ui-') as folder:
         });
         $s=$app->load(); echo $app->render($s,$s['pages']['/']);'''
     html = subprocess.check_output(['php', '-r', configure], cwd=root, text=True)
-    tag = re.search(r'<script defer src="/assets/ga4.js\?v=109" ([^>]*)></script>', html)
+    tag = re.search(r'<script defer src="/assets/ga4.js\?v=110" ([^>]*)></script>', html)
     assert tag, 'GA4 runtime missing from PHP rendered template'
     ga4attrs = dict(re.findall(r'data-ga4-([a-z]+)="([^"]*)"', tag.group(1)))
     assert ga4attrs['id'] == 'G-1234567890' and ga4attrs['pageviews'] == '1', ga4attrs
     html = re.sub(r'<script defer src="/assets/(?:consent|ga4).js\?v=\d+"></script>', '', html)
-    html = re.sub(r'<script defer src="/assets/ga4.js\?v=109" [^>]*></script>', '', html)
+    html = re.sub(r'<script defer src="/assets/ga4.js\?v=110" [^>]*></script>', '', html)
     html = html.replace('<link rel="stylesheet" href="/assets/style.css">', '')
     consentjs = (root/'public/assets/consent.js').read_text()
     ga4js = (root/'public/assets/ga4.js').read_text()
+    # Hard withdrawal now navigates; intercept navigation only for the unit fixture.
+    assert ga4js.count('location.reload();') == 1
+    ga4js = ga4js.replace('location.reload();',
+        'window.__reload104=(window.__reload104||0)+1;')
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome or playwright.chromium.executable_path, headless=True,
@@ -115,15 +119,16 @@ with tempfile.TemporaryDirectory(prefix='lite-104-ui-') as folder:
         assert page.evaluate('CajeerGA4.track("feature_used")') is False
         assert page.evaluate('document.cookie.includes("_ga=")') is False, 'GA cookie not cleared'
         assert page.evaluate('window.dataLayer.slice(-1)[0][0]') == 'consent', 'revocation not updated'
+        assert page.evaluate('window.__reload104') == 1, 'hard withdrawal requires navigation'
+        assert page.evaluate('CajeerGA4.status().reloading') is True
+        # Revocation is irreversible inside the old document, even if another
+        # decision is made before the simulated navigation completes.
         page.locator('[data-consent-open]').click()
         page.locator('[data-consent-category="analytics"]').check()
-        page.locator('[data-consent-category="marketing"]').check()
         page.locator('[data-consent-action="save"]').click()
-        assert page.evaluate('CajeerGA4.status().consent') is True
-        assert len(remote) == 1, 'Google tag downloaded twice on regrant'
-        assert page.evaluate('window.dataLayer.slice(-1)[0][2].analytics_storage') == 'granted', 'regrant not updated'
-        assert page.evaluate('window.dataLayer.slice(-1)[0][2].ad_storage') == 'granted', 'marketing consent not applied'
-        assert sum(e[:2]==['event','page_view'] for e in page.evaluate('window.dataLayer.map(x=>Array.from(x))')) == 1, 'pageview repeated'
+        assert page.evaluate('CajeerGA4.status().consent') is False
+        assert page.evaluate('CajeerGA4.track("feature_used")') is False
+        assert len(remote) == 1, 'Google tag downloaded twice before navigation'
         assert not errors, f'Browser JavaScript errors: {errors}'
         browser.close()
 print('GA4 Chromium runtime/consent integration OK (emulated cookies and Google response)')

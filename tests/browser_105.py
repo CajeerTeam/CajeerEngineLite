@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='lite-105-ui-') as folder:
        });
        $s=$app->load(); echo $app->render($s,$s['pages']['/']);'''
     html=subprocess.check_output(['php','-r',config],cwd=root,text=True)
-    match=re.search(r'<script defer src="/assets/metrica.js\?v=109" ([^>]*)></script>',html)
+    match=re.search(r'<script defer src="/assets/metrica.js\?v=110" ([^>]*)></script>',html)
     assert match,'Yandex runtime missing from PHP render'
     attrs=dict(re.findall(r'data-metrica-([a-z-]+)="([^"]*)"',match.group(1)))
     assert attrs['id']=='12345678', attrs

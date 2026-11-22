@@ -23,7 +23,7 @@ try {
     $app = new Lite($root);
     $app->install('StrongPassword123','https://example.org','GTM test');
     $s = $app->load();
-    check106(Lite::VERSION === '1.0.9' && SiteState::SCHEMA === 8 && $s['schema'] === 8,'version/schema');
+    check106(Lite::VERSION === '1.1.0' && SiteState::SCHEMA === 8 && $s['schema'] === 8,'version/schema');
     check106($s['integrations']['gtm'] === GTMConfig::DEFAULTS,'default GTM config');
     check106(!str_contains((new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']),'/assets/gtm.js'),'disabled GTM loaded');
     foreach ([
@@ -47,7 +47,7 @@ try {
     });
     $s=$app->load();
     $page=(new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']);
-    check106(str_contains($page,'src="/assets/gtm.js?v=106"') &&
+    check106(str_contains($page,'src="/assets/gtm.js?v=110"') &&
         str_contains($page,'data-gtm-id="GTM-ABCD123"'),'GTM loader not rendered');
     check106(!str_contains($page,'/assets/ga4.js'),'direct GA4 loaded alongside GTM');
     check106(str_contains($page,'/assets/metrica.js'),'Metrica unexpectedly disabled');

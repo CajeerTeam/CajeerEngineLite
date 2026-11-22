@@ -19,6 +19,8 @@
   let tagLoaded = false;
   let granted = false;
   let previousMarketing = false;
+  let reloading = false;
+  let remote = null;
 
   function consentState() {
     const consent = window.CajeerConsent.get();
@@ -60,6 +62,7 @@
   }
 
   function start(choice) {
+    if (reloading) return;
     const wasGranted = granted;
     granted = true;
     window[disableKey] = false;
@@ -85,7 +88,7 @@
     previousMarketing = choice.marketing;
     initialized = true;
 
-    const remote = document.createElement('script');
+    remote = document.createElement('script');
     remote.async = true;
     remote.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
     remote.onload = () => { tagLoaded = true; };
@@ -104,15 +107,20 @@
   }
 
   function stop() {
-    // The Google tag cannot be unloaded; use Google's property disable flag and
-    // consent update, and reject all subsequent Lite events after revocation.
+    if (reloading) return;
+    reloading = true;
+    // A running Google tag may retain observers and queues. Setting its disable
+    // flag alone is not a reliable withdrawal boundary; navigate after denial.
     window[disableKey] = true;
     granted = false;
     if (initialized) gtag('consent', 'update', denied);
+    if (remote && !tagLoaded) remote.remove();
     clearOwnCookies();
+    location.reload();
   }
 
   function reconcile() {
+    if (reloading) return;
     const choice = consentState();
     if (choice) start(choice);
     else if (granted) stop();
@@ -132,7 +140,7 @@
   }
 
   function track(name, params = {}) {
-    if (!granted || !consentState() || !initialized ||
+    if (!granted || reloading || !consentState() || !initialized ||
         typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(name) ||
         /^(ga_|google_|firebase_)/.test(name) ||
         ['page_view', 'session_start', 'first_visit', 'user_engagement'].includes(name) ||
@@ -163,7 +171,7 @@
   Object.defineProperty(window, 'CajeerGA4', {
     value: Object.freeze({
       track,
-      status: () => Object.freeze({ enabled: true, consent: granted, initialized, tagLoaded, pageViewSent })
+      status: () => Object.freeze({ enabled: true, consent: granted, initialized, tagLoaded, pageViewSent, reloading })
     }),
     configurable: false,
     writable: false

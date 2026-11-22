@@ -102,7 +102,14 @@
     if (value !== lastChoice) {
       lastChoice = value;
       announce(mask);
-      if (mask === null) root.hidden = false;
+      // Other tabs can save or revoke a decision. Hide a stale banner after
+      // another tab grants/refuses, and re-sync checkboxes in an open editor.
+      if (!editor.hidden) {
+        const selected = mask ?? 0;
+        for (const [key, bit] of Object.entries(bits)) checks[key].checked = !!(selected & bit);
+      } else {
+        root.hidden = mask !== null;
+      }
     }
   }
 

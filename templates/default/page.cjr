@@ -63,21 +63,21 @@
   <p data-consent-error class="cookie-error" role="alert" hidden></p>
   <noscript><p>Для сохранения выбора cookie необходимо включить JavaScript. Необязательная аналитика без согласия не запускается.</p></noscript>
 </section>
-<script defer src="/assets/consent.js?v=103"></script>
+<script defer src="/assets/consent.js?v=110"></script>
 @endif
 @if ($ga4_active)
-<script defer src="/assets/ga4.js?v=109" data-ga4-id="{{ $ga4['measurement_id'] }}" data-ga4-pageviews="{{ $ga4['page_views'] }}" data-ga4-contacts="{{ $ga4['contact_clicks'] }}" data-ga4-debug="{{ $ga4['debug_mode'] }}"></script>
+<script defer src="/assets/ga4.js?v=110" data-ga4-id="{{ $ga4['measurement_id'] }}" data-ga4-pageviews="{{ $ga4['page_views'] }}" data-ga4-contacts="{{ $ga4['contact_clicks'] }}" data-ga4-debug="{{ $ga4['debug_mode'] }}"></script>
 @endif
 @if ($metrica_active)
-<script defer src="/assets/metrica.js?v=109" data-metrica-id="{{ $metrica['counter_id'] }}" data-metrica-pageviews="{{ $metrica['page_views'] }}" data-metrica-bounce="{{ $metrica['accurate_bounce'] }}" data-metrica-webvisor="{{ $metrica['webvisor'] }}" data-metrica-clickmap="{{ $metrica['clickmap'] }}" data-metrica-contacts="{{ $metrica['contact_goals'] }}" data-metrica-email-goal="{{ $metrica['email_goal'] }}" data-metrica-phone-goal="{{ $metrica['phone_goal'] }}"></script>
+<script defer src="/assets/metrica.js?v=110" data-metrica-id="{{ $metrica['counter_id'] }}" data-metrica-pageviews="{{ $metrica['page_views'] }}" data-metrica-bounce="{{ $metrica['accurate_bounce'] }}" data-metrica-webvisor="{{ $metrica['webvisor'] }}" data-metrica-clickmap="{{ $metrica['clickmap'] }}" data-metrica-contacts="{{ $metrica['contact_goals'] }}" data-metrica-email-goal="{{ $metrica['email_goal'] }}" data-metrica-phone-goal="{{ $metrica['phone_goal'] }}"></script>
 @endif
 @if ($gtm_active)
-<script defer src="/assets/gtm.js?v=106" data-gtm-id="{{ $gtm['container_id'] }}" data-gtm-contacts="{{ $gtm['contact_events'] }}"></script>
+<script defer src="/assets/gtm.js?v=110" data-gtm-id="{{ $gtm['container_id'] }}" data-gtm-contacts="{{ $gtm['contact_events'] }}"></script>
 @endif
 @if ($clarity_active)
-<script defer src="/assets/clarity.js?v=107" data-clarity-id="{{ $clarity['project_id'] }}" data-clarity-contacts="{{ $clarity['contact_events'] }}"></script>
+<script defer src="/assets/clarity.js?v=110" data-clarity-id="{{ $clarity['project_id'] }}" data-clarity-contacts="{{ $clarity['contact_events'] }}"></script>
 @endif
 @if ($matomo_active)
-<script defer src="/assets/matomo.js?v=108" data-matomo-mode="{{ $matomo['mode'] }}" data-matomo-url="{{ $matomo['server_url'] }}" data-matomo-site="{{ $matomo['site_id'] }}" data-matomo-pageviews="{{ $matomo['page_views'] }}" data-matomo-contacts="{{ $matomo['contact_events'] }}"></script>
+<script defer src="/assets/matomo.js?v=110" data-matomo-mode="{{ $matomo['mode'] }}" data-matomo-url="{{ $matomo['server_url'] }}" data-matomo-site="{{ $matomo['site_id'] }}" data-matomo-pageviews="{{ $matomo['page_views'] }}" data-matomo-contacts="{{ $matomo['contact_events'] }}"></script>
 @endif
 </body></html>

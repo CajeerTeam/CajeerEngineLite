@@ -23,7 +23,7 @@ try {
     $app = new Lite($root);
     $app->install('VeryStrongPassword123', 'https://example.org', 'Matomo 1.0.8');
     $state = $app->load();
-    check108(Lite::VERSION === '1.0.9' && SiteState::SCHEMA === 8 && $state['schema'] === 8, 'version/schema');
+    check108(Lite::VERSION === '1.1.0' && SiteState::SCHEMA === 8 && $state['schema'] === 8, 'version/schema');
     check108($state['integrations']['matomo'] === MatomoConfig::DEFAULTS, 'missing defaults');
     check108(!str_contains((new Lite(dirname(__DIR__)))->render($state, $state['pages']['/']), '/assets/matomo.js'), 'disabled Matomo published');
     foreach ([
@@ -61,7 +61,7 @@ try {
     });
     $s=$app->load();
     $page=(new Lite(dirname(__DIR__)))->render($s,$s['pages']['/']);
-    check108(str_contains($page, '/assets/matomo.js?v=108') && str_contains($page, 'data-matomo-site="12"') &&
+    check108(str_contains($page, '/assets/matomo.js?v=110') && str_contains($page, 'data-matomo-site="12"') &&
         str_contains($page, 'data-matomo-mode="cloud"'), 'tag not rendered');
     check108(str_contains($page,'/assets/clarity.js') && str_contains($page,'/assets/gtm.js') &&
         str_contains($page,'/assets/metrica.js') && !str_contains($page,'/assets/ga4.js'), 'existing integrations changed');
