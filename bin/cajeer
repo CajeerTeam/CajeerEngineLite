@@ -7,11 +7,28 @@ use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics,Acceptance,Pro
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
+use CajeerEngine\Developer\DeveloperDiagnostics;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
     switch ($cmd) {
+        case 'developer':
+            if (($argv[2]??'')!=='check' || count($argv)>4 ||
+                (isset($argv[3]) && $argv[3]!=='--json')) {
+                throw new InvalidArgumentException('Usage: developer check [--json]');
+            }
+            $report=DeveloperDiagnostics::run($app->root,$app->load());
+            if (($argv[3]??'')==='--json') {
+                echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+            } else {
+                foreach ($report['checks'] as $item) {
+                    echo strtoupper($item['status']).' '.$item['id'].': '.$item['detail']."\n";
+                }
+                echo 'Developer diagnostics: '.($report['ok']?'PASS':'FAIL')."\n";
+            }
+            if (!$report['ok']) exit(1);
+            break;
         case 'support':
             if (($argv[2]??'')!=='check' || count($argv)>4 ||
                 (isset($argv[3]) && $argv[3]!=='--json')) {

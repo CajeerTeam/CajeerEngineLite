@@ -10,7 +10,7 @@ final class CajeerTemplateEngine
     private int $depth = 0;
     private TemplateExpressionEvaluator $expressions;
 
-    public function __construct(private readonly TemplateSandbox $sandbox, private readonly string $templatesRoot, private readonly ?string $cachePath = null)
+    public function __construct(private readonly TemplateSandbox $sandbox, private readonly string $templatesRoot, private readonly ?string $cachePath = null, private readonly array $sourceOverrides = [])
     {
         $this->compiler = new TemplateCompiler();
         $this->expressions = new TemplateExpressionEvaluator();
@@ -22,8 +22,10 @@ final class CajeerTemplateEngine
         if(++$this->depth>32){--$this->depth;throw new \RuntimeException("Template nesting limit exceeded");}
         try {
         $this->sandbox->assertTemplatePath($templatePath);
-        $source = file_get_contents($templatePath);
-        if ($source === false) {
+        $canonicalPath = realpath($templatePath);
+        $source = is_string($canonicalPath) && array_key_exists($canonicalPath,$this->sourceOverrides)
+            ? $this->sourceOverrides[$canonicalPath] : file_get_contents($templatePath);
+        if (!is_string($source)) {
             throw new \RuntimeException("Шаблон не найден: {$templatePath}");
         }
 
@@ -127,7 +129,7 @@ final class CajeerTemplateEngine
     /** @return array{template:string, extends:?string} */
     private function compiledDocument(string $templatePath, string $source): array
     {
-        if ($this->cachePath === null) {
+        if ($this->cachePath === null || (is_string(realpath($templatePath)) && array_key_exists(realpath($templatePath),$this->sourceOverrides))) {
             return $this->compiler->compileDocument($source);
         }
 

@@ -13,6 +13,7 @@ use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\SEO\{SEOControl,SEOControlView};
+use CajeerEngine\Developer\{DeveloperDiagnostics,DeveloperView,TemplateManager,DeveloperEvents};
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
@@ -39,7 +40,7 @@ function go(string $path): never {
 function shell(string $title,string $html,bool $aiChat=false): never {
     header('Content-Type: text/html; charset=utf-8');
     $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
-    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || str_starts_with($route,'/admin/ai')) &&
+    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || $route==='/admin/developer' || str_starts_with($route,'/admin/ai')) &&
         $title!=='Вход в админ-панель';
     if ($admin) {
         $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
@@ -91,7 +92,7 @@ try {
         if ($method==='GET') echo $bytes;
         exit;
     }
-    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -156,6 +157,66 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/developer' || $path==='/admin/developer/preview') {
+            if (!$auth) stop(403,'Administrator login required');
+            $manager=new TemplateManager($app->root);
+            $selected=$_GET['template']??$_POST['template']??'';
+            if (!is_string($selected)) stop(400,'Invalid template name');
+            if ($selected!=='') { try { $manager->path($selected); } catch (InvalidArgumentException|RuntimeException) { stop(422,'Invalid template name'); } }
+            $tab=$_GET['tab']??($method==='POST'?'templates':'diagnostics');
+            if (!is_string($tab) || !in_array($tab,['diagnostics','templates','events'],true)) stop(400,'Invalid developer tab');
+            if ($method==='POST' && (int)($_SERVER['CONTENT_LENGTH']??0)>180000) stop(413,'Template request exceeds 180 kB');
+            $error=''; $notice=''; $draft=null;
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                if (!is_string($_POST['action']??null) || !in_array($_POST['action'],['preview','save','restore'],true)) stop(400,'Invalid developer operation');
+                if ($path==='/admin/developer/preview' && $_POST['action']!=='preview') stop(400,'Invalid preview operation');
+                if ($path==='/admin/developer' && $_POST['action']==='preview') stop(400,'Preview requires the isolated endpoint');
+                try {
+                    if ($_POST['action']==='preview') {
+                        if (!is_string($_POST['source']??null) || !is_string($_POST['page']??null)) throw new InvalidArgumentException('Invalid preview input');
+                        // An in-memory override preserves the saved file and all other published pages.
+                        $rendered=$manager->preview($app,$d,$selected,$_POST['source'],$_POST['page']);
+                        header('Content-Type: text/html; charset=utf-8');
+                        header("Content-Security-Policy: sandbox allow-same-origin; default-src 'none'; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'");
+                        header('X-Robots-Tag: noindex, nofollow');
+                        header('Cache-Control: no-store');
+                        echo $rendered;
+                        exit;
+                    }
+                    if (!is_string($_POST['revision']??null)) throw new InvalidArgumentException('Invalid template revision');
+                    if ($_POST['action']==='save') {
+                        if (!is_string($_POST['source']??null)) throw new InvalidArgumentException('Invalid template source');
+                        $manager->save($selected,$_POST['source'],$_POST['revision']);
+                        try { DeveloperEvents::record($app->root,'template.saved'); } catch (Throwable) { error_log('Developer event write failed'); }
+                    } else {
+                        if (!is_string($_POST['backup']??null)) throw new InvalidArgumentException('Invalid backup name');
+                        $manager->restore($selected,$_POST['backup'],$_POST['revision']);
+                        try { DeveloperEvents::record($app->root,'template.restored'); } catch (Throwable) { error_log('Developer event write failed'); }
+                    }
+                    go('/admin/developer?tab=templates&template='.rawurlencode($selected).'&saved=1');
+                } catch (InvalidArgumentException|RuntimeException|ParseError $failure) {
+                    http_response_code(422);
+                    if ($path==='/admin/developer/preview') {
+                        try { DeveloperEvents::record($app->root,'template.preview_failed','warn'); } catch (Throwable) {}
+                        // No raw trace or PHP source in the preview error response.
+                        stop(422,'Template preview failed: invalid source, dependency or template syntax');
+                    }
+                    $error='Шаблон не сохранён: '.$failure->getMessage();
+                    if (isset($_POST['source']) && is_string($_POST['source'])) $draft=$_POST['source'];
+                    try { DeveloperEvents::record($app->root,'template.write_failed','warn'); } catch (Throwable) {}
+                }
+            }
+            if ($path==='/admin/developer/preview') stop(405,'Method not allowed');
+            if ($method==='GET' && $tab==='diagnostics' && ($_GET['format']??null)==='json') {
+                header('Content-Type: application/json; charset=utf-8');
+                header('Content-Disposition: attachment; filename="cajeer-developer-diagnostics.json"');
+                echo json_encode(DeveloperDiagnostics::run($app->root,$d),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+                exit;
+            }
+            if ($method==='GET' && ($_GET['saved']??null)==='1') $notice='Шаблон сохранён или восстановлен.';
+            shell('Developer Tools',DeveloperView::render($app->root,$d,$_SESSION['csrf'],$tab,$selected,$error,$notice,$draft));
+        }
         if ($path==='/admin/seo') {
             if (!$auth) stop(403,'Administrator login required');
             $chosen=$_GET['path']??$_POST['path']??'/';
@@ -1399,4 +1460,4 @@ try {
     if ($csp['webvisor_frames']) header_remove('X-Frame-Options');
     header('Content-Security-Policy: '.$csp['policy']);
     echo $app->render($d,$d['pages'][$path]);
-} catch(Throwable $ex) { error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }
+} catch(Throwable $ex) { try { DeveloperEvents::record($app->root,'runtime.unhandled','error'); } catch(Throwable) {} error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }

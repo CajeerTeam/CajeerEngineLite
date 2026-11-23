@@ -26,7 +26,7 @@ try {
     $app=new Lite($root);
     $app->install('RealSeo136Password!','https://example.org','Example Company');
     $state=$app->load();
-    ok136(Lite::VERSION==='1.3.6' && SiteState::SCHEMA===14,'compatible release version/schema');
+    ok136(version_compare(Lite::VERSION,'1.3.6','>=') && SiteState::SCHEMA===14,'compatible release version/schema');
     ok136(SEOControl::site($state)===SEOControl::GLOBAL_DEFAULTS,'site defaults persisted');
     ok136(str_contains(SEOControl::sitemapXml($state),'<loc>https://example.org/</loc>'),'home in sitemap');
     ok136(str_contains(SEOControl::robotsText($state),'Sitemap: https://example.org/sitemap.xml'),'sitemap discovery');

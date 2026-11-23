@@ -13,7 +13,7 @@ use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.3.6';
+    public const VERSION = '1.3.7';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
@@ -65,8 +65,8 @@ final class Lite
             $d['login']=$ok?['count'=>0,'until'=>0]:['count'=>$l['count']+1,'until'=>$l['until']]; return $d;
         }); return $ok;
     }
-    public function render(array $d,array $p): string {
-        $engine=new CajeerTemplateEngine(new TemplateSandbox($this->root.'/templates'),$this->root.'/templates');
+    public function render(array $d,array $p,array $templateOverrides=[]): string {
+        $engine=new CajeerTemplateEngine(new TemplateSandbox($this->root.'/templates'),$this->root.'/templates',null,$templateOverrides);
         $nav=ModuleConfig::enabled($d, 'navigation') ? array_values(array_filter($d['pages'],fn($p)=>$p['published']&&$p['menu'])) : [];
         $choice = ConsentCookie::read($_COOKIE[ConsentCookie::NAME] ?? null, $d['consent']);
         $seo=SEOControl::presentation($d,$p);
