@@ -6,6 +6,7 @@ use CajeerEngine\Admin\AdminExperience;
 use CajeerEngine\Admin\PagesManagement;
 use CajeerEngine\Admin\{BlockEditor,BlockEditorView};
 use CajeerEngine\Media\{MediaLibrary,MediaView};
+use CajeerEngine\Content\MediaReferences;
 use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView,ProductionAIAcceptance};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
@@ -189,7 +190,7 @@ try {
             }
             $query=$_GET['q']??'';$type=$_GET['type']??'all';
             if (!is_string($query) || !is_string($type)) stop(400,'Invalid media query');
-            try { $content=MediaView::render($mediaLibrary,$_SESSION['csrf'],$query,$type); }
+            try { $content=MediaView::render($mediaLibrary,$_SESSION['csrf'],$query,$type,'',$app->load()['pages']); }
             catch (InvalidArgumentException) { stop(400,'Invalid media query'); }
             $notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
             $feedback=$mediaError!==''?'<p class="error" role="alert">'.e($mediaError).'</p>':
@@ -203,6 +204,11 @@ try {
                 try {
                     if ($path==='/admin/editor/preview') {
                         $candidate=BlockEditor::candidate($_POST);
+                        $mediaLibrary=new MediaLibrary($app->root);
+                        // Reject missing/wrong-MIME files even for unsaved previews.
+                        $mediaLibrary->guard(static function()use($mediaLibrary,$candidate):void {
+                            MediaReferences::verify($mediaLibrary,$candidate['blocks']);
+                        });
                         header("Content-Security-Policy: sandbox; default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'self'");
                         header('X-Content-Type-Options: nosniff');
                         header('X-Frame-Options: SAMEORIGIN');
@@ -225,7 +231,7 @@ try {
                 'path'=>'','title'=>'','description'=>'','body'=>'','published'=>false,'menu'=>false];
             $notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
             shell('Визуальный редактор', (is_string($notice)?'<p class="admin-feedback">'.e($notice).'</p>':'').
-                BlockEditorView::render($page,$_SESSION['csrf'],$selected!==null));
+                BlockEditorView::render($page,$_SESSION['csrf'],$selected!==null,'',(new MediaLibrary($app->root))->listing()));
         }
         if ($path === '/admin/ai/support') {
             if (!$auth) stop(403,'Administrator login required');
@@ -934,7 +940,17 @@ try {
                 elseif ($action==='page_duplicate') {
                     $old=Lite::field($_POST,'old',1024,true);
                     $revision=Lite::field($_POST,'revision',64,true);
-                    $app->change(static fn(array $state): array => PagesManagement::duplicate($state,$old,$revision));
+                    $mediaLibrary=new MediaLibrary($app->root);
+                    $mediaLibrary->guard(static function()use($app,$old,$revision,$mediaLibrary):void {
+                        $app->change(static function(array $state)use($old,$revision,$mediaLibrary):array {
+                            $copy=PagesManagement::duplicate($state,$old,$revision);
+                            $added=array_diff_key($copy['pages'],$state['pages']);
+                            foreach($added as $page) if(isset($page['blocks'])) {
+                                MediaReferences::verify($mediaLibrary,$page['blocks']);
+                            }
+                            return $copy;
+                        });
+                    });
                     go('/admin');
                 }
                 elseif ($action==='save') {

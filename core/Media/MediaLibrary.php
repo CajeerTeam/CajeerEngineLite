@@ -47,6 +47,27 @@ final class MediaLibrary
         } finally { flock($lock, LOCK_UN); fclose($lock); }
     }
 
+    /** Serialize content writes and deletion so a saved page never refers to a deleted file. */
+    public function guard(callable $fn): mixed
+    {
+        return $this->locked($fn);
+    }
+
+    /** Index lookup also checks the actual private file, without reading all its bytes. */
+    public function metadata(string $id): ?array
+    {
+        $id=self::id($id);
+        $item=$this->index()[$id]??null;
+        if ($item===null) return null;
+        $path=$this->location('files/'.$id.'.'.$item['extension']);
+        $stat=@lstat($path);
+        if (!is_array($stat) || ($stat['mode'] & 0170000)!==0100000 || $stat['nlink']!==1 ||
+            ($stat['mode'] & 0077)!==0 || $stat['size']!==$item['size']) {
+            throw new \RuntimeException('Unsafe or missing media file');
+        }
+        return $item;
+    }
+
     private static function name(string $name): string
     {
         $name = trim($name);
@@ -211,6 +232,13 @@ final class MediaLibrary
         $this->locked(function()use($id): void {
             $entries=$this->index();
             if (!isset($entries[$id])) throw new \InvalidArgumentException('Media file not found');
+            // Lock order is media -> site, matching the visual editor transaction.
+            // Check actual site data under the media lock, not a stale UI snapshot.
+            if (is_file($this->root.'/storage/site.json')) {
+                $site=(new \CajeerEngine\Lite($this->root))->load();
+                $used=\CajeerEngine\Content\MediaReferences::pages($site['pages'],$id);
+                if ($used!==[]) throw new \InvalidArgumentException('Media is used by pages: '.implode(', ',array_slice($used,0,5)));
+            }
             $path=$this->location('files/'.$id.'.'.$entries[$id]['extension']);
             if (is_link($path) || !is_file($path)) throw new \RuntimeException('Unsafe or missing media file');
             unset($entries[$id]);

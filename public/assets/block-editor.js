@@ -14,6 +14,10 @@
   const previewButton=form.querySelector('#cms-preview-button');
   const saveButton=form.querySelector('#cms-save-button');
   const initial=JSON.parse(source.value);
+  const media=JSON.parse(form.querySelector('#cms-editor-media-json')?.value || '[]');
+  const images=media.filter(item=>item.mime.startsWith('image/'));
+  const documents=media.filter(item=>item.mime==='application/pdf');
+  const validId=id=>/^[a-f0-9]{32}$/.test(id);
   let blocks=initial;
   let history=[JSON.stringify(blocks)], cursor=0;
   const key='cajeer:editor:133:'+form.elements.old.value+':'+form.elements.revision.value;
@@ -69,10 +73,13 @@
     if (type==='list') return {type,ordered:false,items:text?text.split('\n'):['']};
     if (type==='link'||type==='button') return {type,text,url:'/'};
     if (type==='divider') return {type};
+    if (type==='image') return {type,media_id:'',alt:'',caption:'',size:'full'};
+    if (type==='file') return {type,media_id:'',label:''};
     return {type,text};
   };
   const types=[['paragraph','Абзац'],['heading','Заголовок'],['list','Список'],
-    ['quote','Цитата'],['link','Ссылка'],['button','Кнопка'],['divider','Разделитель']];
+    ['quote','Цитата'],['link','Ссылка'],['button','Кнопка'],['divider','Разделитель'],
+    ['image','Изображение'],['file','PDF-документ']];
   function drawEditor() {
     host.replaceChildren();
     blocks.forEach((block,i)=>{
@@ -98,7 +105,37 @@
       if (block.type==='heading') card.append(select('Уровень',[2,3,4,5,6].map(x=>[x,'H'+x]),block.level,(level)=>{
         block.level=Number(level);remember();drawPreview();
       }));
-      if(block.type==='list'){
+      if(block.type==='image'||block.type==='file') {
+        const list=block.type==='image'?images:documents;
+        const choices=[['','— Выберите файл из медиатеки —'],
+          ...list.map(item=>[item.id,item.name+(item.width?' ('+item.width+'×'+item.height+')':'')])];
+        // An older reference can be absent after site restore; show it explicitly.
+        if(block.media_id&&!list.some(item=>item.id===block.media_id)) {
+          choices.push([block.media_id,'Файл недоступен: '+block.media_id]);
+        }
+        card.append(select('Медиафайл',choices,block.media_id,(id)=>{
+          block.media_id=id;
+          const selected=list.find(item=>item.id===id);
+          if(selected && block.type==='image' && !block.alt) block.alt=selected.name.replace(/\.[^.]+$/,'');
+          if(selected && block.type==='file' && !block.label) block.label=selected.name;
+          remember();drawEditor();drawPreview();
+        }));
+        const chosen=list.find(item=>item.id===block.media_id);
+        if(chosen && validId(chosen.id) && block.type==='image') {
+          const thumb=make('img','cms-edit-media-thumb');
+          thumb.src='/media/'+chosen.id;thumb.alt='Миниатюра: '+chosen.name;
+          thumb.loading='lazy';card.append(thumb);
+        }
+        if(list.length===0) card.append(make('p','cms-editor-media-empty',
+          'Нет файлов этого типа. Загрузите их в медиатеку и обновите редактор.'));
+        if(block.type==='image') {
+          card.append(textInput('Альтернативный текст (alt)',block.alt,value=>{block.alt=value;},1),
+            textInput('Подпись',block.caption,value=>{block.caption=value;},2),
+            select('Размер',[['small','Малый'],['medium','Средний'],['full','По ширине страницы']],block.size,value=>{
+              block.size=value;remember();drawEditor();drawPreview();
+            }));
+        } else card.append(textInput('Текст ссылки на PDF',block.label,value=>{block.label=value;},1));
+      } else if(block.type==='list'){
         const label=make('label','cms-block-checkbox');
         const checkbox=make('input');checkbox.type='checkbox';checkbox.checked=block.ordered;
         checkbox.addEventListener('change',()=>{block.ordered=checkbox.checked;remember();drawPreview();});
@@ -122,7 +159,20 @@
       if(block.type==='divider') node=make('hr');
       else if(block.type==='heading') node=make('h'+block.level,'cms-text',block.text);
       else if(block.type==='quote') node=make('blockquote','cms-text',block.text);
-      else if(block.type==='list'){
+      else if(block.type==='image') {
+        node=make('figure','cms-media-figure cms-media-size-'+block.size);
+        if(validId(block.media_id)) {
+          const img=make('img');img.src='/media/'+block.media_id;
+          img.alt=block.alt;img.loading='lazy';img.decoding='async';node.append(img);
+        } else node.append(make('p','cms-editor-media-empty','Выберите изображение'));
+        if(block.caption) node.append(make('figcaption','cms-text',block.caption));
+      } else if(block.type==='file') {
+        node=make('p','cms-media-document');
+        if(validId(block.media_id)) {
+          const anchor=make('a','',block.label||'PDF');
+          anchor.href='/media/'+block.media_id+'?download=1';anchor.download='';node.append(anchor);
+        } else node.append(make('span','cms-editor-media-empty','Выберите PDF'));
+      } else if(block.type==='list'){
         node=make(block.ordered?'ol':'ul');
         for(const item of block.items) node.append(make('li','cms-text',item));
       }else if(block.type==='link'||block.type==='button'){

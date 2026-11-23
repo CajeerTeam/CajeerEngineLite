@@ -57,11 +57,13 @@ jobs:
       - run: php tests/core_132.php
       - run: php tests/core_133.php
       - run: php tests/core_134.php
+      - run: php tests/core_135.php
       - run: php tests/media_concurrency_134.php
       - run: bash tests/admin_experience_http.sh
       - run: bash tests/pages_management_http.sh
       - run: bash tests/block_editor_http.sh
       - run: bash tests/media_library_http.sh
+      - run: bash tests/media_content_http.sh
       - run: php tests/ai_concurrency_121.php
       - run: php tests/ai_cost_concurrency_128.php
       - run: php tests/auth_concurrency_119.php
@@ -113,3 +115,4 @@ jobs:
       - run: python tests/browser_132.py
       - run: python tests/browser_133.py
       - run: python tests/browser_134.py
+      - run: python tests/browser_135.py

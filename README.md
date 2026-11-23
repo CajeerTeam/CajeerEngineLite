@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.3.4
+# CajeerEngine Lite Edition 1.3.5
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -1359,3 +1359,29 @@ Back up `storage/media/` alongside `storage/site.json`; exports containing site.
 do not include media assets. Existing site schema remains 14.
 
 Tests: `php tests/core_134.php`, `bash tests/media_library_http.sh`.
+
+
+### 1.3.5 — Media Content Integration
+
+The visual editor (`/admin/editor`) now supports real media blocks: **Image**
+(`media_id`, `alt`, `caption`, `size`: small/medium/full) and **PDF file**
+(`media_id`, `label`). The editor loads selectable assets from `/admin/media` and
+shows safe inline previews. Images render as lazy-loaded, responsive `<img>`
+elements and PDF files as download links. Media IDs resolve to the existing
+private, checksum-verified `/media/<id>` delivery route; arbitrary external
+file URLs, SVG, HTML and executable uploads remain unsupported. Text-only
+pages and the JSON schema (14) are unchanged. Alt text may be empty only for
+intentionally decorative images; editors should provide meaningful alt text
+for informative media. The public HTML escaper is also applied to captions
+and document link labels.
+
+An editor save and its media-reference validation happen within the same media
+file lock used for media deletion. The Media Library displays the pages using
+each file and forbids deleting an item referenced by any current page,
+including unpublished drafts. Historic page restoration rechecks referenced
+media and rejects snapshots with missing assets. PDF is a download, not an
+inline embedded PDF viewer. Back up `storage/media/` together with site JSON
+and `storage/ai/page-history/`.
+
+Tests: `php tests/core_135.php`, `bash tests/media_content_http.sh`,
+`python tests/browser_135.py`.

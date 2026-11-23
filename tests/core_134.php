@@ -10,7 +10,7 @@ function deleteTree134(string $folder): void {
     foreach($items as $item) {if($item->isDir()&&!$item->isLink())rmdir($item->getPathname());else unlink($item->getPathname());}
     rmdir($folder);
 }
-check134(Lite::VERSION==='1.3.4','version 1.3.4');
+check134(version_compare(Lite::VERSION,'1.3.4','>='),'version >= 1.3.4');
 $root=sys_get_temp_dir().'/cajeer-media-134-'.bin2hex(random_bytes(5));mkdir($root);mkdir($root.'/storage');
 $png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUT9rBwMDAxMDAwMDAAAAOPQE9xgjZwQAAAABJRU5ErkJggg==',true);
 try {

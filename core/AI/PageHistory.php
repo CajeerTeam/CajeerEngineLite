@@ -4,6 +4,8 @@ namespace CajeerEngine\AI;
 
 use CajeerEngine\Lite;
 use CajeerEngine\Content\Blocks;
+use CajeerEngine\Content\MediaReferences;
+use CajeerEngine\Media\MediaLibrary;
 use CajeerEngine\Update\{OperationFiles,OperationLock};
 
 /** Durable, private, owner-scoped pre-edit snapshots. Used INSIDE site transactions. */
@@ -141,7 +143,12 @@ final class PageHistory
     {
         if (!preg_match('/^[a-f0-9]{64}$/D',$expectedRevision)) throw new \InvalidArgumentException('Invalid current revision');
         $snapshot=$this->get($path,$snapshotId);
-        $app->change(function(array $site)use($path,$snapshot,$expectedRevision):array {
+        // Restores must not recreate dangling media references if a file was deleted
+        // after a historic page stopped using it. Keep lock ordering media -> site.
+        $media=new MediaLibrary($app->root);
+        $media->guard(function()use($media,$snapshot,$app,$path,$expectedRevision):void {
+            if (isset($snapshot['page']['blocks'])) MediaReferences::verify($media,$snapshot['page']['blocks']);
+            $app->change(function(array $site)use($path,$snapshot,$expectedRevision):array {
             if (!hash_equals($this->generation,$site['identity']['generation'])) throw new \InvalidArgumentException('Owner identity changed');
             $current=$site['pages'][$path]??null;
             if (!is_array($current) || !hash_equals($expectedRevision,PageEditor::revision($current))) {
@@ -151,6 +158,7 @@ final class PageHistory
             $this->save($current); // restoring is itself undoable
             $site['pages'][$path]=$snapshot['page'];
             return $site;
+            });
         });
     }
 }

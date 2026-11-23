@@ -8,13 +8,21 @@ use CajeerEngine\Lite;
 /** Real block editing form. All persistence and preview operations are server-validated. */
 final class BlockEditorView
 {
-    public static function render(array $page,string $csrf,bool $existing,string $error=''): string
+    public static function render(array $page,string $csrf,bool $existing,string $error='',array $mediaRows=[]): string
     {
         $e=static fn(string $s):string=>Lite::esc($s);
         $path=$existing ? $page['path'] : '';
         $revision=$existing ? PagesManagement::revision($page) : '';
         $blocks=$page['blocks']??Blocks::fromLegacy($page['body']);
         $json=json_encode($blocks,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        $media=[];
+        foreach ($mediaRows as $item) {
+            if (!is_array($item) || !preg_match('/^[a-f0-9]{32}$/D',$item['id']??'')) continue;
+            $media[]=['id'=>$item['id'],'name'=>(string)$item['name'],'mime'=>$item['mime'],
+                'width'=>$item['width']??null,'height'=>$item['height']??null];
+        }
+        $mediaJson=json_encode($media,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP);
+
         $html='<section class="cms-editor-shell" id="cms-block-editor">'.
             '<div class="cms-editor-header"><div><h2>Блочный редактор</h2>'.
             '<p>Безопасные текстовые блоки. HTML и JavaScript не выполняются. Предпросмотр откроется справа.</p></div>'.
@@ -37,10 +45,13 @@ final class BlockEditorView
             '<option value="paragraph">Абзац</option><option value="heading">Заголовок</option>'.
             '<option value="list">Список</option><option value="quote">Цитата</option>'.
             '<option value="link">Ссылка</option><option value="button">Кнопка</option>'.
-            '<option value="divider">Разделитель</option></select></label>'.
+            '<option value="divider">Разделитель</option>'.
+            '<option value="image">Изображение</option><option value="file">PDF-документ</option></select></label>'.
             '<button type="button" id="cms-add-block" disabled>Добавить</button>'.
             '<button type="button" id="cms-undo" disabled>Отменить</button>'.
             '<button type="button" id="cms-redo" disabled>Повторить</button></div>'.
+            '<p class="cms-editor-media-tip">Изображения и PDF берутся из <a href="/admin/media" target="_blank" rel="noopener">медиатеки</a>. '.
+            'После загрузки нового файла обновите редактор (сохраните локальный черновик).</p>'.
             '<div id="cms-blocks" aria-live="polite"></div>'.
             '<noscript><p role="alert">Для визуального редактора необходим JavaScript. ' .
             'Используйте <a href="/admin?view=pages&amp;edit='.$e(rawurlencode($path)).'">обычный текстовый редактор</a>.</p></noscript>'.
@@ -53,6 +64,7 @@ final class BlockEditorView
             '<iframe name="cms-server-preview" title="Безопасный предпросмотр страницы" ' .
             'class="cms-preview-frame" sandbox="" referrerpolicy="no-referrer"></iframe></div></div>'.
             '<textarea name="blocks_json" id="cms-block-json" hidden>'.$e($json).'</textarea>'.
+            '<textarea id="cms-editor-media-json" hidden>'.$e($mediaJson).'</textarea>'.
             '<div class="cms-editor-footer"><span id="cms-draft-status" role="status">Редактор загружается…</span>'.
             '<button type="submit" id="cms-save-button" disabled>Сохранить страницу</button></div>'.
             '</form></section>';

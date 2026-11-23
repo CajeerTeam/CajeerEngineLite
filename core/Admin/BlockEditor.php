@@ -5,6 +5,8 @@ namespace CajeerEngine\Admin;
 use CajeerEngine\AI\PageHistory;
 use CajeerEngine\Content\Blocks;
 use CajeerEngine\Lite;
+use CajeerEngine\Content\MediaReferences;
+use CajeerEngine\Media\MediaLibrary;
 
 /** Strict, atomic writes shared by visual editor and sandboxed server preview. */
 final class BlockEditor
@@ -38,7 +40,10 @@ final class BlockEditor
         }
         $generation=$app->load()['identity']['generation'];
         $history=$old!=='' ? new PageHistory($app->root,$generation) : null;
-        $app->change(static function(array $state) use ($old,$rev,$page,$generation,$history):array {
+        $media=new MediaLibrary($app->root);
+        $media->guard(function() use ($app,$old,$rev,$page,$generation,$history,$media):void {
+            MediaReferences::verify($media,$page['blocks']);
+            $app->change(static function(array $state) use ($old,$rev,$page,$generation,$history):array {
             if (!hash_equals($generation,$state['identity']['generation'])) throw new \InvalidArgumentException('Owner changed');
             if ($old!=='') {
                 if (!isset($state['pages'][$old]) || !hash_equals(PagesManagement::revision($state['pages'][$old]),$rev)) {
@@ -55,6 +60,7 @@ final class BlockEditor
             }
             $state['pages'][$page['path']]=$page;
             return $state;
+            });
         });
         return $page['path'];
     }

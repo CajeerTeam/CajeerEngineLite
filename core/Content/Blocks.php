@@ -9,7 +9,7 @@ final class Blocks
 {
     public const MAX_COUNT = 120;
     public const MAX_BYTES = 180000;
-    private const TYPES = ['paragraph','heading','quote','list','link','button','divider'];
+    private const TYPES = ['paragraph','heading','quote','list','link','button','divider','image','file'];
 
     public static function decode(mixed $json): array
     {
@@ -36,10 +36,31 @@ final class Blocks
                 'list'=>['items','ordered','type'],
                 'link','button'=>['text','type','url'],
                 'divider'=>['type'],
+                'image'=>['alt','caption','media_id','size','type'],
+                'file'=>['label','media_id','type'],
                 default=>['text','type'],
             };
             if ($keys!==$expected) throw new \InvalidArgumentException('Invalid block properties');
             if ($type==='divider') { $normalized[]=['type'=>$type];continue; }
+            if ($type==='image' || $type==='file') {
+                if (!is_string($block['media_id']) || !preg_match('/^[a-f0-9]{32}$/D',$block['media_id'])) {
+                    throw new \InvalidArgumentException('Invalid media identifier');
+                }
+                if ($type==='image') {
+                    self::text($block['alt'],300);
+                    self::text($block['caption'],600);
+                    if (!in_array($block['size'],['small','medium','full'],true)) {
+                        throw new \InvalidArgumentException('Invalid image size');
+                    }
+                    $normalized[]=['type'=>'image','media_id'=>$block['media_id'],
+                        'alt'=>$block['alt'],'caption'=>$block['caption'],'size'=>$block['size']];
+                } else {
+                    self::text($block['label'],300);
+                    if (trim($block['label'])==='') throw new \InvalidArgumentException('File label is required');
+                    $normalized[]=['type'=>'file','media_id'=>$block['media_id'],'label'=>$block['label']];
+                }
+                continue;
+            }
             if ($type==='list') {
                 if (!is_bool($block['ordered']) || !is_array($block['items']) || !array_is_list($block['items']) ||
                     count($block['items'])<1 || count($block['items'])>40) throw new \InvalidArgumentException('Invalid list');
@@ -87,6 +108,11 @@ final class Blocks
         foreach ($blocks as $block) {
             $type=$block['type'];
             if ($type==='divider') continue;
+            if ($type==='image') {
+                if ($block['caption']!=='') $lines[]=$block['caption'];
+                continue;
+            }
+            if ($type==='file') { $lines[]=$block['label'];continue; }
             if ($type==='list') { $lines[]=implode("\n",$block['items']);continue; }
             $lines[]=$block['text'];
         }
@@ -104,6 +130,19 @@ final class Blocks
         foreach (self::validate($blocks) as $block) {
             $type=$block['type'];
             if ($type==='divider') { $result.='<hr class="cms-divider">';continue; }
+            if ($type==='image') {
+                $url='/media/'.$block['media_id'];
+                $result.='<figure class="cms-media-figure cms-media-size-'.$block['size'].'">'.
+                    '<img src="'.$url.'" alt="'.Lite::esc($block['alt']).'" loading="lazy" decoding="async">'.
+                    ($block['caption']!==''?'<figcaption>'.nl2br(Lite::esc($block['caption']),false).'</figcaption>':'').
+                    '</figure>';
+                continue;
+            }
+            if ($type==='file') {
+                $result.='<p class="cms-media-document"><a href="/media/'.$block['media_id'].'?download=1" '.
+                    'download rel="noopener noreferrer">'.Lite::esc($block['label']).'</a></p>';
+                continue;
+            }
             if ($type==='list') {
                 $tag=$block['ordered']?'ol':'ul'; $result.='<'.$tag.' class="cms-list">';
                 foreach($block['items'] as $item) $result.='<li>'.nl2br(Lite::esc($item),false).'</li>';

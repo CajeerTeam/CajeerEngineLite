@@ -8,7 +8,7 @@ final class MediaView
 {
     private static function e(string $value): string { return Lite::esc($value); }
 
-    public static function render(MediaLibrary $library,string $csrf,string $query='',string $category='all',string $message=''): string
+    public static function render(MediaLibrary $library,string $csrf,string $query='',string $category='all',string $message='',array $pages=[]): string
     {
         $rows=$library->listing($query,$category);$stats=$library->statistics();
         $html='<section class="cms-media"><div class="cms-media-header"><div><h2>Медиатека</h2><p>Файлы в приватном хранилище. Изображения доступны по безопасным ссылкам, документы — только для скачивания.</p></div>'.
@@ -28,6 +28,7 @@ final class MediaView
         $html.='<div class="cms-media-grid">';
         foreach ($rows as $row) {
             $id=$row['id'];$isImage=str_starts_with($row['mime'],'image/');
+            $used=\CajeerEngine\Content\MediaReferences::pages($pages,$id);
             $link='/media/'.$id;
             $html.='<article class="cms-media-item"><div class="cms-media-thumb">'.
                 ($isImage?'<a href="'.$link.'" target="_blank" rel="noopener"><img loading="lazy" src="'.$link.'" alt="'.self::e($row['name']).'"></a>':'<span aria-hidden="true">PDF</span>').'</div>'.
@@ -36,13 +37,17 @@ final class MediaView
                 ($isImage?' · '.$row['width'].'×'.$row['height']:'').'</small>'.
                 '<a href="'.$link.($isImage?'':'?download=1').'" target="_blank" rel="noopener">'.($isImage?'Открыть файл':'Скачать PDF').'</a>'.
                 '<code class="cms-media-url">'.$link.'</code>'.
+                ($used!==[] ? '<p class="cms-media-used">Используется на '.count($used).' страницах: '.
+                    implode(', ',array_map(static fn(string $path):string =>
+                        '<a href="/admin/editor?path='.rawurlencode($path).'">'.self::e($path).'</a>',array_slice($used,0,5))).'</p>' : '').
                 '<form method="post" action="/admin/media" class="cms-media-rename">'.
                 '<input type="hidden" name="csrf" value="'.self::e($csrf).'"><input type="hidden" name="action" value="rename">'.
                 '<input type="hidden" name="id" value="'.$id.'"><label>Отображаемое имя <input type="text" name="name" required maxlength="150" value="'.self::e($row['name']).'"></label>'.
                 '<button type="submit">Переименовать</button></form>'.
                 '<form method="post" action="/admin/media" class="cms-media-delete">'.
                 '<input type="hidden" name="csrf" value="'.self::e($csrf).'"><input type="hidden" name="action" value="delete">'.
-                '<input type="hidden" name="id" value="'.$id.'"><button type="submit">Удалить</button></form></div></article>';
+                '<input type="hidden" name="id" value="'.$id.'"><button type="submit"'.
+                ($used!==[]?' disabled title="Файл используется на страницах"':'').'>Удалить</button></form></div></article>';
         }
         return $html.'</div></section>';
     }
