@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics,Acceptance};
+use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics,Acceptance,ProductionAIAcceptance};
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
@@ -27,6 +27,26 @@ try {
             if ($snapshot['counts']['fail']>0) exit(1);
             break;
         case 'ai':
+            if (($argv[2]??'')==='release-check') {
+                $options=array_slice($argv,3);
+                if (count($options)>3 || count($options)!==count(array_unique($options)) ||
+                    array_diff($options,['--json','--live','--paid'])) {
+                    throw new InvalidArgumentException('Usage: ai release-check [--json] [--live] [--paid]');
+                }
+                $report=ProductionAIAcceptance::run($app->root,$app->load(),
+                    in_array('--live',$options,true),in_array('--paid',$options,true));
+                if (in_array('--json',$options,true)) {
+                    echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+                } else {
+                    foreach ($report['checks'] as $item) {
+                        echo strtoupper($item['status']).' '.$item['id'].': '.$item['message']."\n";
+                    }
+                    foreach ($report['manual'] as $item) echo 'MANUAL '.$item."\n";
+                }
+                // Never turn a synthetic or read-only probe into production signoff.
+                if (!$report['automated_ok']) exit(1);
+                exit(2);
+            }
             if (($argv[2]??'')==='acceptance') {
                 $options=array_slice($argv,3);
                 if (count($options)>2 || count($options)!==count(array_unique($options)) ||
@@ -45,7 +65,7 @@ try {
                 exit(2);
             }
             if (($argv[2]??'')!=='status' || count($argv)!==3) {
-                throw new InvalidArgumentException('Usage: ai status | ai acceptance [--json] [--live]');
+                throw new InvalidArgumentException('Usage: ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]');
             }
             $state=$app->load();
             $usage=(new UsageLimiter($app->root))->status();
@@ -218,7 +238,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
-                 "php bin/cajeer ai status | ai acceptance [--json] [--live]\nphp bin/cajeer support check [--json]\n".
+                 "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".

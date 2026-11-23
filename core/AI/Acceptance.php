@@ -8,7 +8,7 @@ use CajeerEngine\Storage\SiteState;
 final class Acceptance
 {
     /** @return array{version:string,schema:int,automated_ok:bool,production_accepted:bool,checks:array,manual:array} */
-    public static function run(string $root,array $site,bool $live=false): array
+    public static function run(string $root,array $site,bool $live=false,?OpenAIClient $client=null): array
     {
         $checks=[];$ok=true;
         $add=static function(string $id,string $status,string $message)use(&$checks,&$ok):void {
@@ -68,7 +68,7 @@ final class Acceptance
         if ($live) {
             try {
                 if (!$key) throw new \RuntimeException('Missing key');
-                $models=(new OpenAIClient())->models();
+                $models=($client??new OpenAIClient())->models();
                 $available=in_array($site['ai']['model'],$models,true);
                 $add('live_model',$available?'pass':'fail',
                     $available?'Configured model appears in live project models':'Configured model unavailable in live project');

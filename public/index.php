@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView};
+use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView,ProductionAIAcceptance};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -856,6 +856,28 @@ try {
         } catch (RuntimeException $failure) {
             $html.='<p class="error">Невозможно прочитать защищённые настройки AI-бюджета.</p>';
         }
+        $html.='<section id="ai-release"><h3>Cajeer AI Assistant 1.3.0 — проверка готовности</h3>'.
+            '<p>Без платных запросов и без передачи содержимого сайта в OpenAI. '.
+            'Для проверки реальных генераций используйте только серверный CLI с явным разрешением расходов.</p>'.
+            '<p><a href="/admin?ai_release=1#ai-release">Проверить локальную готовность AI</a></p>';
+        if (($_GET['ai_release']??null)==='1') {
+            try {
+                $gate=ProductionAIAcceptance::run($app->root,$d);
+                $html.='<p>'.($gate['automated_ok']?
+                    'Локальные проверки пройдены; production-приёмка ещё не подтверждена.':
+                    'Есть ошибки конфигурации или безопасности AI.').'</p>';
+                foreach ($gate['checks'] as $item) {
+                    if ($item['status']==='pass') continue;
+                    $html.='<p class="'.($item['status']==='fail'?'error':'notice').'">'.
+                        e(strtoupper($item['status']).': '.$item['message']).'</p>';
+                }
+                foreach ($gate['manual'] as $step) $html.='<p class="notice">'.e($step).'</p>';
+            } catch (\Throwable) {
+                $html.='<p class="error">Не удалось выполнить диагностику AI на этой установке.</p>';
+            }
+        }
+        $html.='<p>CLI: <code>php bin/cajeer ai release-check --json</code>. '.
+            'Платный запуск: <code>--live --paid</code> с отдельным подтверждением оператора.</p></section>';
         $html.=form('ai_models','<button>Проверить доступные модели через API</button>');
         if ($ai['enabled']) {
             $html.=form('ai_test','<label>Тестовый запрос (передаётся OpenAI)'.

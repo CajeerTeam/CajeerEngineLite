@@ -51,6 +51,7 @@ jobs:
       - run: php tests/core_128.php
       - run: php tests/ai_integration_129.php
       - run: php tests/ai_failures_129.php
+      - run: php tests/core_130.php
       - run: php tests/ai_concurrency_121.php
       - run: php tests/ai_cost_concurrency_128.php
       - run: php tests/auth_concurrency_119.php
@@ -69,6 +70,7 @@ jobs:
       - run: bash tests/ai_support_http.sh
       - run: bash tests/ai_cost_http.sh
       - run: bash tests/ai_acceptance_http.sh
+      - run: bash tests/ai_release_http.sh
   browser:
     runs-on: ubuntu-latest
     steps:
