@@ -53,7 +53,9 @@ jobs:
       - run: php tests/ai_failures_129.php
       - run: php tests/core_130.php
       - run: php tests/core_131.php
+      - run: php tests/core_132.php
       - run: bash tests/admin_experience_http.sh
+      - run: bash tests/pages_management_http.sh
       - run: php tests/ai_concurrency_121.php
       - run: php tests/ai_cost_concurrency_128.php
       - run: php tests/auth_concurrency_119.php
@@ -102,3 +104,4 @@ jobs:
       - run: python tests/browser_127.py
       - run: python tests/browser_129.py
       - run: python tests/browser_131.py
+      - run: python tests/browser_132.py

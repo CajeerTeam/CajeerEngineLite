@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Admin\AdminExperience;
+use CajeerEngine\Admin\PagesManagement;
 use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView,ProductionAIAcceptance};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
@@ -19,7 +20,7 @@ function go(string $path): never {
     if ($path==='/admin' && ($_SERVER['REQUEST_METHOD']??'')==='POST') {
         $action=$_POST['action']??null;
         $views=[
-            'save'=>'pages','delete'=>'pages','settings'=>'settings','modules'=>'settings',
+            'save'=>'pages','delete'=>'pages','pages_bulk'=>'pages','page_status'=>'pages','page_duplicate'=>'pages','settings'=>'settings','modules'=>'settings',
             'consent'=>'integrations','ga4'=>'integrations','metrica'=>'integrations',
             'gtm'=>'integrations','clarity'=>'integrations','matomo'=>'integrations',
             'session_revoke_others'=>'security',
@@ -822,6 +823,27 @@ try {
                     }
                     go('/admin?analytics=1&days='.$days);
                 }
+                elseif ($action==='page_status') {
+                    $old=Lite::field($_POST,'old',1024,true);
+                    $revision=Lite::field($_POST,'revision',64,true);
+                    $published=$_POST['published']??null;
+                    if (!is_string($published) || !in_array($published,['0','1'],true)) throw new InvalidArgumentException('Invalid publication status');
+                    $app->change(static fn(array $state): array => PagesManagement::status($state,$old,$revision,$published==='1'));
+                    go('/admin');
+                }
+                elseif ($action==='pages_bulk') {
+                    $operation=Lite::field($_POST,'operation',16,true);
+                    $selected=$_POST['selected']??null;
+                    $revisions=$_POST['revisions']??null;
+                    $app->change(static fn(array $state): array => PagesManagement::bulk($state,$selected,$revisions,$operation));
+                    go('/admin');
+                }
+                elseif ($action==='page_duplicate') {
+                    $old=Lite::field($_POST,'old',1024,true);
+                    $revision=Lite::field($_POST,'revision',64,true);
+                    $app->change(static fn(array $state): array => PagesManagement::duplicate($state,$old,$revision));
+                    go('/admin');
+                }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
                     $app->change(function($d)use($p,$old,$revision){
@@ -1048,9 +1070,8 @@ try {
             $html.=form('logout_global','<button>Выйти из Lite и SkiF4er ID</button>');
         }
         $panels['security']=$html; $html='';
-        $html.='<section><h2>Страницы</h2><ul>';
-        foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').' — <a href="/admin/ai/editor?path='.rawurlencode($p['path']).'">AI-редактор</a> — <a href="/admin/ai/seo?path='.rawurlencode($p['path']).'">SEO-аудит</a></li>';
-        $html.='</ul><a href="/admin?new=1">Создать страницу</a></section>';
+        try { $html.=PagesManagement::render($d['pages'],$_GET,$_SESSION['csrf']); }
+        catch (InvalidArgumentException) { stop(400,'Invalid pages filter'); }
         $edit=$_GET['edit']??null;
         if ((is_string($edit) && isset($d['pages'][$edit])) || isset($_GET['new'])) {
             $p=is_string($edit)&&isset($d['pages'][$edit])?$d['pages'][$edit]:['path'=>'','title'=>'','description'=>'','body'=>'','published'=>false,'menu'=>true];
@@ -1183,6 +1204,11 @@ try {
         }
         $panels['analytics']=$html;
         $view=AdminExperience::view($_GET);
+        // Keep page-management validation errors next to the affected controls,
+        // including a stale revision after another editor has modified a page.
+        if ($method==='POST' && $error!=='' && in_array($action ?? '', ['pages_bulk','page_status','page_duplicate'], true)) {
+            $view='pages';
+        }
         $dashboard=AdminExperience::dashboard($d,count($devices),$report['ok'],OpenAIClient::configured());
         $html=AdminExperience::sections($panels,$view,$dashboard,$alerts);
         shell('Управление сайтом',$html);

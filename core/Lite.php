@@ -12,7 +12,7 @@ use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.3.1';
+    public const VERSION = '1.3.2';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
