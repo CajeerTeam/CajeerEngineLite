@@ -21,7 +21,7 @@ curl -fsS -b "$tmp/cookies" "$base/admin/developer?tab=diagnostics" > "$tmp/diag
 grep -Fq 'Developer Tools' "$tmp/diagnostics"
 grep -Fq 'templates.render' "$tmp/diagnostics"
 curl -fsS -b "$tmp/cookies" "$base/admin/developer?tab=diagnostics&format=json" > "$tmp/report.json"
-php -r '$d=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if($d["version"]!=="1.3.7"||!isset($d["checks"])||!isset($d["counts"]))exit(1);' "$tmp/report.json"
+php -r '$d=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if($d["version"]!=="1.3.8"||!isset($d["checks"])||!isset($d["counts"]))exit(1);' "$tmp/report.json"
 ! grep -Fq 'DevTools137Password!' "$tmp/report.json"
 curl -fsS -b "$tmp/cookies" "$base/admin/developer?tab=templates&template=default%2Fpage.cjr" > "$tmp/editor"
 grep -Fq 'name="source"' "$tmp/editor"
@@ -79,5 +79,5 @@ grep -Fq 'template.restored' "$tmp/events"
   --data-urlencode "revision=$new_revision" --data-urlencode 'action=save' \
   --data-urlencode "source@$tmp/candidate.cjr" "$base/admin/developer") == 422 ]]
 php bin/cajeer developer check --json > "$tmp/cli.json"
-php -r '$d=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if($d["version"]!=="1.3.7"||!$d["ok"])exit(1);' "$tmp/cli.json"
+php -r '$d=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if($d["version"]!=="1.3.8"||!$d["ok"])exit(1);' "$tmp/cli.json"
 echo 'Developer Tools 1.3.7 HTTP: auth, CSRF, JSON diagnostics, sandboxed preview, read-only policy, write, CAS, rollback, event audit OK'

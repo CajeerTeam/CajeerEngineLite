@@ -25,7 +25,7 @@ try {
     $app=new Lite($root);
     $app->install('Developer137Password!','https://example.test','Company');
     $state=$app->load();
-    require137(Lite::VERSION==='1.3.7' && SiteState::SCHEMA===14,'version and stable JSON schema');
+    require137(Lite::VERSION==='1.3.8' && SiteState::SCHEMA===14,'version and stable JSON schema');
     $tool=new TemplateManager($root);
     require137($tool->names()===['default/page.cjr'],'list existing templates');
     rejects137(fn()=>$tool->path('../storage/site.json'),'path traversal');

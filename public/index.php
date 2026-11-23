@@ -14,6 +14,7 @@ use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,Da
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\SEO\{SEOControl,SEOControlView};
 use CajeerEngine\Developer\{DeveloperDiagnostics,DeveloperView,TemplateManager,DeveloperEvents};
+use CajeerEngine\Operations\{CmsOperations,OperationsView};
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
@@ -40,7 +41,7 @@ function go(string $path): never {
 function shell(string $title,string $html,bool $aiChat=false): never {
     header('Content-Type: text/html; charset=utf-8');
     $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
-    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || $route==='/admin/developer' || str_starts_with($route,'/admin/ai')) &&
+    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || $route==='/admin/developer' || $route==='/admin/operations' || str_starts_with($route,'/admin/ai')) &&
         $title!=='Вход в админ-панель';
     if ($admin) {
         $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
@@ -57,6 +58,16 @@ function shell(string $title,string $html,bool $aiChat=false): never {
         ($aiChat?'<script src="/assets/ai-chat.js" defer></script>':'').
         ($route==='/admin/editor'?'<script src="/assets/block-editor.js" defer></script>':'').'</body></html>';
     exit;
+}
+function cmsDownload138(string $file,string $name): void {
+    if (!preg_match('/^[a-zA-Z0-9_.-]+$/D',$name)) throw new InvalidArgumentException('Invalid download filename');
+    $size=filesize($file);
+    if (!is_int($size) || $size<1 || $size>115_000_000 || is_link($file)) throw new RuntimeException('Unsafe download');
+    header('Content-Type: application/x-tar');
+    header('Content-Disposition: attachment; filename="'.$name.'"');
+    header('Content-Length: '.$size);
+    header('Cache-Control: no-store, private');
+    if (($_SERVER['REQUEST_METHOD']??'GET')!=='HEAD') readfile($file);
 }
 function input(string $name,string $value='',string $type='text'): string { return '<label>'.e($name).'<input name="'.e($name).'" type="'.e($type).'" value="'.e($value).'"></label>'; }
 function token(): string { return '<input type="hidden" name="csrf" value="'.e($_SESSION['csrf']).'">'; }
@@ -92,7 +103,7 @@ try {
         if ($method==='GET') echo $bytes;
         exit;
     }
-    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/operations' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -157,6 +168,66 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/operations') {
+            if (!$auth) stop(403,'Administrator login required');
+            $ops=new CmsOperations($app->root);
+            $error='';$notice='';
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                $action=$_POST['action']??null;
+                if (!is_string($action) || !in_array($action,['create','verify','download','restore','export','import','cache','prune'],true)) stop(400,'Invalid CMS operation');
+                if ((int)($_SERVER['CONTENT_LENGTH']??0)>116_000_000) stop(413,'CMS operation request too large');
+                try {
+                    if ($action==='create') {
+                        $notice='Резервная копия создана: '.$ops->createBackup();
+                        try { DeveloperEvents::record($app->root,'cms.backup_created'); } catch (Throwable) {}
+                    } elseif ($action==='export') {
+                        $file=$ops->exportArchive();
+                        try { cmsDownload138($file,'cajeer-lite-export.tar'); }
+                        finally { $ops->removeExport($file); }
+                        exit;
+                    } elseif (in_array($action,['verify','download','restore'],true)) {
+                        if (!is_string($_POST['name']??null)) throw new InvalidArgumentException('Invalid backup name');
+                        $name=$_POST['name'];
+                        if ($action==='verify') {
+                            $info=$ops->verifyBackup($name);
+                            $notice='Архив проверен: '.$name.' · '.(int)$info['pages'].' страниц, '.(int)$info['media'].' медиафайлов';
+                        } elseif ($action==='download') {
+                            cmsDownload138($ops->backupPath($name),$name);
+                            exit;
+                        } else {
+                            if (($_POST['confirm']??null)!=='RESTORE') throw new InvalidArgumentException('Введите RESTORE для подтверждения');
+                            $ops->restoreBackup($name);
+                            try { DeveloperEvents::record($app->root,'cms.backup_restored'); } catch (Throwable) {}
+                            go('/admin?restored=1');
+                        }
+                    } elseif ($action==='import') {
+                        if (($_POST['confirm']??null)!=='IMPORT') throw new InvalidArgumentException('Введите IMPORT для подтверждения');
+                        $upload=$_FILES['archive']??null;
+                        if (!is_array($upload) || ($upload['error']??null)!==UPLOAD_ERR_OK ||
+                            !is_string($upload['name']??null) || !str_ends_with(strtolower($upload['name']),'.tar') ||
+                            !is_string($upload['tmp_name']??null) || !is_uploaded_file($upload['tmp_name']) ||
+                            ($upload['size']??0)>115_000_000) throw new InvalidArgumentException('Invalid or oversized TAR upload');
+                        $ops->importFile($upload['tmp_name']);
+                        try { DeveloperEvents::record($app->root,'cms.imported'); } catch (Throwable) {}
+                        go('/admin?imported=1');
+                    } elseif ($action==='cache') {
+                        $notice='Очищено файлов кэша аналитики: '.$ops->clearAnalyticsCache();
+                        try { DeveloperEvents::record($app->root,'cms.cache_cleared'); } catch (Throwable) {}
+                    } elseif ($action==='prune') {
+                        if (($_POST['confirm']??null)!=='PRUNE' || !is_string($_POST['keep']??null) ||
+                            !preg_match('/^(?:[1-9]|[1-9][0-9]|100)$/D',$_POST['keep'])) throw new InvalidArgumentException('Invalid backup retention request');
+                        $notice='Удалено старых архивов: '.$ops->pruneBackups((int)$_POST['keep']);
+                        try { DeveloperEvents::record($app->root,'cms.backups_pruned'); } catch (Throwable) {}
+                    }
+                } catch (InvalidArgumentException|RuntimeException|JsonException $failure) {
+                    http_response_code(422);
+                    $error='Операция не выполнена: '.$failure->getMessage();
+                    try { DeveloperEvents::record($app->root,'cms.operation_failed','warn'); } catch (Throwable) {}
+                }
+            }
+            shell('CMS Operations',OperationsView::render($ops,$_SESSION['csrf'],$error,$notice));
+        }
         if ($path==='/admin/developer' || $path==='/admin/developer/preview') {
             if (!$auth) stop(403,'Administrator login required');
             $manager=new TemplateManager($app->root);

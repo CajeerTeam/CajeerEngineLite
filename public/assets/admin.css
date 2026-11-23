@@ -189,3 +189,24 @@
 .dev-restore{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0!important;margin:0!important;border:0!important;background:transparent!important;box-shadow:none!important}
 .dev-muted{color:#61718a;font-size:.85rem;overflow-wrap:anywhere}
 @media(max-width:700px){.admin-body .dev-tools{padding:13px}.dev-template-grid{grid-template-columns:minmax(0,1fr)}.dev-template-form textarea{min-height:310px}.dev-restore{flex-wrap:wrap}}
+
+/* CMS Operations 1.3.8: responsive, server-rendered file operations. */
+.admin-body .cms-operations{background:#fff;border-radius:14px;padding:24px;min-width:0;overflow-wrap:anywhere}
+.cms-operations section{border:1px solid #e0e7f0;border-radius:12px;padding:20px;margin:18px 0;min-width:0}
+.cms-operations h2{font-size:1.25rem;margin:0 0 12px}
+.cms-ops-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin:20px 0}
+.cms-ops-stats>div{background:#f2f6fb;padding:15px;border-radius:9px;display:grid;gap:8px}
+.cms-ops-stats small{color:#5b6e86}.cms-ops-stats strong{font-size:1.2rem;color:#20395a}
+.admin-body .cms-operations form{box-shadow:none;border:0;background:transparent;margin:10px 0;padding:0;display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.cms-operations form label{font-size:.86rem;min-width:0}
+.cms-operations form input{display:block;min-width:0;max-width:100%;margin-top:4px}
+.cms-operations form input[type=file]{width:100%;max-width:440px}
+.cms-operations button{background:#1857a9;color:#fff;border:0;border-radius:7px;padding:9px 13px;cursor:pointer}
+.cms-operations button.cms-ops-danger{background:#9c3036;color:#fff}
+.cms-operations .cms-ops-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.cms-ops-row form{margin:0!important;flex:0 1 auto}
+.cms-ops-row label{display:flex;flex-direction:column;max-width:170px}
+.cms-operations .dev-table-wrap{overflow:auto;max-width:100%}
+.cms-operations .dev-table-wrap table{min-width:680px}
+.cms-ops-note{font-size:.86rem;color:#61718a}
+@media(max-width:650px){.admin-body .cms-operations{padding:12px}.cms-operations section{padding:13px}.cms-ops-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}

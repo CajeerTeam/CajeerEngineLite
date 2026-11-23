@@ -8,11 +8,38 @@ use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
 use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Developer\DeveloperDiagnostics;
+use CajeerEngine\Operations\CmsOperations;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
     switch ($cmd) {
+        case 'operations':
+            $ops=new CmsOperations($app->root);
+            $action=$argv[2]??'';
+            if ($action==='check' && count($argv)===3) {
+                echo json_encode($ops->health(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)."\n";
+            } elseif ($action==='backup' && count($argv)>=4) {
+                $sub=$argv[3];
+                if ($sub==='create' && count($argv)===4) echo $ops->createBackup()."\n";
+                elseif ($sub==='list' && count($argv)===4) foreach ($ops->names() as $name) echo $name."\n";
+                elseif ($sub==='verify' && count($argv)===5) echo json_encode($ops->verifyBackup($argv[4]),JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";
+                elseif ($sub==='restore' && count($argv)===5) {
+                    if (getenv('CAJEER_OPERATIONS_CONFIRM')!==$argv[4]) throw new InvalidArgumentException('Confirm exact backup file name in CAJEER_OPERATIONS_CONFIRM');
+                    $ops->restoreBackup($argv[4]);echo "CMS archive restored. Sessions revoked.\n";
+                } else throw new InvalidArgumentException('Usage: operations backup create|list|verify <name>|restore <name>');
+            } elseif ($action==='export' && count($argv)===4) {
+                $ops->exportTo($argv[3]);echo "Portable export written.\n";
+            } elseif ($action==='import' && count($argv)===4) {
+                if (getenv('CAJEER_OPERATIONS_CONFIRM')!=='IMPORT') throw new InvalidArgumentException('Set CAJEER_OPERATIONS_CONFIRM=IMPORT');
+                $ops->importFile($argv[3]);echo "Content and media imported; sessions revoked.\n";
+            } elseif ($action==='cache' && ($argv[3]??'')==='clear' && count($argv)===4) {
+                echo 'Analytics cache files removed: '.$ops->clearAnalyticsCache()."\n";
+            } elseif ($action==='prune' && count($argv)===4 && preg_match('/^(?:[1-9]|[1-9][0-9]|100)$/D',$argv[3])) {
+                if (getenv('CAJEER_OPERATIONS_CONFIRM')!=='PRUNE') throw new InvalidArgumentException('Set CAJEER_OPERATIONS_CONFIRM=PRUNE');
+                echo 'Backups removed: '.$ops->pruneBackups((int)$argv[3])."\n";
+            } else throw new InvalidArgumentException('Usage: operations check|backup create|backup list|backup verify <name>|backup restore <name>|export <absolute-file>|import <file>|cache clear|prune <keep>');
+            break;
         case 'developer':
             if (($argv[2]??'')!=='check' || count($argv)>4 ||
                 (isset($argv[3]) && $argv[3]!=='--json')) {
@@ -258,6 +285,7 @@ try {
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
+                 "php bin/cajeer operations check | backup create|list|verify|restore | export <absolute-file> | import <file> | cache clear | prune <keep>\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
                  "php bin/cajeer release check [--json]\nphp bin/cajeer auth check [--json]\n".

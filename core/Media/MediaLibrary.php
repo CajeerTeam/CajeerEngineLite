@@ -249,6 +249,135 @@ final class MediaLibrary
         });
     }
 
+    /** Verify portable media metadata and payloads without touching the live library. */
+    public static function validateArchive(array $entries, array $paths): void
+    {
+        if (count($entries)!==count($paths) || count($entries)>self::MAX_FILES ||
+            array_sum(array_map(static fn($m)=>is_array($m) && is_int($m['size']??null)?$m['size']:self::MAX_TOTAL_BYTES+1,$entries))>self::MAX_TOTAL_BYTES) {
+            throw new \RuntimeException('Invalid archived media quota');
+        }
+        foreach ($entries as $id=>$meta) {
+            if (!is_string($id) || !preg_match('/^[a-f0-9]{32}$/D',$id) || !is_array($meta) ||
+                array_keys($meta)!==['id','name','mime','extension','size','width','height','sha256','created'] ||
+                $meta['id']!==$id || !is_string($meta['name']) || !is_string($meta['mime']) ||
+                !isset(self::TYPES[$meta['mime']]) || $meta['extension']!==self::TYPES[$meta['mime']] ||
+                !is_int($meta['size']) || $meta['size']<1 || $meta['size']>self::MAX_FILE_BYTES ||
+                !is_int($meta['created']) || $meta['created']<0 ||
+                !is_string($meta['sha256']) || !preg_match('/^[a-f0-9]{64}$/D',$meta['sha256']) ||
+                !isset($paths[$id])) throw new \RuntimeException('Invalid archived media metadata');
+            self::name($meta['name']);
+            $file=$paths[$id]; $stat=@lstat($file);
+            if (!is_array($stat) || ($stat['mode'] & 0170000)!==0100000 || $stat['nlink']!==1 ||
+                $stat['size']!==$meta['size'] || !hash_equals($meta['sha256'],OperationFiles::hash($file))) {
+                throw new \RuntimeException('Archived media bytes failed verification');
+            }
+            $mime=(new \finfo(FILEINFO_MIME_TYPE))->file($file);
+            if ($mime!==$meta['mime']) throw new \RuntimeException('Archived media MIME mismatch');
+            if (str_starts_with($mime,'image/')) {
+                $dimensions=@getimagesize($file);
+                if (!is_array($dimensions) || ($dimensions['mime']??null)!==$mime ||
+                    ($dimensions[0]??null)!==$meta['width'] || ($dimensions[1]??null)!==$meta['height'] ||
+                    $dimensions[0]<1 || $dimensions[1]<1 || $dimensions[0]>12000 || $dimensions[1]>12000 ||
+                    $dimensions[0]*$dimensions[1]>self::MAX_PIXELS) throw new \RuntimeException('Invalid archived image');
+            } elseif ($meta['width']!==null || $meta['height']!==null) {
+                throw new \RuntimeException('Invalid archived PDF metadata');
+            }
+            $handle=@fopen($file,'rb');
+            if (!is_resource($handle)) throw new \RuntimeException('Cannot inspect archived media');
+            try {
+                $first=fread($handle,12);
+                if (fseek($handle,max(0,$meta['size']-2048))!==0) throw new \RuntimeException('Cannot inspect media suffix');
+                $last=stream_get_contents($handle);
+            } finally {fclose($handle);}
+            if (!is_string($first) || !is_string($last) ||
+                ($mime==='image/png' && (!str_starts_with($first,"\x89PNG\r\n\x1a\n") || !str_ends_with($last,"IEND\xaeB`\x82"))) ||
+                ($mime==='image/jpeg' && (!str_starts_with($first,"\xff\xd8\xff") || !str_ends_with($last,"\xff\xd9"))) ||
+                ($mime==='image/gif' && (!in_array(substr($first,0,6),['GIF87a','GIF89a'],true) || !str_ends_with($last,"\x3b"))) ||
+                ($mime==='image/webp' && (!str_starts_with($first,'RIFF') || substr($first,8,4)!=='WEBP' ||
+                    unpack('V',substr($first,4,4))[1]+8!==$meta['size'])) ||
+                ($mime==='application/pdf' && (!str_starts_with($first,'%PDF-') || !str_contains($last,'%%EOF')))) {
+                throw new \RuntimeException('Archived media structure is invalid');
+            }
+        }
+    }
+
+    /**
+     * Transactional, additive import retaining stable media IDs. Caller supplies only
+     * verified archive members; all files and the index are rolled back if site commit fails.
+     * Existing assets are not deleted because they may be referenced by other site history.
+     * @param array<string,array<string,mixed>> $incoming
+     * @param array<string,string> $paths
+     */
+    public function importPreservingIds(array $incoming, array $paths, callable $commit): mixed
+    {
+        return $this->locked(function () use ($incoming,$paths,$commit): mixed {
+            self::validateArchive($incoming,$paths);
+            $existing=$this->index();
+            $combined=$existing;
+            $added=[];
+            if (count($incoming)>self::MAX_FILES || count($incoming)!==count($paths)) {
+                throw new \InvalidArgumentException('Invalid media archive contents');
+            }
+            foreach ($incoming as $id=>$meta) {
+                self::id((string)$id);
+                if (!is_array($meta) || ($meta['id']??null)!==$id ||
+                    !is_string($meta['name']??null) || !is_string($meta['mime']??null) ||
+                    !isset(self::TYPES[$meta['mime']]) || ($meta['extension']??null)!==self::TYPES[$meta['mime']] ||
+                    !is_int($meta['size']??null) || $meta['size']<1 || $meta['size']>self::MAX_FILE_BYTES ||
+                    !is_string($meta['sha256']??null) || !preg_match('/^[a-f0-9]{64}$/D',$meta['sha256']) ||
+                    !is_int($meta['created']??null) || $meta['created']<0 ||
+                    !array_key_exists('width',$meta) || !array_key_exists('height',$meta) ||
+                    !isset($paths[$id])) throw new \InvalidArgumentException('Invalid imported media metadata');
+                self::name($meta['name']);
+                $file=$paths[$id];
+                $stat=@lstat($file);
+                if (!is_array($stat) || ($stat['mode'] & 0170000)!==0100000 || $stat['nlink']!==1 ||
+                    $stat['size']!==$meta['size'] || !hash_equals($meta['sha256'],OperationFiles::hash($file))) {
+                    throw new \RuntimeException('Invalid imported media bytes');
+                }
+                $mime=(new \finfo(FILEINFO_MIME_TYPE))->file($file);
+                if ($mime!==$meta['mime']) throw new \RuntimeException('Imported media type mismatch');
+                if (str_starts_with($mime,'image/')) {
+                    $info=@getimagesize($file);
+                    if (!is_array($info) || ($info['mime']??null)!==$mime ||
+                        ($info[0]??null)!==($meta['width']??null) || ($info[1]??null)!==($meta['height']??null) ||
+                        $info[0]<1 || $info[1]<1 || $info[0]*$info[1]>self::MAX_PIXELS ||
+                        $info[0]>12000 || $info[1]>12000) throw new \RuntimeException('Invalid imported image');
+                } elseif (($meta['width']??null)!==null || ($meta['height']??null)!==null) {
+                    throw new \RuntimeException('Invalid PDF metadata');
+                }
+                if (isset($existing[$id]) && (
+                    $existing[$id]['sha256']!==$meta['sha256'] || $existing[$id]['mime']!==$meta['mime'] ||
+                    $existing[$id]['size']!==$meta['size'] || $existing[$id]['extension']!==$meta['extension'])) {
+                    throw new \RuntimeException('Media ID collision');
+                }
+                if (isset($existing[$id])) {
+                    // Do not silently accept a missing/corrupted local file as a valid collision.
+                    $this->read($id);
+                }
+                $combined[$id]=$meta;
+            }
+            if (count($combined)>self::MAX_FILES || array_sum(array_column($combined,'size'))>self::MAX_TOTAL_BYTES) {
+                throw new \RuntimeException('Imported media exceeds storage quota');
+            }
+            try {
+                foreach ($incoming as $id=>$meta) {
+                    if (isset($existing[$id])) continue;
+                    $path=$this->location('files/'.$id.'.'.$meta['extension']);
+                    if (file_exists($path) || is_link($path)) throw new \RuntimeException('Unindexed media path already exists');
+                    OperationFiles::copy($paths[$id],$path,0600);
+                    $added[]=$path;
+                }
+                $this->writeIndex($combined);
+                return $commit();
+            } catch (\Throwable $failure) {
+                try { $this->writeIndex($existing); }
+                finally { foreach ($added as $path) OperationFiles::remove($path); }
+                throw $failure;
+            }
+        });
+    }
+
     /** Read verified, registered bytes; never redirect clients to a storage path. */
     public function read(string $id): ?array
     {
