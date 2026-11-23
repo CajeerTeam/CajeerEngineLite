@@ -10,6 +10,7 @@ use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Developer\DeveloperDiagnostics;
 use CajeerEngine\Operations\CmsOperations;
 use CajeerEngine\Integrations\{IntegrationDiagnostics,ProductionAcceptance};
+use CajeerEngine\Release\StableCMSAcceptance;
 $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
@@ -153,6 +154,26 @@ try {
             if (!$report['ok']) exit(1);
             break;
         case 'release':
+            if (($argv[2]??null)==='stable-check') {
+                $flags=array_slice($argv,3);
+                if (count($flags)>2 || count($flags)!==count(array_unique($flags)) ||
+                    array_diff($flags,['--json','--live'])) {
+                    throw new InvalidArgumentException('Usage: release stable-check [--json] [--live]');
+                }
+                $report=StableCMSAcceptance::run($app->root,$app->load(),in_array('--live',$flags,true));
+                if (in_array('--json',$flags,true)) {
+                    echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)."\n";
+                } else {
+                    foreach ($report['checks'] as $item) {
+                        echo strtoupper($item['status']).' '.$item['id'].': '.$item['message']."\n";
+                    }
+                    foreach ($report['manual'] as $item) echo 'MANUAL '.$item."\n";
+                    echo 'CMS 1.4.0 release readiness: '.strtoupper($report['status'])."\n";
+                }
+                if (!$report['automated_ok']) exit(1);
+                // Local/live probes cannot sign off human deployment acceptance.
+                exit(2);
+            }
             if (($argv[2] ?? '') !== 'check' || count($argv) > 4 ||
                 (count($argv) === 4 && $argv[3] !== '--json')) {
                 throw new InvalidArgumentException('Usage: release check [--json]');
@@ -288,7 +309,7 @@ try {
                  "php bin/cajeer operations check | backup create|list|verify|restore | export <absolute-file> | import <file> | cache clear | prune <keep>\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
-                 "php bin/cajeer release check [--json]\nphp bin/cajeer auth check [--json]\n".
+                 "php bin/cajeer release check [--json] | release stable-check [--json] [--live]\nphp bin/cajeer auth check [--json]\n".
                  "php bin/cajeer auth release-check [--json] [--live]\n".
                  "php bin/cajeer analytics refresh|status [--days=7]\n";
     }

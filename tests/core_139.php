@@ -38,7 +38,7 @@ function cleanup139(string $root): void
     rmdir($root);
 }
 
-expect139(Lite::VERSION==='1.3.9' && SiteState::SCHEMA===14,'version with compatible data schema');
+expect139(version_compare(Lite::VERSION,'1.3.9','>=') && SiteState::SCHEMA===14,'version with compatible data schema');
 $origin='http://cms.test:18839';
 $normal=['HTTP_HOST'=>'cms.test:18839','CONTENT_LENGTH'=>'64', 'HTTP_ORIGIN'=>$origin, 'HTTP_SEC_FETCH_SITE'=>'same-origin'];
 AdminRequestGuard::check($origin,$normal,'/admin','POST');

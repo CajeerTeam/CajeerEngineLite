@@ -85,7 +85,12 @@ final class TarPackage
                     }
                 } finally { fclose($dst); }
                 $skip=(512-$size%512)%512;
-                if ($skip && (strlen((string)fread($in,$skip))!==$skip)) throw new \RuntimeException('Truncated TAR padding');
+                if ($skip) {
+                    $padding=fread($in,$skip);
+                    if (!is_string($padding) || strlen($padding)!==$skip || $padding!==str_repeat("\0",$skip)) {
+                        throw new \RuntimeException('Invalid TAR padding');
+                    }
+                }
                 $actual[$name]=['path'=>$out,'size'=>$size,'sha256'=>hash_file('sha256',$out)];
             }
             if (!isset($actual['manifest.json'],$actual['site.json'],$actual['media/index.json'])) throw new \RuntimeException('Incomplete CMS archive');

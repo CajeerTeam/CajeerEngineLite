@@ -56,20 +56,53 @@ final class OperationFiles
         } finally { if (is_resource($out)) fclose($out); if (is_file($tmp)) unlink($tmp); }
     }
 
+    /** Copy a new file without ever replacing an existing destination (even on a race). */
     public static function copy(string $source, string $dest, int $mode = 0600, ?int $uid = null, ?int $gid = null): void
     {
-        if (is_link($source) || !is_file($source) || is_link($dest)) throw new \RuntimeException('Invalid copy source/target');
+        if (is_link($source) || !is_file($source) || is_link($dest) || file_exists($dest)) {
+            throw new \RuntimeException('Copy requires a regular source and a new destination');
+        }
         self::dir(dirname($dest), $mode === 0600 ? 0700 : 0755);
         $tmp = dirname($dest) . '/.tmp-' . bin2hex(random_bytes(12));
-        $in = fopen($source, 'rb'); $out = fopen($tmp, 'xb');
+        $in = @fopen($source, 'rb');
+        $out = @fopen($tmp, 'xb');
+        $published = false;
+        $identity = null;
         try {
             if (!is_resource($in) || !is_resource($out)) throw new \RuntimeException('Cannot open copy streams');
-            self::permissions($tmp,$mode,$uid,$gid);
-            if (stream_copy_to_stream($in, $out) !== filesize($source) || !fflush($out) || !fsync($out)) throw new \RuntimeException('Copy failed');
+            $sourceStat = fstat($in);
+            $sourceEntry = @lstat($source);
+            if (!is_array($sourceStat) || !is_array($sourceEntry) ||
+                ($sourceStat['mode'] & 0170000) !== 0100000 || $sourceStat['nlink'] !== 1 ||
+                $sourceStat['ino'] !== $sourceEntry['ino'] || $sourceStat['dev'] !== $sourceEntry['dev']) {
+                throw new \RuntimeException('Unsafe copy source');
+            }
+            self::permissions($tmp, $mode, $uid, $gid);
+            if (stream_copy_to_stream($in, $out) !== $sourceStat['size'] ||
+                fread($in, 1) !== '' || !fflush($out) || !fsync($out)) {
+                throw new \RuntimeException('Copy failed or source changed');
+            }
+            $identity = fstat($out);
             fclose($out); $out = null;
-            if (!rename($tmp, $dest)) throw new \RuntimeException('Cannot replace file');
+            // link(2), unlike rename(2), cannot replace a name created by a
+            // concurrent request. Remove the temporary link after publishing.
+            if (!@link($tmp, $dest)) throw new \RuntimeException('Destination already exists or cannot be created');
+            $published = true;
+            if (!@unlink($tmp)) throw new \RuntimeException('Cannot remove copy staging link');
             self::syncDir(dirname($dest));
-        } finally { if (is_resource($in)) fclose($in); if (is_resource($out)) fclose($out); if (is_file($tmp)) unlink($tmp); }
+        } catch (\Throwable $failure) {
+            if ($published && is_array($identity)) {
+                $entry = @lstat($dest);
+                if (is_array($entry) && $entry['ino'] === $identity['ino'] && $entry['dev'] === $identity['dev']) {
+                    @unlink($dest);
+                }
+            }
+            throw $failure;
+        } finally {
+            if (is_resource($in)) fclose($in);
+            if (is_resource($out)) fclose($out);
+            if (is_file($tmp) && !is_link($tmp)) @unlink($tmp);
+        }
     }
 
     public static function syncDir(string $path): void

@@ -79,6 +79,30 @@ try {
     $method=$_SERVER['REQUEST_METHOD']??'GET';
     if (!in_array($method,['GET','HEAD','POST'],true)) { header('Allow: GET, HEAD, POST'); stop(405,'Method not allowed'); }
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
+    // Liveness means the PHP worker is responding. Readiness is a separate,
+    // read-only probe of actual CMS state and the public rendering path.
+    if ($path==='/health/ready') {
+        if ($method!=='GET' && $method!=='HEAD') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
+        header('Cache-Control: no-store');
+        header('Content-Type: application/json; charset=utf-8');
+        $ready=false;
+        try {
+            $health=$app->load();
+            if ($health['schema']!==\CajeerEngine\Storage\SiteState::SCHEMA ||
+                !is_writable(dirname($app->file())) ||
+                !is_array($health['pages']['/']??null) ||
+                $health['pages']['/']['published']!==true) throw new \RuntimeException('Not ready');
+            $rendered=$app->render($health,$health['pages']['/']);
+            $ready=is_string($rendered) && trim($rendered)!=='';
+        } catch (\Throwable $failure) {
+            // Do not leak private paths, schema contents or exception messages.
+            error_log('Cajeer readiness failure: '.get_class($failure));
+        }
+        if (!$ready) { http_response_code(503); header('Retry-After: 30'); }
+        if ($method==='GET') echo $ready ? '{"status":"ready"}' : '{"status":"unavailable"}';
+        exit;
+    }
+
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
     if (preg_match('~^/media/([a-f0-9]{32})$~D', $path, $mediaMatch)) {
