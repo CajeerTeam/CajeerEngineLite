@@ -16,7 +16,7 @@ function wipe116(string $path): void {
     if (is_dir($path)) { foreach (new FilesystemIterator($path) as $entry) wipe116($entry->getPathname()); rmdir($path); }
 }
 
-ok116(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===13, 'release version and schema');
+ok116(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===14, 'release version and schema');
 $root = sys_get_temp_dir().'/cajeer-recovery-'.bin2hex(random_bytes(10));
 mkdir($root,0700,true);
 try {
@@ -51,7 +51,7 @@ try {
     $after=$app->load();
     ok116($after['identity']['owner']===null && $after['identity']['generation']!==$before['identity']['generation'],'owner detached and generation rotated');
     ok116($app->login($newPassword) && !$app->login($oldPassword),'recovered password live');
-    ok116($after['schema']===13 && $after['pages']===$before['pages'] && $after['settings']===$before['settings'] &&
+    ok116($after['schema']===14 && $after['pages']===$before['pages'] && $after['settings']===$before['settings'] &&
         $after['integrations']===$before['integrations'],'content and integrations preserved');
     ok116(!$registry->valid($local,$after) && !$registry->valid($oidc,$after),'all current sessions revoked');
     reject116(fn()=> $service->complete($token,'AnotherPassword!456',$time+4),'replay token');

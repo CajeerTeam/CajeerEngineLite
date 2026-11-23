@@ -57,5 +57,5 @@ grep -Fq 'href="/admin/ai" aria-current="page"' "$tmp/chat"
 curl -fsS -b "$tmp/cookie" "$base/admin?view=security" > "$tmp/security"
 grep -Fq 'Активные сеансы и устройства' "$tmp/security"
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookie" -d 'action=settings' "$base/admin") == 403 ]]
-php -r '$site=json_decode(file_get_contents("storage/site.json"),true,64,JSON_THROW_ON_ERROR);if($site["schema"]!==13||!isset($site["pages"]["/new"])) exit(1);'
+php -r '$site=json_decode(file_get_contents("storage/site.json"),true,64,JSON_THROW_ON_ERROR);if($site["schema"]!==14||!isset($site["pages"]["/new"])) exit(1);'
 echo 'Admin Experience 1.3.1 authenticated dashboard, responsive navigation, pages, redirects, CSRF, AI navigation and storage OK'

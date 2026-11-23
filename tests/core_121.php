@@ -8,11 +8,11 @@ use CajeerEngine\Storage\SiteState;
 function ok121(bool $condition,string $message): void {if (!$condition) throw new RuntimeException('AI 1.2.1: '.$message);}
 function reject121(callable $run,string $message):void {try{$run();}catch(RuntimeException|InvalidArgumentException $e){return;} throw new RuntimeException('AI 1.2.1 accepted: '.$message);}
 function remove121(string $path):void {if(is_link($path)||is_file($path)){unlink($path);return;}if(is_dir($path)){foreach(new FilesystemIterator($path) as $file) remove121($file->getPathname());rmdir($path);}}
-ok121(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===13,'version/schema');
+ok121(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===14,'version/schema');
 $root=sys_get_temp_dir().'/cajeer-ai121-'.bin2hex(random_bytes(8)); mkdir($root,0700,true);
 try {
     $app=new Lite($root);$app->install('TestPasswordA1B2C3!','https://example.org','AI test');
-    $state=$app->load();ok121($state['schema']===13 && $state['ai']===AIConfig::DEFAULTS,'fresh install configuration');
+    $state=$app->load();ok121($state['schema']===14 && $state['ai']===AIConfig::DEFAULTS,'fresh install configuration');
     ok121(!str_contains(file_get_contents($app->file()),'sk-test'),'no API key in state');
     $original=$state;
     $state['schema']=12;unset($state['ai']);

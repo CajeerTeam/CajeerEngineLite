@@ -13,13 +13,13 @@ use CajeerEngine\AI\AIConfig;
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
 {
-    public const SCHEMA = 13;
+    public const SCHEMA = 14;
     public const LIMIT = 4_000_000;
 
     public static function validate(array $state): void
     {
         $version = $state['schema'] ?? null;
-        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], true)) throw new \RuntimeException('Unsupported site schema');
+        if (!in_array($version, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], true)) throw new \RuntimeException('Unsupported site schema');
         $settings = $state['settings'] ?? null;
         if (!is_array($settings) || !is_string($settings['name'] ?? null) || trim($settings['name']) === '' ||
             !is_string($settings['url'] ?? null) || !is_string($settings['email'] ?? null) ||
@@ -44,6 +44,15 @@ final class SiteState
             foreach (['title'=>200,'description'=>500,'body'=>60000] as $field=>$limit) {
                 if (!is_string($page[$field] ?? null) || strlen($page[$field]) > $limit ||
                     !preg_match('//u', $page[$field]) || str_contains($page[$field], "\0")) throw new \RuntimeException('Invalid page field: '.$field);
+            }
+            if (array_key_exists('blocks',$page)) {
+                if ($version < 14) throw new \RuntimeException('Blocks require schema 14');
+                try {
+                    $blocks=\CajeerEngine\Content\Blocks::validate($page['blocks']);
+                    if ($blocks !== $page['blocks'] || \CajeerEngine\Content\Blocks::plain($blocks)!==$page['body']) {
+                        throw new \RuntimeException('Blocks and body are inconsistent');
+                    }
+                } catch (\InvalidArgumentException $error) { throw new \RuntimeException('Invalid page blocks',0,$error); }
             }
             if ($page['title'] === '' || !is_bool($page['published'] ?? null) || !is_bool($page['menu'] ?? null)) {
                 throw new \RuntimeException('Invalid page flags or title');
@@ -164,6 +173,10 @@ final class SiteState
         if ($state['schema'] === 12) {
             $state['ai'] = AIConfig::DEFAULTS;
             $state['schema'] = 13;
+        }
+        if ($state['schema'] === 13) {
+            // Non-destructive: legacy pages retain their original plain text and rendering.
+            $state['schema'] = 14;
         }
         self::validate($state);
         return $state;

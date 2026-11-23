@@ -9,7 +9,7 @@ function reject132(callable $test, string $message): void {
     try { $test(); } catch (InvalidArgumentException) { return; }
     throw new RuntimeException('Pages Management: expected rejection: '.$message);
 }
-check132(Lite::VERSION==='1.3.2' && SiteState::SCHEMA===13,'version and compatible schema');
+check132(version_compare(Lite::VERSION,'1.3.2','>=') && SiteState::SCHEMA===14,'version and compatible schema');
 $root=sys_get_temp_dir().'/lite-pages132-'.bin2hex(random_bytes(5));
 mkdir($root);mkdir($root.'/storage');
 try {

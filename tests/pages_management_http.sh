@@ -82,5 +82,5 @@ curl -fsS -b "$tmp/cookies" "$base/admin?view=pages&sort=path&dir=desc&per_page=
 grep -Fq 'revisions[' "$tmp/pages"
 grep -Fq 'name="operation" value="publish"' "$tmp/pages"
 php bin/cajeer doctor >/dev/null
-php -r '$d=json_decode(file_get_contents("storage/site.json"),true,512,JSON_THROW_ON_ERROR);if($d["schema"]!==13)exit(1);'
+php -r '$d=json_decode(file_get_contents("storage/site.json"),true,512,JSON_THROW_ON_ERROR);if($d["schema"]!==14)exit(1);'
 echo 'Pages Management 1.3.2 real HTTP: authenticated filters, publishing, duplication, atomic bulk, conflict, CSRF and storage OK'

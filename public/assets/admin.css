@@ -86,3 +86,34 @@
 .admin-pages-pagination a{padding:6px 11px;border:1px solid #dce5f0;border-radius:8px;text-decoration:none}
 @media(max-width:1100px){.admin-body .admin-pages-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.admin-body .admin-pages{padding:14px}.admin-body .admin-pages-filters{grid-template-columns:1fr;padding:12px}.admin-pages-heading{align-items:flex-start}}
+
+/* Enhanced Content Editor 1.3.3: block workspace and sand-boxed template preview. */
+.admin-body .cms-editor-shell{padding:24px;border-radius:15px;background:white}
+.cms-editor-header,.cms-editor-toolbar,.cms-editor-footer,.cms-edit-block-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cms-editor-header{justify-content:space-between}.cms-editor-header h2{margin:0 0 4px}.cms-editor-header p{margin:0;color:#66758b}
+.admin-body #cms-editor-form{padding:0;background:transparent;border:0;box-shadow:none;margin:0}
+.cms-editor-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.cms-editor-fields label{font-weight:600}.cms-editor-fields label:nth-child(3){grid-column:1/-1}
+.cms-editor-fields input{display:block;width:100%}.cms-editor-flags{display:flex;gap:20px;flex-wrap:wrap;margin:0 0 20px}
+.cms-editor-workspace{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:20px}
+.cms-editor-compose,.cms-editor-preview{min-width:0;border:1px solid #dbe5f0;border-radius:12px;padding:16px;background:#f8fafd}
+.cms-editor-toolbar{margin:0 0 16px}.cms-editor-toolbar label{display:flex;align-items:center;gap:6px}
+.admin-body .cms-editor-toolbar button,.cms-editor-footer button{padding:8px 12px}
+.cms-edit-block{border:1px solid #dbe5ee;border-radius:10px;background:#fff;padding:13px;margin:0 0 11px}
+.cms-edit-block-head{margin:0 0 10px}.cms-edit-block-head strong{margin-right:auto}
+.cms-block-field{display:block;font-size:.85rem;font-weight:600;margin:0 0 8px;min-width:0}
+.cms-block-field input,.cms-block-field textarea,.cms-block-field select{width:100%;font-size:.93rem}
+.cms-edit-block-head .cms-block-field{display:flex;align-items:center;gap:6px;margin:0}
+.admin-body .cms-block-action{background:#edf3fb;border:1px solid #cddcec;color:#1c4b7c;padding:0 9px;min-width:34px;min-height:34px}
+.cms-block-checkbox{display:block;margin:0 0 10px}
+.cms-editor-preview h3{margin:0 0 12px}
+#cms-live-preview{min-height:100px;padding:14px;background:white;border:1px solid #dce5f0;border-radius:8px;overflow-wrap:anywhere}
+.cms-text{white-space:pre-line}.cms-editor-preview p{font-size:.86rem}
+.cms-preview-frame{width:100%;height:440px;border:1px solid #c8d6e8;border-radius:8px;background:white;margin-top:10px}
+.cms-editor-footer{justify-content:space-between;border-top:1px solid #e0e5ef;padding-top:18px;margin-top:20px}
+.cms-editor-footer #cms-save-button{background:#1760ad;color:#fff;font-weight:700}
+.cms-draft-restore{background:#ebf5ff;color:#154676;border:1px solid #b7cdec}
+.cms-button{display:inline-block;padding:8px 15px;border-radius:7px;color:white;background:#1760ad}
+.cms-link{color:#1760ad;text-decoration:underline}
+@media(max-width:1120px){.cms-editor-workspace{grid-template-columns:1fr}}
+@media(max-width:620px){.admin-body .cms-editor-shell{padding:13px}.cms-editor-fields{grid-template-columns:1fr}.cms-editor-fields label:nth-child(3){grid-column:auto}}

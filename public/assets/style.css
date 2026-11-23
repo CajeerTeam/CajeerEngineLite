@@ -27,3 +27,10 @@ main section table{display:block;overflow-x:auto}
 .ai-edit-columns pre, #ai-editor-history pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:24rem; overflow-y:auto; }
 #ai-editor-history details { margin:.8rem 0; padding:.6rem; border:1px solid #adb5bd; border-radius:.4rem; }
 @media(max-width:720px) { .ai-edit-columns { grid-template-columns:1fr; } }
+
+/* Sanitized public block layout (server renders escaped text and allowlisted tags). */
+.cms-block-content p{margin:0 0 1em}.cms-block-content h2,.cms-block-content h3,.cms-block-content h4{margin:1.3em 0 .5em}
+.cms-block-content blockquote{padding:8px 16px;margin:1em 0;border-left:4px solid #8eaac8;background:#f1f5fa;white-space:pre-line}
+.cms-block-content .cms-divider{border:0;border-top:1px solid #bdcadd;margin:1.4em 0}
+.cms-block-content .cms-list{padding-left:1.6em;margin:0 0 1em}.cms-block-content .cms-list li{margin:.22em 0}
+.cms-block-content .cms-button{display:inline-block;background:#1760ad;color:#fff;padding:9px 15px;border-radius:8px;text-decoration:none}

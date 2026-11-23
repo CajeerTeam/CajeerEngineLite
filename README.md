@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.3.2
+# CajeerEngine Lite Edition 1.3.3
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -1292,7 +1292,7 @@ python tests/browser_131.py
 Dashboard показывает только локальное состояние, не утверждает, что события были
 доставлены в GA4/Метрику или что продакшен-приёмка OpenAI и SkiF4er ID завершена.
 
-## 1.3.2 — Pages Management
+## 1.3.3 — Pages Management
 
 Раздел `/admin?view=pages` содержит **рабочий серверный менеджер страниц**:
 поиск по заголовку, URL и описанию (без требования `mbstring`), фильтр
@@ -1327,3 +1327,12 @@ php tests/core_132.php
 bash tests/pages_management_http.sh
 python tests/browser_132.py
 ```
+
+
+### 1.3.3 — Enhanced Content Editor
+
+The authenticated `/admin/editor` page is a functional client-side block editor: headings H2–H6, paragraphs, quotes, ordered/unordered lists, safe HTTPS/local links, buttons and dividers. Blocks can be inserted, reordered and removed; undo/redo and per-tab draft recovery are provided. A live text-safe preview is shown next to the editor; **Check on site** posts the proposed content to `/admin/editor/preview`, rendering the actual `.cjr` template in a sandboxed, script-disabled iframe without saving it. Clicking **Save** performs a CSRF-protected, revision-checked, atomic JSON transaction and retains the previous version in AI Page History. Legacy plain-text pages remain unchanged until edited in the block editor; the old text editor remains accessible.
+
+Schema **14** adds an optional `blocks` array to each page while retaining the plain `body` field for search and AI. Migration from schema 13 preserves all original text and publication flags; back up `storage/site.json`, `storage/ai/` before upgrade. AI metadata changes preserve blocks; AI body rewrites intentionally return pages to plain-text mode (the old structured document is available via page history). Block content is escaped server-side and never interpreted as submitted HTML or JavaScript.
+
+Checks: `php tests/core_133.php`, `bash tests/block_editor_http.sh`, `python tests/browser_133.py`.

@@ -31,5 +31,5 @@ grep -q 'ai-chat-send' "$tmp/chat2"
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" -d "action=clear&csrf=$csrf" "$base/admin/ai") == 303 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' "$base/assets/ai-chat.js") == 200 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" -d "action=send&csrf=$csrf&id=../../bad&message=Hello" "$base/admin/ai") == 503 ]]
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==13||$s["ai"]["enabled"]!==false)exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==14||$s["ai"]["enabled"]!==false)exit(1);'
 echo 'Lite 1.2.2 authenticated AI chat, private CRUD, CSP, CSRF and unconfigured-provider HTTP OK'

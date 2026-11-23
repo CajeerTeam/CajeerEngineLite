@@ -9,7 +9,7 @@ use CajeerEngine\Storage\SiteState;
 function verify131(bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException('Admin Experience: '.$message);
 }
-verify131(version_compare(Lite::VERSION, '1.3.1', '>=') && SiteState::SCHEMA === 13, 'compatible release');
+verify131(version_compare(Lite::VERSION, '1.3.1', '>=') && SiteState::SCHEMA === 14, 'compatible release');
 foreach (['dashboard','pages','ai','analytics','integrations','security','settings'] as $view) {
     verify131(AdminExperience::view(['view'=>$view]) === $view, 'navigation view '.$view);
 }

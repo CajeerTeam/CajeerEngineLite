@@ -20,7 +20,7 @@ function del119(string $path): void {
 }
 function origin119(): string { return 'https://lite.example.test'; }
 
-ok119(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA === 13, 'version and compatible schema');
+ok119(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA === 14, 'version and compatible schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 ok119($key instanceof OpenSSLAsymmetricKey, 'RSA key generation');
 $details=openssl_pkey_get_details($key);
@@ -116,7 +116,7 @@ try {
         $original=file_get_contents($root.'/storage/site.json');
         ok119($app->migrate(), 'migration '.$version.'->12 ran');
         $upgraded=$app->load();
-        ok119($upgraded['schema']===13 && $upgraded['pages']===$seed['pages'] &&
+        ok119($upgraded['schema']===14 && $upgraded['pages']===$seed['pages'] &&
             $upgraded['integrations']===$seed['integrations'] && $upgraded['password']===$seed['password'],
             'migration '.$version.' preserves actual website and analytics configuration');
         ok119($upgraded['auth_policy']===AuthPolicy::DEFAULTS, 'migration '.$version.' initializes hybrid policy');

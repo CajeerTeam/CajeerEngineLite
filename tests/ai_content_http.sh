@@ -25,7 +25,7 @@ csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/content" | he
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" -d "csrf=$csrf&action=discard" "$base/admin/ai/content") == 303 ]]
 curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/admin"
 grep -Fq '/admin/ai/content' "$tmp/admin"
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==13 || count($s["pages"])!==1) exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==14 || count($s["pages"])!==1) exit(1);'
 php bin/cajeer ai status > "$tmp/usage"
 php -r '$x=json_decode(file_get_contents($argv[1]),true);if($x["usage"]["requests"]!==0)exit(1);' "$tmp/usage"
 echo 'Lite 1.2.3 authenticated content generation forms, CSRF, no provider leakage and unchanged pages OK'

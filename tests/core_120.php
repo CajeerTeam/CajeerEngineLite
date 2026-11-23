@@ -16,7 +16,7 @@ function clean120(string $path): void {
     if (is_link($path)||is_file($path)) { unlink($path); return; }
     if (is_dir($path)) { foreach(new FilesystemIterator($path) as $f) clean120($f->getPathname());rmdir($path); }
 }
-check120(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===13,'release and unchanged JSON schema');
+check120(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===14,'release and unchanged JSON schema');
 $key=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048]);
 check120($key instanceof OpenSSLAsymmetricKey,'RSA 2048 support');
 $details=openssl_pkey_get_details($key);

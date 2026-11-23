@@ -30,5 +30,5 @@ csrf=$(grep -o 'name="csrf" value="[a-f0-9]*"' "$tmp/admin" | head -1 | cut -d '
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" --data-urlencode "csrf=$csrf" --data-urlencode 'action=unknown' "$base/admin/ai/support") == 400 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" --data-urlencode "csrf=$csrf" --data-urlencode 'action=delete' "$base/admin/ai/support") == 303 ]]
 grep -Fq 'AI Technical Support — диагностика и поддержка CMS' "$tmp/admin"
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==13||count($s["pages"])!==1)exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==14||count($s["pages"])!==1)exit(1);'
 echo 'Lite 1.2.7 HTTP AI support: real diagnostics, export, authenticated access, CSRF, offline guidance, no paid requests without key OK'

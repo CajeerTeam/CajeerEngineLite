@@ -39,6 +39,6 @@ if($m["automated_ok"]||!$c["automated_ok"]||$c["production_accepted"]||
    !in_array("paid_api_smoke",array_column(array_filter($n["checks"],fn($x)=>$x["status"]==="fail"),"id"),true)) exit(1);
 ' "$tmp/missing.json" "$tmp/configured.json" "$tmp/no-consent.json"
 ! grep -Fq 'sk-SafeFakeReleaseKey12345' "$tmp/configured.json"
-php -r '$v=json_decode(file_get_contents("storage/site.json"),true,64,JSON_THROW_ON_ERROR);if($v["schema"]!==13||count($v["pages"])!==1)exit(1);'
+php -r '$v=json_decode(file_get_contents("storage/site.json"),true,64,JSON_THROW_ON_ERROR);if($v["schema"]!==14||count($v["pages"])!==1)exit(1);'
 [[ ! -f storage/ai/usage-$(date -u +%F).json ]]
 echo 'Lite 1.3.0 authenticated release UI, read-only CLI, explicit paid consent, no leaked credentials or paid calls OK'

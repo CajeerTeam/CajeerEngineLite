@@ -45,7 +45,7 @@ revision=$(grep -o 'name="revision" value="[a-f0-9]*"' "$tmp/editor2" | head -1 
     --data-urlencode "csrf=$csrf" --data-urlencode 'action=restore' --data-urlencode 'path=/' \
     --data-urlencode "snapshot_id=$snapshot" --data-urlencode "revision=$revision" \
     --data-urlencode 'confirm_restore=1' "$base/admin/ai/editor") == 303 ]]
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==13 || $s["pages"]["/"]["body"]==="Edited from backend") exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==14 || $s["pages"]["/"]["body"]==="Edited from backend") exit(1);'
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" \
     --data-urlencode "csrf=$csrf" --data-urlencode 'action=restore' --data-urlencode 'path=/' \
     --data-urlencode "snapshot_id=$snapshot" --data-urlencode "revision=$revision" \

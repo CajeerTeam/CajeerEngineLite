@@ -9,7 +9,7 @@ use CajeerEngine\Storage\SiteState;
 function c122(bool $good,string $why):void{if(!$good)throw new RuntimeException('Chat 1.2.2: '.$why);}
 function fail122(callable $fn,string $why):void{try{$fn();}catch(RuntimeException|InvalidArgumentException){return;}throw new RuntimeException('Unexpected chat success: '.$why);}
 function rm122(string $path):void{if(is_link($path)||is_file($path)){unlink($path);return;}if(is_dir($path)){foreach(new FilesystemIterator($path) as $f)rm122($f->getPathname());rmdir($path);}}
-c122(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===13,'version/schema');
+c122(version_compare(Lite::VERSION,'1.2.2','>=') && SiteState::SCHEMA===14,'version/schema');
 $root=sys_get_temp_dir().'/cajeer-chat122-'.bin2hex(random_bytes(8));mkdir($root,0700);
 try {
     $app=new Lite($root);$app->install('TestPassword122ABC!','https://lite.example.test','Chat test');

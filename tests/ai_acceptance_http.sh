@@ -39,5 +39,5 @@ unsafe=$?
 set -e
 [[ "$unsafe" == 1 ]]
 php -r '$s=json_decode(file_get_contents($argv[1]),true,64,JSON_THROW_ON_ERROR);if($s["automated_ok"]||!in_array("ai_files",array_column(array_filter($s["checks"],fn($c)=>$c["status"]==="fail"),"id"),true))exit(1);' "$tmp/unsafe.json"
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true,64,JSON_THROW_ON_ERROR);if($s["schema"]!==13||!$s["ai"]["enabled"])exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true,64,JSON_THROW_ON_ERROR);if($s["schema"]!==14||!$s["ai"]["enabled"])exit(1);'
 echo 'Lite 1.2.9 HTTP protected AI routes, actual CLI release gate, privacy, manual outstanding status and unsafe storage rejection OK'

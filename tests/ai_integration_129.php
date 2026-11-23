@@ -14,7 +14,7 @@ function clean129(string $path):void {
     if (is_file($path)||is_link($path)) {unlink($path);return;}
     if (is_dir($path)) {foreach(new FilesystemIterator($path) as $entry)clean129($entry->getPathname());rmdir($path);}
 }
-ok129(version_compare(Lite::VERSION,'1.2.9','>=') && SiteState::SCHEMA===13,'release version and storage compatibility');
+ok129(version_compare(Lite::VERSION,'1.2.9','>=') && SiteState::SCHEMA===14,'release version and storage compatibility');
 $root=sys_get_temp_dir().'/lite-ai-acceptance-'.bin2hex(random_bytes(8));
 mkdir($root.'/templates/default',0700,true);
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');
@@ -128,6 +128,6 @@ try {
     $acceptance=Acceptance::run($root,$app->load());
     ok129(!$acceptance['automated_ok'] && !$acceptance['production_accepted'] && count($acceptance['manual'])>0,
         'release check never fabricates production acceptance without real key');
-    ok129($app->load()['schema']===13 && $app->load()['pages']['/']['published']===true,'site stays valid');
+    ok129($app->load()['schema']===14 && $app->load()['pages']['/']['published']===true,'site stays valid');
     echo "Lite 1.2.9 integrated page generation, metadata preservation, editor/history/undo, SEO, SSE chat, cached analytics, local support, shared quota and release-gate OK\n";
 } finally {clean129($root);}

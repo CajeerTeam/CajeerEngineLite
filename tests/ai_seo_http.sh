@@ -34,5 +34,5 @@ csrf=$(grep -o 'name="csrf" value="[a-f0-9]*"' "$tmp/seo" | head -1 | cut -d '"'
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/cookies" "$base/admin/ai/seo?path=%2Funknown") == 404 ]]
 curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/admin"
 grep -Fq 'AI SEO Assistant' "$tmp/admin"
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==13||count($s["pages"])!==1)exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==14||count($s["pages"])!==1)exit(1);'
 echo 'Lite 1.2.5 HTTP SEO audit UI, login, CSRF, forbidden generation, stale preview, no unwanted writes OK'

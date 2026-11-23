@@ -4,6 +4,7 @@ require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Admin\AdminExperience;
 use CajeerEngine\Admin\PagesManagement;
+use CajeerEngine\Admin\{BlockEditor,BlockEditorView};
 use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView,ProductionAIAcceptance};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
@@ -35,7 +36,7 @@ function go(string $path): never {
 function shell(string $title,string $html,bool $aiChat=false): never {
     header('Content-Type: text/html; charset=utf-8');
     $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
-    $admin=is_string($route) && ($route==='/admin' || str_starts_with($route,'/admin/ai')) &&
+    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || str_starts_with($route,'/admin/ai')) &&
         $title!=='Вход в админ-панель';
     if ($admin) {
         $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
@@ -49,7 +50,8 @@ function shell(string $title,string $html,bool $aiChat=false): never {
         '<title>'.e($title).'</title><link rel="stylesheet" href="/assets/style.css">'.
         ($admin?'<link rel="stylesheet" href="/assets/admin.css">':'').
         '<body'.($admin?' class="admin-body"':'').'>'.$html.
-        ($aiChat?'<script src="/assets/ai-chat.js" defer></script>':'').'</body></html>';
+        ($aiChat?'<script src="/assets/ai-chat.js" defer></script>':'').
+        ($route==='/admin/editor'?'<script src="/assets/block-editor.js" defer></script>':'').'</body></html>';
     exit;
 }
 function input(string $name,string $value='',string $type='text'): string { return '<label>'.e($name).'<input name="'.e($name).'" type="'.e($type).'" value="'.e($value).'"></label>'; }
@@ -58,7 +60,7 @@ function form(string $action,string $html): string { return '<form method="post"
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin'); header('X-Frame-Options: DENY');
 header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
 header('Cross-Origin-Opener-Policy: same-origin');
-header("Content-Security-Policy: default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src '".(str_starts_with(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH) ?: '/', '/admin/editor')?'self':'none')."'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; frame-src 'self'");
 header('Content-Type: text/html; charset=utf-8');
 try {
     $raw=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
@@ -69,7 +71,7 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -134,6 +136,37 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/editor' || $path==='/admin/editor/preview') {
+            if (!$auth) stop(403,'Administrator login required');
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                try {
+                    if ($path==='/admin/editor/preview') {
+                        $candidate=BlockEditor::candidate($_POST);
+                        header("Content-Security-Policy: sandbox; default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'self'");
+                        header('X-Content-Type-Options: nosniff');
+                        header('X-Frame-Options: SAMEORIGIN');
+                        header('Content-Type: text/html; charset=utf-8');
+                        echo $app->render($d,$candidate);exit;
+                    }
+                    if (($_POST['action']??null)!=='save_blocks') stop(400,'Invalid editor operation');
+                    $saved=BlockEditor::save($app,$_POST);
+                    $_SESSION['admin_notice']='Страница сохранена.';
+                    go('/admin/editor?path='.rawurlencode($saved));
+                } catch (InvalidArgumentException $failure) {
+                    stop(422,$failure->getMessage());
+                }
+            }
+            if ($path==='/admin/editor/preview') { header('Allow: POST');stop(405,'Method not allowed'); }
+            $selected=$_GET['path']??null;
+            if (isset($_GET['new']) && $_GET['new']==='1') $selected=null;
+            if ($selected!==null && (!is_string($selected) || !isset($d['pages'][$selected]))) stop(404,'Page not found');
+            $page=$selected!==null?$d['pages'][$selected]:[
+                'path'=>'','title'=>'','description'=>'','body'=>'','published'=>false,'menu'=>false];
+            $notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
+            shell('Визуальный редактор', (is_string($notice)?'<p class="admin-feedback">'.e($notice).'</p>':'').
+                BlockEditorView::render($page,$_SESSION['csrf'],$selected!==null));
+        }
         if ($path === '/admin/ai/support') {
             if (!$auth) stop(403,'Administrator login required');
             $rawCategory=$method==='POST' ? ($_POST['category']??'general') : ($_GET['category']??'general');
@@ -846,10 +879,19 @@ try {
                 }
                 elseif ($action==='save') {
                     $p=Lite::page($_POST); $old=Lite::field($_POST,'old',1024); $revision=Lite::field($_POST,'revision',64);
-                    $app->change(function($d)use($p,$old,$revision){
+                    $postedBody=$_POST['body']??null;
+                    $app->change(function($d)use($p,$old,$revision,$postedBody){
                         if ($old!=='' && (!isset($d['pages'][$old]) || !hash_equals(hash('sha256',json_encode($d['pages'][$old],JSON_THROW_ON_ERROR)),$revision))) throw new InvalidArgumentException('Page changed; reload');
                         if ($old==='/' && ($p['path']!=='/' || !$p['published'])) throw new InvalidArgumentException('Home must remain published at /');
                         if (isset($d['pages'][$p['path']]) && $old!==$p['path']) throw new InvalidArgumentException('Path already exists');
+                        if ($old!=='' && isset($d['pages'][$old])) {
+                            // A metadata-only write through the legacy textarea must not
+                            // trim the stored body or discard an existing block document.
+                            if (is_string($postedBody) && $postedBody===$d['pages'][$old]['body']) {
+                                $p['body']=$d['pages'][$old]['body'];
+                            }
+                            $p=\CajeerEngine\Content\Blocks::reconcile($d['pages'][$old],$p);
+                        }
                         if ($old!=='') unset($d['pages'][$old]);
                         if (count($d['pages'])>=100) throw new InvalidArgumentException('Page limit: 100');
                         $d['pages'][$p['path']]=$p;return $d;
@@ -1077,7 +1119,8 @@ try {
             $p=is_string($edit)&&isset($d['pages'][$edit])?$d['pages'][$edit]:['path'=>'','title'=>'','description'=>'','body'=>'','published'=>false,'menu'=>true];
             $old=$p['path']; $rev=$old!==''?hash('sha256',json_encode($p,JSON_THROW_ON_ERROR)):'';
             $hidden='<input type="hidden" name="old" value="'.e($old).'"><input type="hidden" name="revision" value="'.e($rev).'">';
-            $html.=form('save','<h2>Редактор страницы</h2>'.$hidden.input('path',$p['path']).input('title',$p['title']).input('description',$p['description']).'<label>Текст<textarea name="body">'.e($p['body']).'</textarea></label><label><input type="checkbox" name="published" value="1" '.($p['published']?'checked':'').'> Опубликовано</label><label><input type="checkbox" name="menu" value="1" '.($p['menu']?'checked':'').'> В меню</label><button>Сохранить</button>');
+            $html.='<p><a href="/admin/editor'.($old!==''?'?path='.rawurlencode($old):'?new=1').'">Открыть визуальный блочный редактор</a></p>';
+            $html.=form('save','<h2>Текстовый редактор (совместимый)</h2>'.$hidden.input('path',$p['path']).input('title',$p['title']).input('description',$p['description']).'<label>Текст<textarea name="body">'.e($p['body']).'</textarea></label><label><input type="checkbox" name="published" value="1" '.($p['published']?'checked':'').'> Опубликовано</label><label><input type="checkbox" name="menu" value="1" '.($p['menu']?'checked':'').'> В меню</label><button>Сохранить</button>');
             if ($old!==''&&$old!=='/') $html.=form('delete',$hidden.'<button>Удалить страницу</button>');
         }
         $panels['pages']=$html; $html='';

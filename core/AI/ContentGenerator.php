@@ -124,7 +124,7 @@ final class ContentGenerator
                 foreach (['title', 'description', 'body'] as $field) {
                     if ($field !== $mode) $updated[$field] = $old[$field];
                 }
-                $state['pages'][$path] = $updated;
+                $state['pages'][$path] = \CajeerEngine\Content\Blocks::reconcile($old,$updated);
             }
             return $state;
         });

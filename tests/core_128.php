@@ -7,7 +7,7 @@ use CajeerEngine\Storage\SiteState;
 function check128(bool $ok,string $label):void {if(!$ok)throw new RuntimeException('AI 1.2.8: '.$label);}
 function fail128(callable $run,string $label):void {try{$run();}catch(RuntimeException|InvalidArgumentException){return;}throw new RuntimeException('AI 1.2.8 accepted '.$label);}
 function cleanup128(string $path):void {if(is_link($path)||is_file($path)){unlink($path);return;}if(is_dir($path)){foreach(new FilesystemIterator($path) as $item)cleanup128($item->getPathname());rmdir($path);}}
-check128(version_compare(Lite::VERSION,'1.2.8','>=') && SiteState::SCHEMA===13,'compatible schema and version');
+check128(version_compare(Lite::VERSION,'1.2.8','>=') && SiteState::SCHEMA===14,'compatible schema and version');
 $root=sys_get_temp_dir().'/cajeer-ai128-'.bin2hex(random_bytes(8));mkdir($root,0700,true);
 try {
     $app=new Lite($root);$app->install('TestAdminCostPassword128','https://example.test','Budget test');

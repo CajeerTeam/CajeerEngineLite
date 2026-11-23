@@ -59,7 +59,7 @@ final class PageEditor
         }
         if ($candidate['path']!==$page['path'] || $candidate['published']!==$page['published'] ||
             $candidate['menu']!==$page['menu']) throw new \InvalidArgumentException('AI cannot change page publication or URL');
-        return $candidate;
+        return \CajeerEngine\Content\Blocks::reconcile($page,$candidate);
     }
     public static function apply(Lite $app,PageHistory $history,array $proposal,array $post): string
     {

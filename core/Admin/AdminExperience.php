@@ -47,6 +47,7 @@ final class AdminExperience
             $active = $path === '/admin' && $view === $id;
             $nav .= self::link('/admin?view='.$id, $label, $active);
         }
+        $nav .= self::link('/admin/editor?new=1', 'Блочный редактор', $path === '/admin/editor');
         $nav .= '<div class="admin-nav-divider" aria-hidden="true"></div><p class="admin-nav-label">AI-инструменты</p>';
         foreach ([
             '/admin/ai' => 'Чат',
@@ -103,7 +104,7 @@ final class AdminExperience
         $html .= '</div><div class="admin-dashboard-grid"><section class="admin-dashboard-card"><h2>Быстрые действия</h2><div class="admin-quick-links">';
         foreach ([
             '/admin?view=pages'=>'Управление страницами',
-            '/admin?view=pages&new=1'=>'Новая страница',
+            '/admin/editor?new=1'=>'Новая страница (блоки)',
             '/admin/ai/editor'=>'AI-редактор',
             '/admin/ai/seo'=>'SEO-аудит',
             '/admin?view=analytics&analytics=1'=>'Отчёты аналитики',

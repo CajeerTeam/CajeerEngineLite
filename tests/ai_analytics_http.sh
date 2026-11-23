@@ -34,5 +34,5 @@ grep -Fq 'name="action" value="generate"' "$tmp/with-report"
  --data-urlencode 'action=unknown' --data-urlencode 'days=7' "$base/admin/ai/analytics") == 400 ]]
 curl -fsS -b "$tmp/cookies" "$base/admin" > "$tmp/admin"
 grep -Fq 'AI Analytics Insights — анализ отчётов и конверсий' "$tmp/admin"
-php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==13||count($s["pages"])!==1)exit(1);'
+php -r '$s=json_decode(file_get_contents("storage/site.json"),true);if($s["schema"]!==14||count($s["pages"])!==1)exit(1);'
 echo 'Lite 1.2.6 HTTP AI analytics: private reports, authenticated read-only insights, CSRF, no provider or model calls without configured key OK'

@@ -40,6 +40,7 @@ final class SEOAssistant
         $candidate = Lite::page([...$page, ...$fields,
             'published' => $page['published'] ? '1' : '', 'menu' => $page['menu'] ? '1' : '']);
         if ($scope === 'metadata') $candidate['body'] = $page['body']; // preserve untouched text byte-for-byte
+        $candidate = \CajeerEngine\Content\Blocks::reconcile($page,$candidate);
         if ($candidate['path'] !== $path || $candidate['published'] !== $page['published'] ||
             $candidate['menu'] !== $page['menu']) throw new \RuntimeException('Invalid AI SEO proposal');
         if ($candidate === $page) throw new \InvalidArgumentException('SEO suggestion contains no changes');
@@ -79,6 +80,7 @@ final class SEOAssistant
             'published' => $proposal['original']['published'] ? '1' : '',
             'menu' => $proposal['original']['menu'] ? '1' : '']);
         if ($scope === 'metadata') $candidate['body'] = $proposal['original']['body'];
+        $candidate = \CajeerEngine\Content\Blocks::reconcile($proposal['original'],$candidate);
         if ($candidate === $proposal['original']) throw new \InvalidArgumentException('No SEO changes selected');
         $app->change(static function(array $state) use ($proposal, $candidate, $history): array {
             if (!hash_equals($state['identity']['generation'], $proposal['owner_generation'])) {

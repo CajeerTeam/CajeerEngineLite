@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace CajeerEngine\AI;
 
 use CajeerEngine\Lite;
+use CajeerEngine\Content\Blocks;
 use CajeerEngine\Update\{OperationFiles,OperationLock};
 
 /** Durable, private, owner-scoped pre-edit snapshots. Used INSIDE site transactions. */
@@ -50,13 +51,13 @@ final class PageHistory
         clearstatcache(true,$file);
         $stat=@lstat($file);
         if (!is_array($stat) || ($stat['mode']&0170000)!==0100000 || $stat['nlink']!==1 ||
-            ($stat['mode']&0077)!==0 || $stat['size']>140000) throw new \RuntimeException('Page history entry missing or unsafe');
+            ($stat['mode']&0077)!==0 || $stat['size']>320000) throw new \RuntimeException('Page history entry missing or unsafe');
         $s=OperationFiles::read($file);
         if (array_keys($s)!==['id','created','generation','path','revision','page'] || $s['id']!==$id ||
             $s['path']!==$path || $s['generation']!==$generation ||
             !is_int($s['created']) || $s['created']<1 || $s['created']>time()+60 ||
             !is_string($s['revision']) || !preg_match('/^[a-f0-9]{64}$/D',$s['revision']) ||
-            !is_array($s['page']) || array_keys($s['page'])!==['path','title','description','body','published','menu'] ||
+            !is_array($s['page']) || !in_array(array_keys($s['page']),[['path','title','description','body','published','menu'],['path','title','description','body','published','menu','blocks']],true) ||
             $s['page']['path']!==$path || !is_bool($s['page']['published']) || !is_bool($s['page']['menu']) ||
             !hash_equals($s['revision'],PageEditor::revision($s['page']))) {
             throw new \RuntimeException('Page history is corrupt');
@@ -77,6 +78,13 @@ final class PageHistory
         } catch (\Throwable $e) { throw new \RuntimeException('Invalid saved page',0,$e); }
         if ($canonical['path']!==$page['path'] || $canonical['published']!==$page['published'] ||
             $canonical['menu']!==$page['menu']) throw new \RuntimeException('Invalid saved page');
+        if (isset($page['blocks'])) {
+            try {
+                if (Blocks::validate($page['blocks'])!==$page['blocks'] || Blocks::plain($page['blocks'])!==$page['body']) {
+                    throw new \RuntimeException('Block snapshot differs from plain text');
+                }
+            } catch (\InvalidArgumentException $e) { throw new \RuntimeException('Invalid block snapshot',0,$e); }
+        }
         foreach (['title'=>200,'description'=>500,'body'=>60000] as $field=>$limit) {
             $value=$page[$field];
             if (!is_string($value) || strlen($value)>$limit || str_contains($value,"\0") ||
@@ -110,7 +118,7 @@ final class PageHistory
     public function save(array $page): string
     {
         $path=$page['path']??null;
-        if (!is_string($path) || array_keys($page)!==['path','title','description','body','published','menu']) {
+        if (!is_string($path) || !in_array(array_keys($page),[['path','title','description','body','published','menu'],['path','title','description','body','published','menu','blocks']],true)) {
             throw new \InvalidArgumentException('Invalid page snapshot');
         }
         self::validatePage($page);
@@ -120,7 +128,7 @@ final class PageHistory
             $data=['id'=>$id,'created'=>time(),'generation'=>$this->generation,'path'=>$path,
                 'revision'=>PageEditor::revision($page),'page'=>$page];
             $json=json_encode($data,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-            if (strlen($json)>130000) throw new \RuntimeException('Page snapshot exceeds storage limit');
+            if (strlen($json)>310000) throw new \RuntimeException('Page snapshot exceeds storage limit');
             OperationFiles::write($dir.'/'.$id.'.json',$json."\n",0600);
             // Cap retained versions; the latest snapshot always survives.
             if (count($existing)>=20) foreach (array_slice($existing,19) as $old) {

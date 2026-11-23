@@ -105,7 +105,7 @@ final class PagesManagement
         $countPublished = count(array_filter($pages, static fn(array $p): bool => $p['published']));
         $html = '<section class="admin-pages"><div class="admin-pages-heading"><div><h2>Управление страницами</h2>'.
             '<p>Всего: '.count($pages).' · Опубликовано: '.$countPublished.' · Черновиков: '.(count($pages)-$countPublished).'</p></div>'.
-            '<a class="admin-page-create" href="/admin?view=pages&amp;new=1">Создать страницу</a></div>'.
+            '<a class="admin-page-create" href="/admin/editor?new=1">Создать страницу</a></div>'.
             '<form method="get" action="/admin" class="admin-pages-filters" role="search">'.
             '<input type="hidden" name="view" value="pages">'.
             '<label>Поиск по названию, адресу и описанию<input type="search" name="q" maxlength="120" value="'.$e($l['q']).'" placeholder="Название или адрес страницы"></label>'.
@@ -129,7 +129,8 @@ final class PagesManagement
                 '<input type="hidden" form="admin-pages-bulk" name="revisions['.$key.']" value="'.$e($revision).'"></td>'.
                 '<td><strong>'.$e($p['title']).'</strong><small>'.$e($path).'</small></td>'.
                 '<td><span class="admin-pages-badge '.($p['published']?'is-published':'is-draft').'">'.($p['published']?'Опубликована':'Черновик').'</span></td>'.
-                '<td class="admin-pages-actions"><a href="/admin?view=pages&amp;edit='.rawurlencode($path).'">Изменить</a>'.
+                '<td class="admin-pages-actions"><a href="/admin?view=pages&amp;edit='.rawurlencode($path).'">Текст</a>'.
+                '<a href="/admin/editor?path='.rawurlencode($path).'">Блоки</a>'.
                 '<a href="/admin/ai/editor?path='.rawurlencode($path).'">AI-редактор</a>'.
                 '<a href="/admin/ai/seo?path='.rawurlencode($path).'">SEO</a>'.
                 '<form method="post" action="/admin" class="admin-pages-inline">'.

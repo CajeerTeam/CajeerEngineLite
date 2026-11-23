@@ -25,5 +25,5 @@ php bin/cajeer ai status > "$tmp/usage.json"
 php -r '$v=json_decode(file_get_contents($argv[1]),true);if($v["usage"]["cost_policy"]["monthly_cents"]!==100 || $v["usage"]["monthly_spent_microcents"]!==0)exit(1);' "$tmp/usage.json"
 [[ $(curl -s -o /dev/null -w '%{http_code}' "$base/admin?ai=1") == 200 ]]
 if curl -fsS "$base/admin?ai=1" | grep -q 'Цена входных 1 млн'; then echo 'Unauthenticated budget UI exposed' >&2; exit 1; fi
-php -r '$v=json_decode(file_get_contents("storage/site.json"),true);if($v["schema"]!==13)exit(1);'
+php -r '$v=json_decode(file_get_contents("storage/site.json"),true);if($v["schema"]!==14)exit(1);'
 echo 'Lite 1.2.8 authenticated budget configuration, CSRF, file permissions, quota status and unchanged site schema OK'

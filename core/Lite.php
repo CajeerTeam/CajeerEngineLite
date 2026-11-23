@@ -12,7 +12,7 @@ use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.3.2';
+    public const VERSION = '1.3.3';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
@@ -69,7 +69,7 @@ final class Lite
         return $engine->renderName('default.page',[
             'page'=>$p, 'site'=>$d['settings'], 'navigation'=>$nav,
             'canonical'=>$d['settings']['url'].$p['path'],
-            'body_html'=>nl2br(self::esc($p['body']),false),
+            'body_html'=>isset($p['blocks']) ? \CajeerEngine\Content\Blocks::html($p['blocks']) : nl2br(self::esc($p['body']),false),
             'consent'=>$d['consent'], 'consent_saved'=>$choice !== null,
             'consent_mask'=>$choice === null ? 0 : ConsentCookie::mask($choice),
             'ga4_active'=>GA4Config::active($d) && !GTMConfig::active($d), 'ga4'=>$d['integrations']['ga4'],
