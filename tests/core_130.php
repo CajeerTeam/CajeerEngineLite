@@ -19,7 +19,7 @@ function output130(string $text,int $input=12,int $out=8):array {
         'usage'=>['input_tokens'=>$input,'output_tokens'=>$out]];
 }
 
-check130(Lite::VERSION==='1.3.0' && SiteState::SCHEMA===13,'stable version and unchanged JSON schema');
+check130(version_compare(Lite::VERSION,'1.3.0','>=') && SiteState::SCHEMA===13,'stable version and unchanged JSON schema');
 $root=sys_get_temp_dir().'/lite-ai-stable130-'.bin2hex(random_bytes(8));
 mkdir($root.'/templates/default',0700,true);
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');

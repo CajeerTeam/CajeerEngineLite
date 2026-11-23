@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\Admin\AdminExperience;
 use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView,ProductionAIAcceptance};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
@@ -12,8 +13,44 @@ use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,M
 $app=new Lite(dirname(__DIR__));
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
-function go(string $path): never { header('Location: '.$path,true,303); exit; }
-function shell(string $title,string $html,bool $aiChat=false): never { header('Content-Type: text/html; charset=utf-8'); echo '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.e($title).'</title><link rel="stylesheet" href="/assets/style.css"><body><header><a href="/">На сайт</a><a href="/admin">CajeerEngine Lite</a></header><main><h1>'.e($title).'</h1>'.$html.'</main>'.($aiChat?'<script src="/assets/ai-chat.js" defer></script>':'').'</body></html>'; exit; }
+function go(string $path): never {
+    // Keep the administrator in the section that was just updated.
+    // Mapping is server-owned; submitted data never becomes a redirect target.
+    if ($path==='/admin' && ($_SERVER['REQUEST_METHOD']??'')==='POST') {
+        $action=$_POST['action']??null;
+        $views=[
+            'save'=>'pages','delete'=>'pages','settings'=>'settings','modules'=>'settings',
+            'consent'=>'integrations','ga4'=>'integrations','metrica'=>'integrations',
+            'gtm'=>'integrations','clarity'=>'integrations','matomo'=>'integrations',
+            'session_revoke_others'=>'security',
+        ];
+        if (is_string($action) && isset($views[$action])) {
+            $_SESSION['admin_notice']='Изменения сохранены.';
+            $path='/admin?view='.$views[$action];
+        }
+    }
+    header('Location: '.$path,true,303); exit;
+}
+function shell(string $title,string $html,bool $aiChat=false): never {
+    header('Content-Type: text/html; charset=utf-8');
+    $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
+    $admin=is_string($route) && ($route==='/admin' || str_starts_with($route,'/admin/ai')) &&
+        $title!=='Вход в админ-панель';
+    if ($admin) {
+        $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
+        $html=AdminExperience::frame($title,$html,$route,$view,$_SESSION['csrf']);
+    } else {
+        $html='<header><a href="/">На сайт</a><a href="/admin">CajeerEngine Lite</a></header>'.
+            '<main><h1>'.e($title).'</h1>'.$html.'</main>';
+    }
+    echo '<!doctype html><html lang="ru"><meta charset="utf-8">'.
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'.
+        '<title>'.e($title).'</title><link rel="stylesheet" href="/assets/style.css">'.
+        ($admin?'<link rel="stylesheet" href="/assets/admin.css">':'').
+        '<body'.($admin?' class="admin-body"':'').'>'.$html.
+        ($aiChat?'<script src="/assets/ai-chat.js" defer></script>':'').'</body></html>';
+    exit;
+}
 function input(string $name,string $value='',string $type='text'): string { return '<label>'.e($name).'<input name="'.e($name).'" type="'.e($type).'" value="'.e($value).'"></label>'; }
 function token(): string { return '<input type="hidden" name="csrf" value="'.e($_SESSION['csrf']).'">'; }
 function form(string $action,string $html): string { return '<form method="post" action="/admin">'.token().'<input type="hidden" name="action" value="'.e($action).'">'.$html.'</form>'; }
@@ -527,6 +564,11 @@ try {
                 stop(403, 'SkiF4er ID authentication failed');
             }
         }
+        // Validate selected administration section before handling a mutating request.
+        if ($method==='GET' || $method==='HEAD') {
+            try { AdminExperience::view($_GET); }
+            catch (InvalidArgumentException) { stop(400,'Invalid administration view'); }
+        }
         $error='';
         if ($method==='POST') {
             if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
@@ -818,6 +860,12 @@ try {
         if (isset($_SESSION['cajeer_oidc_transaction'])) {
             $html.='<p>Незавершённая OIDC-авторизация.</p>'.form('oidc_cancel','<button>Отменить авторизацию</button>');
         }
+        $alerts=$html;
+        if (isset($_SESSION['admin_notice']) && is_string($_SESSION['admin_notice'])) {
+            $alerts.='<p class="admin-feedback" role="status">'.e($_SESSION['admin_notice']).'</p>';
+            unset($_SESSION['admin_notice']);
+        }
+        $html=''; $panels=[];
         $identity=$d['identity']['owner'] ?? null;
         $ai=$d['ai'];
         $html.='<p><a href="/admin/ai">Cajeer AI Assistant — открыть чат</a></p>';
@@ -911,6 +959,7 @@ try {
             }
         }
         $html.='</section>';
+        $panels['ai']=$html; $html='';
         $html.='<section><h2>SkiF4er ID</h2>';
         if ($identity === null) {
             $html.='<p>Аккаунт владельца пока не привязан. Вход через ID не предоставляет права автоматически.</p>';
@@ -998,6 +1047,7 @@ try {
         if (isset($_SESSION['oidc_identity']) && OidcClient::enabled($d['settings']['url'])) {
             $html.=form('logout_global','<button>Выйти из Lite и SkiF4er ID</button>');
         }
+        $panels['security']=$html; $html='';
         $html.='<section><h2>Страницы</h2><ul>';
         foreach($d['pages'] as $p) $html.='<li><a href="/admin?edit='.rawurlencode($p['path']).'">'.e($p['title']).'</a> — '.e($p['path']).($p['published']?'':' (черновик)').' — <a href="/admin/ai/editor?path='.rawurlencode($p['path']).'">AI-редактор</a> — <a href="/admin/ai/seo?path='.rawurlencode($p['path']).'">SEO-аудит</a></li>';
         $html.='</ul><a href="/admin?new=1">Создать страницу</a></section>';
@@ -1009,12 +1059,14 @@ try {
             $html.=form('save','<h2>Редактор страницы</h2>'.$hidden.input('path',$p['path']).input('title',$p['title']).input('description',$p['description']).'<label>Текст<textarea name="body">'.e($p['body']).'</textarea></label><label><input type="checkbox" name="published" value="1" '.($p['published']?'checked':'').'> Опубликовано</label><label><input type="checkbox" name="menu" value="1" '.($p['menu']?'checked':'').'> В меню</label><button>Сохранить</button>');
             if ($old!==''&&$old!=='/') $html.=form('delete',$hidden.'<button>Удалить страницу</button>');
         }
+        $panels['pages']=$html; $html='';
         $s=$d['settings']; $html.=form('settings','<h2>Настройки сайта</h2>'.input('name',$s['name']).input('url',$s['url']).input('email',$s['email'],'email').input('phone',$s['phone']).'<button>Сохранить настройки</button>');
         $flags='<h2>Модули</h2>';
         foreach (ModuleConfig::DEFAULTS as $name => $_) {
             $flags.='<label><input type="checkbox" name="module['.e($name).']" value="1" '.(ModuleConfig::enabled($d,$name)?'checked':'').'> '.e($name).'</label>';
         }
         $html.=form('modules',$flags.'<button>Сохранить модули</button>');
+        $panels['settings']=$html; $html='';
         $c=$d['consent'];
         $consentForm='<h2>Cookie Consent</h2><p>Версия политики: '.e((string)$c['revision']).'. При изменении настроек ранее сохранённые разрешения истекают.</p>';
         $consentForm.='<label><input type="checkbox" name="enabled" value="1" '.($c['enabled']?'checked':'').'> Показывать баннер и настройки cookie</label>';
@@ -1117,6 +1169,7 @@ try {
             $html.='<p class="notice">Требуется проверка в кабинете провайдера: '.e($step).'</p>';
         }
         $html.='<p>CLI: php bin/cajeer release check --json. Отчёт не подтверждает доставку данных.</p></section>';
+        $panels['integrations']=$html; $html='';
         $html.=DashboardView::settings($d,$_SESSION['csrf']);
         if (isset($_GET['analytics'])) {
             $days=filter_var($_GET['days']??'7',FILTER_VALIDATE_INT);
@@ -1128,6 +1181,10 @@ try {
             }
             $html.=DashboardView::render($d,$snapshot,$_SESSION['csrf'],$days);
         }
+        $panels['analytics']=$html;
+        $view=AdminExperience::view($_GET);
+        $dashboard=AdminExperience::dashboard($d,count($devices),$report['ok'],OpenAIClient::configured());
+        $html=AdminExperience::sections($panels,$view,$dashboard,$alerts);
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
