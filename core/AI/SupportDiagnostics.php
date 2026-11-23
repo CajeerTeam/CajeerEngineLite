@@ -40,6 +40,12 @@ final class SupportDiagnostics
         $add('runtime.https',str_starts_with((string)($site['settings']['url']??''),'https://')?'pass':'warn');
         $add('ai.integration',!empty($site['ai']['enabled'])?'pass':'warn');
         $add('ai.credentials',OpenAIClient::configured()?'pass':'warn');
+        try {
+            $policy=CostPolicy::load($root);
+            $add('ai.cost_budget',$policy['enabled']?'pass':'warn');
+            $usage=(new UsageLimiter($root))->status();
+            $add('ai.concurrent',($usage['active_requests']<=$policy['max_concurrent'])?'pass':'fail');
+        } catch (\Throwable) { $add('ai.cost_storage','fail'); }
         foreach (['auth'=>AuthAcceptance::class,'integration'=>IntegrationDiagnostics::class] as $prefix=>$diagnostic) {
             try {
                 $data=$diagnostic::run($root,$site);

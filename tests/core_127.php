@@ -7,7 +7,7 @@ use CajeerEngine\Storage\SiteState;
 function must127(bool $value,string $name):void {if(!$value)throw new RuntimeException('Support 1.2.7: '.$name);}
 function reject127(callable $f,string $name):void {try {$f();}catch(InvalidArgumentException|RuntimeException){return;}throw new RuntimeException('Unsafe support accepted: '.$name);}
 function clean127(string $path):void {if(is_link($path)||is_file($path)){unlink($path);return;}if(is_dir($path)){foreach(new FilesystemIterator($path) as $p)clean127($p->getPathname());rmdir($path);}}
-must127(Lite::VERSION==='1.2.7' && SiteState::SCHEMA===13,'version and JSON schema');
+must127(version_compare(Lite::VERSION,'1.2.7','>=') && SiteState::SCHEMA===13,'version and JSON schema');
 $root=sys_get_temp_dir().'/cajeer-support-'.bin2hex(random_bytes(8));
 mkdir($root.'/templates/default',0700,true);
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');

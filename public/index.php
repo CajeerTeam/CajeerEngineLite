@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\AI\{AIConfig,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView};
+use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
@@ -667,6 +667,11 @@ try {
                     });
                     go('/admin?ai=1');
                 }
+                elseif ($action==='ai_cost_settings') {
+                    $policy=CostPolicy::fromPost($_POST);
+                    CostPolicy::save($app->root,$policy);
+                    go('/admin?ai=1');
+                }
                 elseif ($action==='ai_models') {
                     if (time()-(int)($_SESSION['ai_models_at']??0)<30) {
                         throw new InvalidArgumentException('Повторите запрос моделей не ранее чем через 30 секунд');
@@ -832,6 +837,25 @@ try {
             $fields.='<label>'.e($label).'<input type="number" name="ai_'.e($key).'" value="'.e((string)$ai[$key]).'" required></label>';
         }
         $html.=form('ai_settings',$fields.'<button>Сохранить настройки OpenAI</button>');
+        try {
+            $policy=CostPolicy::load($app->root);
+            $costFields='<label><input type="checkbox" name="cost_enabled" value="1" '.
+                ($policy['enabled']?'checked':'').'> Включить денежный бюджет (оценка, не лимит биллинга OpenAI)</label>';
+            foreach (['daily_cents'=>'Дневной лимит, центы USD',
+                'monthly_cents'=>'Месячный лимит, центы USD',
+                'input_cents_per_million'=>'Цена входных 1 млн токенов, центы USD',
+                'output_cents_per_million'=>'Цена выходных 1 млн токенов, центы USD',
+                'max_concurrent'=>'Одновременных запросов максимум'] as $key=>$label) {
+                $costFields.='<label>'.e($label).'<input type="number" min="0" step="1" name="cost_'.e($key).
+                    '" value="'.e((string)$policy[$key]).'" required></label>';
+            }
+            $html.='<section id="ai-cost"><h3>AI Security & Cost Control</h3><p>Цены задаются вами по тарифам выбранной модели. ' .
+                'Подсчёт приблизителен, оплаченный счёт OpenAI может отличаться. Бюджет изначально отключён ' .
+                'до настройки действительных цен. Лимит одновременно выполняемых запросов действует всегда.</p>'.
+                form('ai_cost_settings',$costFields.'<button>Сохранить AI-бюджет</button>').'</section>';
+        } catch (RuntimeException $failure) {
+            $html.='<p class="error">Невозможно прочитать защищённые настройки AI-бюджета.</p>';
+        }
         $html.=form('ai_models','<button>Проверить доступные модели через API</button>');
         if ($ai['enabled']) {
             $html.=form('ai_test','<label>Тестовый запрос (передаётся OpenAI)'.
@@ -843,6 +867,10 @@ try {
             $html.='<p>UTC '.e($usage['day']).': запросов '.e((string)$usage['requests']).
                 ' / '.e((string)$ai['daily_requests']).', токенов '.e((string)$usage['tokens']).
                 ' (зарезервировано '.e((string)$usage['reserved_tokens']).') / '.e((string)$ai['daily_tokens']).'.</p>';
+            $html.='<p>Параллельных запросов: '.e((string)$usage['active_requests']).
+                '. Оценка трат (центы USD): за сутки '.e(number_format($usage['spent_microcents']/1000000,4,'.','')).
+                ', за месяц '.e(number_format($usage['monthly_spent_microcents']/1000000,4,'.','')).
+                ', резерв на месяц '.e(number_format($usage['monthly_reserved_microcents']/1000000,4,'.','')).'.</p>';
         } catch (Throwable $failure) {
             $html.='<p class="error">Файловый счётчик AI недоступен.</p>';
         }
