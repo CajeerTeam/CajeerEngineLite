@@ -26,13 +26,13 @@ function result140(array $report,string $id): string {
     throw new RuntimeException('Missing gate check '.$id);
 }
 
-assert140(Lite::VERSION==='1.4.0','version bump');
+assert140(version_compare(Lite::VERSION,'1.4.0','>='),'version bump');
 $root=sys_get_temp_dir().'/cms140-tests-'.bin2hex(random_bytes(8));mkdir($root,0700);
 try {
     $source=dirname(__DIR__);
     foreach (['core','public','templates'] as $name) copy140($source.'/'.$name,$root.'/'.$name);
     mkdir($root.'/bin',0755);copy($source.'/bin/cajeer',$root.'/bin/cajeer');
-    foreach (['bootstrap.php','router.php'] as $name) copy($source.'/'.$name,$root.'/'.$name);
+    foreach (['bootstrap.php','router.php','VERSION'] as $name) copy($source.'/'.$name,$root.'/'.$name);
     $cms=new Lite($root);$cms->install('SourcePassword140!','https://test.example.invalid','Recovery test');
     $png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUT9rBwMDAxMDAwMDAAAAOPQE9xgjZwQAAAABJRU5ErkJggg==',true);
     $image=$root.'/upload.png';file_put_contents($image,$png);

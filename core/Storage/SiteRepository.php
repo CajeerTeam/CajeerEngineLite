@@ -91,7 +91,7 @@ final class SiteRepository
     public function commit(array $state): void
     {
         if (!$this->locked) throw new \LogicException('State writes require an exclusive lock');
-        if ($state['schema'] !== SiteState::SCHEMA) throw new \RuntimeException('Cannot commit an outdated schema');
+        if (($state['schema'] ?? null) !== SiteState::SCHEMA) throw new \RuntimeException('Cannot commit an outdated schema');
         OperationFiles::write($this->file(), SiteState::encode($state), 0600);
     }
 
@@ -99,13 +99,17 @@ final class SiteRepository
     {
         return $this->exclusive(function () use ($fn): array {
             $old = $this->read();
-            if ($old !== null && $old['schema'] !== SiteState::SCHEMA) {
+            $migrating = $old !== null && $old['schema'] !== SiteState::SCHEMA;
+            if ($migrating) {
                 // Never migrate in place without a recoverable snapshot of the original bytes.
                 (new BackupService($this))->createLocked('migration');
                 $old = SiteState::migrate($old);
             }
             $result = $fn($old);
             if (!is_array($result)) throw new \InvalidArgumentException('Transaction must return a site state');
+            // Rejected/no-op updates must not rewrite site.json, consume disk space,
+            // or cause a spurious revision change. A migrated state MUST persist.
+            if (!$migrating && $old !== null && $result === $old) return $old;
             $this->commit($result);
             return $result;
         });

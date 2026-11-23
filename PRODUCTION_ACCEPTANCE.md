@@ -1,4 +1,4 @@
-# CajeerEngine Lite 1.4.0: production release checklist
+# CajeerEngine Lite 1.4.1: production release checklist
 
 The executable gate is `php bin/cajeer release stable-check --json [--live]`.
 Exit 1 means a failed check. Exit 2 means automated checks passed but manual release acceptance is still pending; it is **not** a deployment success code. The command never authenticates real users, sends a paid AI request or checks a real analytics account.
@@ -13,7 +13,7 @@ Exit 1 means a failed check. Exit 2 means automated checks passed but manual rel
 ## Isolated staging acceptance
 
 1. Restore the **off-host** copy of code, templates and `storage/` into a private staging host; use separate environment credentials and domain as appropriate.
-2. Apply patch 1.4.0 with PHP-FPM and scheduled jobs stopped. Do **not** alter `storage/site.json` manually or rename it. JSON schema remains 14.
+2. Apply patch 1.4.1 with PHP-FPM and scheduled jobs stopped. Do **not** alter `storage/site.json` manually or rename it. JSON schema remains 14.
 3. Run `php bin/cajeer doctor`, `php bin/cajeer developer check` and `php bin/cajeer release stable-check --json`. Fix failures; note that exit 2 denotes pending human sign-off.
 4. Run all CI PHP, HTTP and Chromium tests. The Chromium 1.4.0 smoke obtains real HTTP HTML via an authenticated client but uses `set_content` in restricted sandboxes; manually test **real browser navigation** on staging.
 5. With a valid TLS certificate and correct `Host`, verify `GET /health/live` = 200, `GET /health/ready` = 200 `{"status":"ready"}`, `POST /health/ready` = 405, and `/admin` has HSTS, cache-control, CSP, Secure/HttpOnly/SameSite cookie. Verify wrong Host is rejected.
@@ -28,3 +28,10 @@ Exit 1 means a failed check. Exit 2 means automated checks passed but manual rel
 Stop writers and schedulers, take a fresh off-host snapshot, deploy only the changed patch files with retained paths and production ownership, restart PHP-FPM, check `health/ready` and critical user flows. Monitor logs, error rate and disk utilization. If any check fails, stop writes and restore **both code and storage** from the same pre-upgrade backup, then rerun readiness and authentication checks. Do not use an imported CMS TAR as a substitute for a full server rollback.
 
 Sign-off requires a human to record staging environment, date, test evidence, external dependency outcomes and rollback validation. No automatic tool can truthfully certify unobserved production traffic, credentials, providers or server configuration.
+
+## 1.4.1 Core Stability acceptance
+
+- Check that the project root `VERSION` agrees exactly with `Lite::VERSION` before a release is considered healthy; partial deployments are rejected.
+- Run `php tests/core_141.php` and `php tests/site_concurrency_141.php` after a full independent backup. These tests use isolated local directories; do not run fault injection against production data.
+- Exercise real site-editor submissions, page history, CMS import and JSON backup restoration on staging, including deliberate failures and recovery. Verify that password and OIDC authorization remain usable after a failed restore.
+- Complete the existing TLS/proxy, real-browser and external integration sign-off; successful PHP regression does not complete production acceptance.

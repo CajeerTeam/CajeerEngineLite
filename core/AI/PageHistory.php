@@ -144,7 +144,7 @@ final class PageHistory
                 'revision'=>PageEditor::revision($page),'page'=>$page];
             $json=json_encode($data,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             if (strlen($json)>310000) throw new \RuntimeException('Page snapshot exceeds storage limit');
-            OperationFiles::write($dir.'/'.$id.'.json',$json."\n",0600);
+            OperationFiles::writeNew($dir.'/'.$id.'.json',$json."\n",0600);
             // Cap retained versions; the latest snapshot always survives.
             if (count($existing)>=20) foreach (array_slice($existing,19) as $old) {
                 OperationFiles::remove($dir.'/'.$old['id'].'.json');

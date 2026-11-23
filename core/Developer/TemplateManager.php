@@ -97,7 +97,7 @@ final class TemplateManager
         $directory=$this->backupDirectory($name);
         OperationFiles::dir($directory,0700);
         $file=$directory.'/'.gmdate('Ymd\THis\Z').'-'.bin2hex(random_bytes(8)).'.cjr';
-        OperationFiles::write($file,$source,0600);
+        OperationFiles::writeNew($file,$source,0600);
         // Keep the latest twenty full copies. No partial or diff-only backups.
         foreach (array_slice($this->history($name),20) as $old) OperationFiles::remove($directory.'/'.$old);
     }

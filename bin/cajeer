@@ -168,7 +168,7 @@ try {
                         echo strtoupper($item['status']).' '.$item['id'].': '.$item['message']."\n";
                     }
                     foreach ($report['manual'] as $item) echo 'MANUAL '.$item."\n";
-                    echo 'CMS 1.4.0 release readiness: '.strtoupper($report['status'])."\n";
+                    echo 'CMS '.Lite::VERSION.' release readiness: '.strtoupper($report['status'])."\n";
                 }
                 if (!$report['automated_ok']) exit(1);
                 // Local/live probes cannot sign off human deployment acceptance.

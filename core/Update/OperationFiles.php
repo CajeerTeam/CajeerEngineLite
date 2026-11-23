@@ -49,11 +49,53 @@ final class OperationFiles
         if ($out === false) throw new \RuntimeException('Cannot create temporary file');
         try {
             self::permissions($tmp,$mode,$uid,$gid);
-            if (fwrite($out, $data) !== strlen($data) || !fflush($out) || !fsync($out)) throw new \RuntimeException('Cannot write durable file');
+            self::writeAll($out, $data);
+            if (!fflush($out) || !fsync($out)) throw new \RuntimeException('Cannot write durable file');
             fclose($out); $out = null;
             if (!rename($tmp, $path)) throw new \RuntimeException('Cannot replace file');
             self::syncDir(dirname($path));
         } finally { if (is_resource($out)) fclose($out); if (is_file($tmp)) unlink($tmp); }
+    }
+
+    /** A complete write may require multiple fwrite calls on filesystems under load. */
+    private static function writeAll(mixed $stream, string $data): void
+    {
+        $length = strlen($data);
+        for ($position = 0; $position < $length;) {
+            $written = @fwrite($stream, substr($data, $position, min(65536, $length - $position)));
+            if (!is_int($written) || $written <= 0) throw new \RuntimeException('Cannot write durable file');
+            $position += $written;
+        }
+    }
+
+    /** Atomically publish a *new* file; never clobber a concurrent creation. */
+    public static function writeNew(string $path, string $data, int $mode = 0600): void
+    {
+        self::dir(dirname($path));
+        $staging = dirname($path).'/.new-'.bin2hex(random_bytes(12));
+        $published = false;
+        $identity = null;
+        try {
+            self::write($staging, $data, $mode);
+            $identity = @lstat($staging);
+            if (!is_array($identity) || ($identity['mode'] & 0170000) !== 0100000 || $identity['nlink'] !== 1) {
+                throw new \RuntimeException('New-file staging was replaced');
+            }
+            if (!@link($staging, $path)) throw new \RuntimeException('Destination already exists or cannot be created');
+            $published = true;
+            if (!@unlink($staging)) throw new \RuntimeException('Cannot remove staging link');
+            self::syncDir(dirname($path));
+        } catch (\Throwable $error) {
+            if ($published && is_array($identity)) {
+                $current = @lstat($path);
+                if (is_array($current) && $current['ino'] === $identity['ino'] && $current['dev'] === $identity['dev']) {
+                    @unlink($path);
+                }
+            }
+            throw $error;
+        } finally {
+            if (is_file($staging) && !is_link($staging)) @unlink($staging);
+        }
     }
 
     /** Copy a new file without ever replacing an existing destination (even on a race). */

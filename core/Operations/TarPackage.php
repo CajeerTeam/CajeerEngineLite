@@ -13,6 +13,7 @@ final class TarPackage
         if (count($files)>255 || !$files) throw new \InvalidArgumentException('Invalid archive entry count');
         $handle=@fopen($target,'x+b');
         if (!is_resource($handle)) throw new \RuntimeException('Cannot create archive');
+        $complete = false;
         try {
             if (!chmod($target,0600)) throw new \RuntimeException('Cannot protect archive');
             $total=0;
@@ -36,7 +37,13 @@ final class TarPackage
             }
             self::put($handle,str_repeat("\0",1024));
             if (!fflush($handle) || !fsync($handle)) throw new \RuntimeException('Cannot sync archive');
-        } finally { fclose($handle); }
+            \CajeerEngine\Update\OperationFiles::syncDir(dirname($target));
+            $complete = true;
+        } finally {
+            fclose($handle);
+            // Never expose a truncated TAR as a finished backup on failure.
+            if (!$complete) @unlink($target);
+        }
     }
 
     /** Extracts only the exact permitted members to a generated private directory; rejects any links, pax, duplicates and unexpected entries. */
@@ -138,6 +145,11 @@ final class TarPackage
     }
     private static function put(mixed $out,string $bytes): void
     {
-        if (fwrite($out,$bytes)!==strlen($bytes)) throw new \RuntimeException('Cannot write TAR');
+        $length = strlen($bytes);
+        for ($offset = 0; $offset < $length;) {
+            $written = @fwrite($out, substr($bytes, $offset, min(65536, $length - $offset)));
+            if (!is_int($written) || $written <= 0) throw new \RuntimeException('Cannot write TAR');
+            $offset += $written;
+        }
     }
 }

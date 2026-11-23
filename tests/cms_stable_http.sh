@@ -39,5 +39,5 @@ php bin/cajeer release stable-check --json > "$work/release.json"
 result=$?
 set -e
 [[ $result == 2 ]]
-php -r '$s=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if(($s["version"]??"")!=="1.4.0"||($s["automated_ok"]??false)!==true||($s["status"]??"")!=="pending_live"||($s["production_accepted"]??true)!==false) exit(1);' "$work/release.json"
+php -r '$s=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if(($s["version"]??"")!==trim(file_get_contents("VERSION"))||($s["automated_ok"]??false)!==true||($s["status"]??"")!=="pending_live"||($s["production_accepted"]??true)!==false) exit(1);' "$work/release.json"
 echo 'CMS Experience Stable 1.4.0 HTTP: readiness, liveness, safe failure, host guard and CLI release gate OK'

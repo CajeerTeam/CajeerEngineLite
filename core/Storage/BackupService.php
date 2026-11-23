@@ -48,7 +48,7 @@ final class BackupService
         $name = 'site-'.gmdate('Ymd\THis\Z').'-'.bin2hex(random_bytes(8)).'.json';
         $path = $this->filename($name);
         if (file_exists($path) || is_link($path)) throw new \RuntimeException('Backup name collision');
-        OperationFiles::write($path, $this->encode($raw,$reason), 0600);
+        OperationFiles::writeNew($path, $this->encode($raw,$reason), 0600);
         return $name;
     }
     public function create(): string
@@ -147,11 +147,23 @@ final class BackupService
                 $state['login'] = $live['login'];
                 $state['auth_policy'] = $live['auth_policy'];
             }
-            // A damaged live JSON can be recovered: preserve its raw bytes first.
-            $rescue = $this->site->raw() === null ? '' : $this->createLocked('pre-restore');
-            // Restoring site.json must not resurrect any pre-restore PHP session.
-            (new \CajeerEngine\Auth\SessionRegistry($this->site->root))->invalidateAll($state);
-            $this->site->commit($state);
+            // A damaged live JSON can be recovered: preserve its exact bytes first.
+            $previous = $this->site->raw();
+            $rescue = $previous === null ? '' : $this->createLocked('pre-restore');
+            // Commit first, then revoke all sessions. On failure restore the exact
+            // previous bytes (even an invalid JSON file), never leave a partial restore.
+            try {
+                $this->site->commit($state);
+                (new \CajeerEngine\Auth\SessionRegistry($this->site->root))->invalidateAll($state);
+            } catch (\Throwable $failure) {
+                try {
+                    if ($previous === null) OperationFiles::remove($this->site->file());
+                    else OperationFiles::write($this->site->file(), $previous, 0600);
+                } catch (\Throwable $rollbackError) {
+                    throw new \RuntimeException('Site restoration rollback failed; recover from pre-restore backup', 0, $rollbackError);
+                }
+                throw $failure;
+            }
             return $rescue;
         });
     }

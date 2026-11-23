@@ -22,8 +22,14 @@ final class StableCMSAcceptance
             if (!in_array($status,['pass','warn','fail'],true)) throw new \LogicException('Invalid status');
             $checks[]=compact('id','status','message');
         };
-        $add('release.version', Lite::VERSION==='1.4.0'?'pass':'fail',
-            'Installed Lite release matches 1.4.0');
+        $versionFile = $root.'/VERSION';
+        $versionStat = @lstat($versionFile);
+        $versionMatches = is_array($versionStat) && ($versionStat['mode'] & 0170000) === 0100000 &&
+            $versionStat['nlink'] === 1 && ($versionStat['mode'] & 0022) === 0 &&
+            trim((string) @file_get_contents($versionFile)) === Lite::VERSION;
+        $add('release.version', $versionMatches ? 'pass' : 'fail',
+            $versionMatches ? 'Installed release and VERSION file agree ('.Lite::VERSION.')' :
+            'Installed release does not match VERSION or the version file is unsafe');
         try {
             SiteState::validate($state);
             $add('data.schema', $state['schema']===SiteState::SCHEMA?'pass':'fail',
