@@ -25,7 +25,9 @@ final class MediaReferences
     {
         $found=[];
         foreach ($pages as $path=>$page) {
-            if (is_array($page) && is_array($page['blocks']??null) && in_array($mediaId,self::ids($page['blocks']),true)) {
+            if (is_array($page) && (
+                (is_array($page['blocks']??null) && in_array($mediaId,self::ids($page['blocks']),true)) ||
+                ($page['seo']['og_image']??'')===$mediaId)) {
                 $found[]=$path;
             }
         }

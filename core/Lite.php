@@ -8,11 +8,12 @@ use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\Consent\{ConsentConfig,ConsentCookie};
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig};
 use CajeerEngine\Storage\{SiteRepository,BackupService,SiteState};
+use CajeerEngine\SEO\SEOControl;
 use CajeerEngine\Template\{CajeerTemplateEngine,TemplateSandbox};
 
 final class Lite
 {
-    public const VERSION = '1.3.5';
+    public const VERSION = '1.3.6';
     /** Upstream baseline for the shared, dependency-free core components, not Lite's application version. */
     public const ENGINE_BASE_VERSION = '2.1.0';
     public function __construct(public readonly string $root) {}
@@ -36,7 +37,9 @@ final class Lite
         if (!str_starts_with($raw,'/')) throw new \InvalidArgumentException('Path must start with /');
         $path=PublicPath::content($raw);
         if (!str_starts_with($path,'/') || str_contains($path,'.')) throw new \InvalidArgumentException('Invalid page path');
-        return ['path'=>$path,'title'=>self::field($a,'title',200,true),'description'=>self::field($a,'description',500),'body'=>self::field($a,'body',60000),'published'=>($a['published']??'')==='1','menu'=>($a['menu']??'')==='1'];
+        $page=['path'=>$path,'title'=>self::field($a,'title',200,true),'description'=>self::field($a,'description',500),'body'=>self::field($a,'body',60000),'published'=>($a['published']??'')==='1','menu'=>($a['menu']??'')==='1'];
+        if (array_key_exists('seo',$a)) { SEOControl::validatePage($a['seo']); $page['seo']=$a['seo']; }
+        return $page;
     }
     public static function settings(array $a): array {
         $name=self::field($a,'name',200,true); $url=PublicPath::base(self::field($a,'url',500,true));
@@ -50,7 +53,7 @@ final class Lite
         $this->change(function($d) use($password,$settings) {
             if ($d!==null) throw new \InvalidArgumentException('Already installed');
             $home=self::page(['path'=>'/','title'=>'Добро пожаловать','description'=>'Сайт на CajeerEngine Lite','body'=>'Расскажите о себе, своих услугах и контактах. Измените эту страницу в административной панели.','published'=>'1','menu'=>'1']);
-            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'reporting'=>ReportConfig::DEFAULTS,'identity'=>['owner'=>null,'generation'=>\CajeerEngine\Auth\OwnerIdentity::generation()],'auth_policy'=>\CajeerEngine\Auth\AuthPolicy::DEFAULTS,'ai'=>AIConfig::DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS,'metrica'=>MetricaConfig::DEFAULTS,'gtm'=>GTMConfig::DEFAULTS,'clarity'=>ClarityConfig::DEFAULTS,'matomo'=>MatomoConfig::DEFAULTS]];
+            return ['schema'=>SiteState::SCHEMA,'settings'=>$settings,'password'=>password_hash($password,PASSWORD_DEFAULT),'pages'=>['/'=>$home],'login'=>['count'=>0,'until'=>0],'modules'=>ModuleConfig::DEFAULTS,'consent'=>ConsentConfig::DEFAULTS,'reporting'=>ReportConfig::DEFAULTS,'identity'=>['owner'=>null,'generation'=>\CajeerEngine\Auth\OwnerIdentity::generation()],'auth_policy'=>\CajeerEngine\Auth\AuthPolicy::DEFAULTS,'ai'=>AIConfig::DEFAULTS,'seo'=>SEOControl::GLOBAL_DEFAULTS,'integrations'=>['ga4'=>GA4Config::DEFAULTS,'metrica'=>MetricaConfig::DEFAULTS,'gtm'=>GTMConfig::DEFAULTS,'clarity'=>ClarityConfig::DEFAULTS,'matomo'=>MatomoConfig::DEFAULTS]];
         });
     }
     public function login(string $password): bool {
@@ -66,9 +69,11 @@ final class Lite
         $engine=new CajeerTemplateEngine(new TemplateSandbox($this->root.'/templates'),$this->root.'/templates');
         $nav=ModuleConfig::enabled($d, 'navigation') ? array_values(array_filter($d['pages'],fn($p)=>$p['published']&&$p['menu'])) : [];
         $choice = ConsentCookie::read($_COOKIE[ConsentCookie::NAME] ?? null, $d['consent']);
+        $seo=SEOControl::presentation($d,$p);
         return $engine->renderName('default.page',[
             'page'=>$p, 'site'=>$d['settings'], 'navigation'=>$nav,
-            'canonical'=>$d['settings']['url'].$p['path'],
+            'canonical'=>$seo['canonical'], 'seo'=>$seo,
+            'structured_data'=>SEOControl::structuredData($d,$p),
             'body_html'=>isset($p['blocks']) ? \CajeerEngine\Content\Blocks::html($p['blocks']) : nl2br(self::esc($p['body']),false),
             'consent'=>$d['consent'], 'consent_saved'=>$choice !== null,
             'consent_mask'=>$choice === null ? 0 : ConsentCookie::mask($choice),

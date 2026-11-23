@@ -132,7 +132,8 @@ final class PagesManagement
                 '<td class="admin-pages-actions"><a href="/admin?view=pages&amp;edit='.rawurlencode($path).'">Текст</a>'.
                 '<a href="/admin/editor?path='.rawurlencode($path).'">Блоки</a>'.
                 '<a href="/admin/ai/editor?path='.rawurlencode($path).'">AI-редактор</a>'.
-                '<a href="/admin/ai/seo?path='.rawurlencode($path).'">SEO</a>'.
+                '<a href="/admin/seo?path='.rawurlencode($path).'">SEO</a>'.
+                '<a href="/admin/ai/seo?path='.rawurlencode($path).'">AI SEO</a>'.
                 '<form method="post" action="/admin" class="admin-pages-inline">'.
                 '<input type="hidden" name="csrf" value="'.$e($csrf).'">'.
                 '<input type="hidden" name="action" value="page_status">'.

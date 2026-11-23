@@ -48,6 +48,7 @@ final class AdminExperience
             $nav .= self::link('/admin?view='.$id, $label, $active);
         }
         $nav .= self::link('/admin/media', 'Медиатека', $path === '/admin/media');
+        $nav .= self::link('/admin/seo', 'SEO Control Center', $path === '/admin/seo');
         $nav .= self::link('/admin/editor?new=1', 'Блочный редактор', $path === '/admin/editor');
         $nav .= '<div class="admin-nav-divider" aria-hidden="true"></div><p class="admin-nav-label">AI-инструменты</p>';
         foreach ([
@@ -107,6 +108,7 @@ final class AdminExperience
             '/admin?view=pages'=>'Управление страницами',
             '/admin/editor?new=1'=>'Новая страница (блоки)',
             '/admin/media'=>'Медиатека: файлы',
+            '/admin/seo'=>'SEO Control Center',
             '/admin/ai/editor'=>'AI-редактор',
             '/admin/ai/seo'=>'SEO-аудит',
             '/admin?view=analytics&analytics=1'=>'Отчёты аналитики',

@@ -17,7 +17,7 @@ function del135(string $dir): void {
     foreach($it as $file){if($file->isDir()&&!$file->isLink())rmdir($file->getPathname());else unlink($file->getPathname());}
     rmdir($dir);
 }
-ck135(Lite::VERSION==='1.3.5','version');
+ck135(version_compare(Lite::VERSION,'1.3.5','>='),'version');
 $root=sys_get_temp_dir().'/lite135-'.bin2hex(random_bytes(5));
 mkdir($root);mkdir($root.'/storage');mkdir($root.'/templates');mkdir($root.'/templates/default');
 copy(dirname(__DIR__).'/templates/default/page.cjr',$root.'/templates/default/page.cjr');

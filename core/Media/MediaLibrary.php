@@ -238,6 +238,7 @@ final class MediaLibrary
                 $site=(new \CajeerEngine\Lite($this->root))->load();
                 $used=\CajeerEngine\Content\MediaReferences::pages($site['pages'],$id);
                 if ($used!==[]) throw new \InvalidArgumentException('Media is used by pages: '.implode(', ',array_slice($used,0,5)));
+                if (($site['seo']['default_image']??'')===$id) throw new \InvalidArgumentException('Media is the default SEO social image');
             }
             $path=$this->location('files/'.$id.'.'.$entries[$id]['extension']);
             if (is_link($path) || !is_file($path)) throw new \RuntimeException('Unsafe or missing media file');

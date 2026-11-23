@@ -50,6 +50,7 @@ final class BlockEditor
                     throw new \InvalidArgumentException('Page changed; reload before saving');
                 }
             }
+            if ($old!=='' && isset($state['pages'][$old]['seo'])) $page['seo']=$state['pages'][$old]['seo'];
             if ($old==='/' && ($page['path']!=='/' || !$page['published'])) throw new \InvalidArgumentException('Home must remain published at /');
             if (isset($state['pages'][$page['path']]) && $old!==$page['path']) throw new \InvalidArgumentException('Page path already exists');
             if ($old==='') {

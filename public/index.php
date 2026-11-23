@@ -12,6 +12,7 @@ use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPol
 use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\{ReportConfig,ReportService,ReportCache,HttpClient,DashboardView};
 use CajeerEngine\Modules\ModuleConfig;
+use CajeerEngine\SEO\{SEOControl,SEOControlView};
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
@@ -38,7 +39,7 @@ function go(string $path): never {
 function shell(string $title,string $html,bool $aiChat=false): never {
     header('Content-Type: text/html; charset=utf-8');
     $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
-    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || str_starts_with($route,'/admin/ai')) &&
+    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || str_starts_with($route,'/admin/ai')) &&
         $title!=='Вход в админ-панель';
     if ($admin) {
         $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
@@ -90,7 +91,7 @@ try {
         if ($method==='GET') echo $bytes;
         exit;
     }
-    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -155,6 +156,59 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/seo') {
+            if (!$auth) stop(403,'Administrator login required');
+            $chosen=$_GET['path']??$_POST['path']??'/';
+            if (!is_string($chosen) || !isset($d['pages'][$chosen])) stop(404,'SEO page not found');
+            $error='';$notice='';
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                try {
+                    $action=$_POST['action']??null;
+                    $library=new MediaLibrary($app->root);
+                    if ($action==='global') {
+                        $config=SEOControl::globalFromPost($_POST);
+                        $revision=$_POST['revision']??null;
+                        if (!is_string($revision) || !preg_match('/^[a-f0-9]{64}$/D',$revision)) throw new InvalidArgumentException('Invalid SEO global revision');
+                        $library->guard(static function()use($app,$config,$revision):void {
+                            SEOControl::verifyImage(new MediaLibrary($app->root),$config['default_image']);
+                            $app->change(static function(array $state)use($config,$revision):array {
+                                if (!hash_equals(SEOControl::revision($state),$revision)) {
+                                    throw new InvalidArgumentException('Site SEO changed; reload settings');
+                                }
+                                $state['seo']=$config;
+                                return $state;
+                            });
+                        });
+                    } elseif ($action==='page') {
+                        $config=SEOControl::pageFromPost($_POST);
+                        $revision=$_POST['revision']??null;
+                        if (!is_string($revision) || !preg_match('/^[a-f0-9]{64}$/D',$revision)) throw new InvalidArgumentException('Invalid SEO page revision');
+                        $library->guard(static function()use($app,$config,$chosen,$revision,$library):void {
+                            SEOControl::verifyImage($library,$config['og_image']);
+                            $app->change(static function(array $state)use($config,$chosen,$revision):array {
+                                if (!isset($state['pages'][$chosen]) ||
+                                    !hash_equals(PagesManagement::revision($state['pages'][$chosen]),$revision)) {
+                                    throw new InvalidArgumentException('Page changed; reload SEO settings');
+                                }
+                                $target=$config['canonical'];
+                                if ($target!=='' && (!isset($state['pages'][$target]) || !$state['pages'][$target]['published'])) {
+                                    throw new InvalidArgumentException('Canonical target must be a published page');
+                                }
+                                $state['pages'][$chosen]['seo']=$config;
+                                return $state;
+                            });
+                        });
+                    } else stop(400,'Invalid SEO action');
+                    go('/admin/seo?path='.rawurlencode($chosen).'&saved=1');
+                } catch (InvalidArgumentException $failure) {
+                    http_response_code(422);$error=$failure->getMessage();
+                }
+                $d=$app->load();
+            }
+            if ($method==='GET' && ($_GET['saved']??null)==='1') $notice='SEO-настройки сохранены.';
+            shell('SEO Control Center',SEOControlView::render($d,$_SESSION['csrf'],$chosen,$error,$notice));
+        }
         if ($path==='/admin/media') {
             if (!$auth) stop(403,'Administrator login required');
             if ($method==='POST' && (int)($_SERVER['CONTENT_LENGTH']??0)>10_000_000) stop(413,'Media upload request exceeds 10 MB');
@@ -190,7 +244,7 @@ try {
             }
             $query=$_GET['q']??'';$type=$_GET['type']??'all';
             if (!is_string($query) || !is_string($type)) stop(400,'Invalid media query');
-            try { $content=MediaView::render($mediaLibrary,$_SESSION['csrf'],$query,$type,'',$app->load()['pages']); }
+            try { $content=MediaView::render($mediaLibrary,$_SESSION['csrf'],$query,$type,'',$app->load()['pages'], SEOControl::site($d)['default_image']); }
             catch (InvalidArgumentException) { stop(400,'Invalid media query'); }
             $notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
             $feedback=$mediaError!==''?'<p class="error" role="alert">'.e($mediaError).'</p>':
@@ -967,6 +1021,7 @@ try {
                                 $p['body']=$d['pages'][$old]['body'];
                             }
                             $p=\CajeerEngine\Content\Blocks::reconcile($d['pages'][$old],$p);
+                            if (isset($d['pages'][$old]['seo'])) $p['seo']=$d['pages'][$old]['seo'];
                         }
                         if ($old!=='') unset($d['pages'][$old]);
                         if (count($d['pages'])>=100) throw new InvalidArgumentException('Page limit: 100');
@@ -1333,12 +1388,13 @@ try {
         shell('Управление сайтом',$html);
     }
     if ($method==='POST') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
-    if ($path==='/robots.txt' && ModuleConfig::enabled($d, 'robots')) { header('Content-Type: text/plain; charset=utf-8'); echo "User-agent: *\nDisallow: /admin\n"; if (ModuleConfig::enabled($d, 'sitemap')) echo "Sitemap: ".$d['settings']['url']."/sitemap.xml\n"; exit; }
-    if ($path==='/sitemap.xml' && ModuleConfig::enabled($d, 'sitemap')) { header('Content-Type: application/xml; charset=utf-8'); echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'; foreach($d['pages'] as $p) if($p['published']) echo '<url><loc>'.e($d['settings']['url'].$p['path']).'</loc></url>'; echo '</urlset>'; exit; }
+    if ($path==='/robots.txt' && ModuleConfig::enabled($d, 'robots')) { header('Content-Type: text/plain; charset=utf-8'); echo SEOControl::robotsText($d); exit; }
+    if ($path==='/sitemap.xml' && ModuleConfig::enabled($d, 'sitemap')) { header('Content-Type: application/xml; charset=utf-8'); echo SEOControl::sitemapXml($d); exit; }
     if (!isset($d['pages'][$path]) || !$d['pages'][$path]['published']) stop(404,'Страница не найдена');
     if ($path!==$raw) { header('Location: '.$path,true,301); exit; }
     // Personalized consent state must never be shared via a public intermediary cache.
     header('Cache-Control: private, no-store');
+    header('X-Robots-Tag: '.SEOControl::robots($d,$d['pages'][$path]));
     $csp = PublicCsp::headers($d);
     if ($csp['webvisor_frames']) header_remove('X-Frame-Options');
     header('Content-Security-Policy: '.$csp['policy']);

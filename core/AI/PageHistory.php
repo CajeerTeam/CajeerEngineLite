@@ -59,13 +59,22 @@ final class PageHistory
             $s['path']!==$path || $s['generation']!==$generation ||
             !is_int($s['created']) || $s['created']<1 || $s['created']>time()+60 ||
             !is_string($s['revision']) || !preg_match('/^[a-f0-9]{64}$/D',$s['revision']) ||
-            !is_array($s['page']) || !in_array(array_keys($s['page']),[['path','title','description','body','published','menu'],['path','title','description','body','published','menu','blocks']],true) ||
+            !is_array($s['page']) || !self::validPageKeys($s['page']) ||
             $s['page']['path']!==$path || !is_bool($s['page']['published']) || !is_bool($s['page']['menu']) ||
             !hash_equals($s['revision'],PageEditor::revision($s['page']))) {
             throw new \RuntimeException('Page history is corrupt');
         }
         self::validatePage($s['page']);
         return $s;
+    }
+
+    private static function validPageKeys(array $page): bool
+    {
+        $required=['path','title','description','body','published','menu'];
+        $keys=array_keys($page);
+        foreach ($required as $key) if (!array_key_exists($key,$page)) return false;
+        foreach ($keys as $key) if (!in_array($key,[...$required,'blocks','seo'],true)) return false;
+        return count($keys)===count($required)+(isset($page['blocks'])?1:0)+(isset($page['seo'])?1:0);
     }
 
     /** Validate a historic JSON page without normalizing its untouched text. */
@@ -80,6 +89,10 @@ final class PageHistory
         } catch (\Throwable $e) { throw new \RuntimeException('Invalid saved page',0,$e); }
         if ($canonical['path']!==$page['path'] || $canonical['published']!==$page['published'] ||
             $canonical['menu']!==$page['menu']) throw new \RuntimeException('Invalid saved page');
+        if (isset($page['seo'])) {
+            try { \CajeerEngine\SEO\SEOControl::validatePage($page['seo']); }
+            catch (\Throwable $e) { throw new \RuntimeException('Invalid SEO snapshot',0,$e); }
+        }
         if (isset($page['blocks'])) {
             try {
                 if (Blocks::validate($page['blocks'])!==$page['blocks'] || Blocks::plain($page['blocks'])!==$page['body']) {
@@ -120,7 +133,7 @@ final class PageHistory
     public function save(array $page): string
     {
         $path=$page['path']??null;
-        if (!is_string($path) || !in_array(array_keys($page),[['path','title','description','body','published','menu'],['path','title','description','body','published','menu','blocks']],true)) {
+        if (!is_string($path) || !self::validPageKeys($page)) {
             throw new \InvalidArgumentException('Invalid page snapshot');
         }
         self::validatePage($page);
@@ -148,6 +161,7 @@ final class PageHistory
         $media=new MediaLibrary($app->root);
         $media->guard(function()use($media,$snapshot,$app,$path,$expectedRevision):void {
             if (isset($snapshot['page']['blocks'])) MediaReferences::verify($media,$snapshot['page']['blocks']);
+            if (isset($snapshot['page']['seo'])) \CajeerEngine\SEO\SEOControl::verifyImage($media,$snapshot['page']['seo']['og_image']);
             $app->change(function(array $site)use($path,$snapshot,$expectedRevision):array {
             if (!hash_equals($this->generation,$site['identity']['generation'])) throw new \InvalidArgumentException('Owner identity changed');
             $current=$site['pages'][$path]??null;

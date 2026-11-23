@@ -14,7 +14,8 @@ final class SEOView
         $hidden = '<input type="hidden" name="csrf" value="'.$e($csrf).'">';
         $html = '<p><a href="/admin">Админ-панель</a> · <a href="/admin/ai">AI-чат</a> · '.
             '<a href="/admin/ai/content">Генерация контента</a> · '.
-            '<a href="/admin/ai/editor">AI-редактор</a></p>';
+            '<a href="/admin/ai/editor">AI-редактор</a> · '.
+            '<a href="/admin/seo">SEO Control Center</a></p>';
         if ($error !== '') $html .= '<p role="alert" class="error">'.$e($error).'</p>';
         $html .= '<section id="seo-audit"><h2>SEO-аудит сайта</h2>'.
             '<p>Страниц опубликовано: '.(int)$audit['published_count'].'. Проверок, требующих внимания: '.

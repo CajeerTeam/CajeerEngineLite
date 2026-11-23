@@ -9,6 +9,7 @@ use CajeerEngine\Public\PublicPath;
 use CajeerEngine\Analytics\ReportConfig;
 use CajeerEngine\Auth\AuthPolicy;
 use CajeerEngine\AI\AIConfig;
+use CajeerEngine\SEO\SEOControl;
 
 /** Versioned schema and deterministic upgrade path for the site's durable data. */
 final class SiteState
@@ -53,6 +54,11 @@ final class SiteState
                         throw new \RuntimeException('Blocks and body are inconsistent');
                     }
                 } catch (\InvalidArgumentException $error) { throw new \RuntimeException('Invalid page blocks',0,$error); }
+            }
+            if (array_key_exists('seo',$page)) {
+                if (!is_array($page['seo'])) throw new \RuntimeException('Invalid page SEO schema');
+                try { SEOControl::validatePage($page['seo']); }
+                catch (\InvalidArgumentException $e) { throw new \RuntimeException('Invalid page SEO configuration',0,$e); }
             }
             if ($page['title'] === '' || !is_bool($page['published'] ?? null) || !is_bool($page['menu'] ?? null)) {
                 throw new \RuntimeException('Invalid page flags or title');
@@ -120,6 +126,11 @@ final class SiteState
         if ($version >= 13) {
             if (!is_array($state['ai'] ?? null)) throw new \RuntimeException('Missing OpenAI settings');
             AIConfig::validate($state['ai']);
+        }
+        if (array_key_exists('seo',$state)) {
+            if (!is_array($state['seo'])) throw new \RuntimeException('Invalid SEO configuration');
+            try { SEOControl::validateGlobal($state['seo']); }
+            catch (\InvalidArgumentException $e) { throw new \RuntimeException('Invalid global SEO configuration',0,$e); }
         }
     }
 

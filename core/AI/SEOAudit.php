@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace CajeerEngine\AI;
 
 use CajeerEngine\Modules\ModuleConfig;
+use CajeerEngine\SEO\SEOControl;
 
 /** Reproducible on-site SEO checks. No AI guesswork is presented as measured data. */
 final class SEOAudit
@@ -37,6 +38,20 @@ final class SEOAudit
             if (!$page['published']) {
                 $add('unpublished', 'info', 'Страница не опубликована и не входит в sitemap.');
             }
+            $seo=SEOControl::page($page);
+            if ($page['published'] && !SEOControl::isIndexable($site,$page)) {
+                $add('noindex','info','Индексация страницы отключена в SEO Control Center.');
+            }
+            if ($seo['canonical']!=='' && $seo['canonical']!==$path) {
+                if (!isset($pages[$seo['canonical']]) || !$pages[$seo['canonical']]['published']) {
+                    $add('broken_canonical','error','Canonical ведёт на отсутствующую или неопубликованную страницу.');
+                } else {
+                    $add('alternate_canonical','info','Canonical указан на другой адрес; текущая страница исключена из sitemap.');
+                }
+            }
+            if ($page['published'] && !$seo['sitemap']) {
+                $add('sitemap_disabled','info','Страница исключена из sitemap через SEO Control Center.');
+            }
             if ($titleLength < 25) $add('short_title', 'warning', 'Заголовок короче 25 символов.');
             if ($titleLength > 65) $add('long_title', 'warning', 'Заголовок длиннее 65 символов.');
             if ($descriptionLength === 0) $add('missing_description', 'error', 'Meta description отсутствует.');
@@ -55,7 +70,7 @@ final class SEOAudit
             foreach ($issues as $issue) $penalty += match ($issue['severity']) {'error' => 22, 'warning' => 9, default => 0};
             $pagesReport[$path] = [
                 'path' => $path, 'published' => $page['published'],
-                'canonical' => $site['settings']['url'].$path,
+                'canonical' => $site['settings']['url'].SEOControl::canonicalPath($page),
                 'title_chars' => $titleLength, 'description_chars' => $descriptionLength,
                 'body_chars' => $bodyLength, 'issues' => $issues,
                 'score' => max(0, 100 - $penalty),
@@ -65,6 +80,7 @@ final class SEOAudit
         $global = [];
         if (!ModuleConfig::enabled($site, 'sitemap')) $global[] = 'Sitemap выключен в конфигурации модулей.';
         if (!ModuleConfig::enabled($site, 'robots')) $global[] = 'robots.txt выключен в конфигурации модулей.';
+        if (!SEOControl::site($site)['indexable']) $global[] = 'Индексация сайта отключена в SEO Control Center.';
         if (!str_starts_with($site['settings']['url'], 'https://')) $global[] = 'Публичный URL сайта использует HTTP вместо HTTPS.';
         return ['pages' => $pagesReport, 'issue_count' => $total,
             'global' => $global, 'published_count' => count(array_filter($pages, static fn(array $p): bool => $p['published']))];
