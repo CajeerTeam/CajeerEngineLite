@@ -114,11 +114,17 @@ final class ContentGenerator
                     throw new \InvalidArgumentException('Page changed since generation; generate a new preview');
                 }
                 $old[$mode] = $fields[$mode];
-                $state['pages'][$path] = Lite::page([
+                $updated = Lite::page([
                     ...$old,
                     'published' => $old['published'] ? '1' : '',
                     'menu' => $old['menu'] ? '1' : '',
                 ]);
+                // Leave unrelated fields byte-identical on metadata-only writes;
+                // older imported pages may contain significant trailing whitespace.
+                foreach (['title', 'description', 'body'] as $field) {
+                    if ($field !== $mode) $updated[$field] = $old[$field];
+                }
+                $state['pages'][$path] = $updated;
             }
             return $state;
         });

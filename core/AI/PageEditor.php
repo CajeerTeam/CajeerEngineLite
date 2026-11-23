@@ -52,6 +52,11 @@ final class PageEditor
         }
         $candidate=Lite::page([...$page,...$changes,
             'published'=>$page['published']?'1':'','menu'=>$page['menu']?'1':'']);
+        // Lite::page normalizes every text field. Editing a single field must never
+        // silently trim unrelated, already-published content from older JSON sites.
+        foreach (['title','description','body'] as $field) {
+            if (!array_key_exists($field,$changes)) $candidate[$field]=$page[$field];
+        }
         if ($candidate['path']!==$page['path'] || $candidate['published']!==$page['published'] ||
             $candidate['menu']!==$page['menu']) throw new \InvalidArgumentException('AI cannot change page publication or URL');
         return $candidate;

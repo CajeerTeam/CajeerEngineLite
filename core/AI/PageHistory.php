@@ -61,10 +61,29 @@ final class PageHistory
             !hash_equals($s['revision'],PageEditor::revision($s['page']))) {
             throw new \RuntimeException('Page history is corrupt');
         }
-        $checked=Lite::page([...$s['page'], 'published'=>$s['page']['published']?'1':'',
-            'menu'=>$s['page']['menu']?'1':'']);
-        if ($checked!==$s['page']) throw new \RuntimeException('Invalid saved page');
+        self::validatePage($s['page']);
         return $s;
+    }
+
+    /** Validate a historic JSON page without normalizing its untouched text. */
+    private static function validatePage(array $page): void
+    {
+        // Reuse canonical path/flag validation, but do not require the text to
+        // equal Lite::page()'s trim-normalized copy: legacy pages may preserve
+        // whitespace that is valid under SiteState::validate().
+        try {
+            $canonical=Lite::page([...$page, 'published'=>$page['published']?'1':'',
+                'menu'=>$page['menu']?'1':'']);
+        } catch (\Throwable $e) { throw new \RuntimeException('Invalid saved page',0,$e); }
+        if ($canonical['path']!==$page['path'] || $canonical['published']!==$page['published'] ||
+            $canonical['menu']!==$page['menu']) throw new \RuntimeException('Invalid saved page');
+        foreach (['title'=>200,'description'=>500,'body'=>60000] as $field=>$limit) {
+            $value=$page[$field];
+            if (!is_string($value) || strlen($value)>$limit || str_contains($value,"\0") ||
+                !preg_match('//u',$value) || ($field==='title' && trim($value)==='')) {
+                throw new \RuntimeException('Invalid saved page');
+            }
+        }
     }
     private function entries(string $dir,string $path): array
     {
@@ -91,7 +110,10 @@ final class PageHistory
     public function save(array $page): string
     {
         $path=$page['path']??null;
-        if (!is_string($path) || PageEditor::revision($page)==='') throw new \InvalidArgumentException('Invalid page snapshot');
+        if (!is_string($path) || array_keys($page)!==['path','title','description','body','published','menu']) {
+            throw new \InvalidArgumentException('Invalid page snapshot');
+        }
+        self::validatePage($page);
         return $this->locked($path,function(string $dir)use($page,$path):string {
             $existing=$this->entries($dir,$path);
             $id=bin2hex(random_bytes(16));
