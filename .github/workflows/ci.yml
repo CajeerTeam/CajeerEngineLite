@@ -61,6 +61,7 @@ jobs:
       - run: php tests/core_136.php
       - run: php tests/core_137.php
       - run: php tests/core_138.php
+      - run: php tests/core_139.php
       - run: php tests/media_concurrency_134.php
       - run: bash tests/admin_experience_http.sh
       - run: bash tests/pages_management_http.sh
@@ -70,6 +71,7 @@ jobs:
       - run: bash tests/seo_control_http.sh
       - run: bash tests/developer_tools_http.sh
       - run: bash tests/cms_operations_http.sh
+      - run: bash tests/experience_hardening_http.sh
       - run: php tests/ai_concurrency_121.php
       - run: php tests/ai_cost_concurrency_128.php
       - run: php tests/auth_concurrency_119.php
@@ -125,3 +127,4 @@ jobs:
       - run: python tests/browser_136.py
       - run: python tests/browser_137.py
       - run: python tests/browser_138.py
+      - run: python tests/browser_139.py

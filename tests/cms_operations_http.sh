@@ -40,5 +40,5 @@ csrf2=$(grep -o 'name="csrf" value="[a-f0-9]*"' "$tmp/newpanel" | head -1 | cut 
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/newcookies" --data-urlencode "csrf=$csrf2" --data-urlencode 'action=cache' "$base/admin/operations") == 200 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' -b "$tmp/newcookies" --data-urlencode "csrf=$csrf2" --data-urlencode 'action=prune' --data-urlencode 'confirm=PRUNE' --data-urlencode 'keep=1' "$base/admin/operations") == 200 ]]
 php bin/cajeer operations check > "$tmp/cli.json"
-php -r '$report=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if($report["version"]!=="1.3.8"||$report["backups"]!==1)exit(1);' "$tmp/cli.json"
+php -r '$report=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if(version_compare($report["version"],"1.3.8","<")||$report["backups"]!==1)exit(1);' "$tmp/cli.json"
 echo 'CMS Operations 1.3.8 HTTP: authorization, CSRF, complete TAR backup/download/export, import, session revocation, cache, retention OK'

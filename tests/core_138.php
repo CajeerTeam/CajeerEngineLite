@@ -12,7 +12,7 @@ $root=sys_get_temp_dir().'/lite138-'.bin2hex(random_bytes(6));mkdir($root);mkdir
 $other=sys_get_temp_dir().'/lite138-other-'.bin2hex(random_bytes(6));mkdir($other);mkdir($other.'/storage');
 try {
     $app=new Lite($root);$app->install('OriginalPassword138!','https://example.test','Original');
-    ok138(Lite::VERSION==='1.3.8'&&SiteState::SCHEMA===14,'version and compatible schema');
+    ok138(version_compare(Lite::VERSION,'1.3.8','>=')&&SiteState::SCHEMA===14,'version and compatible schema');
     $media=new MediaLibrary($root);$sample=$root.'/sample.png';
     $png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUT9rBwMDAxMDAwMDAAAAOPQE9xgjZwQAAAABJRU5ErkJggg==',true);
     file_put_contents($sample,$png);$entry=$media->ingest($sample,'public-asset.png');

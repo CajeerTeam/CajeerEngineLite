@@ -15,6 +15,7 @@ use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\SEO\{SEOControl,SEOControlView};
 use CajeerEngine\Developer\{DeveloperDiagnostics,DeveloperView,TemplateManager,DeveloperEvents};
 use CajeerEngine\Operations\{CmsOperations,OperationsView};
+use CajeerEngine\Security\{AdminRequestGuard,RequestRejected,PrivateArchiveDownload};
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
@@ -60,14 +61,8 @@ function shell(string $title,string $html,bool $aiChat=false): never {
     exit;
 }
 function cmsDownload138(string $file,string $name): void {
-    if (!preg_match('/^[a-zA-Z0-9_.-]+$/D',$name)) throw new InvalidArgumentException('Invalid download filename');
-    $size=filesize($file);
-    if (!is_int($size) || $size<1 || $size>115_000_000 || is_link($file)) throw new RuntimeException('Unsafe download');
-    header('Content-Type: application/x-tar');
-    header('Content-Disposition: attachment; filename="'.$name.'"');
-    header('Content-Length: '.$size);
-    header('Cache-Control: no-store, private');
-    if (($_SERVER['REQUEST_METHOD']??'GET')!=='HEAD') readfile($file);
+    // The descriptor remains bound to the verified inode during streaming.
+    PrivateArchiveDownload::send($file,$name);
 }
 function input(string $name,string $value='',string $type='text'): string { return '<label>'.e($name).'<input name="'.e($name).'" type="'.e($type).'" value="'.e($value).'"></label>'; }
 function token(): string { return '<input type="hidden" name="csrf" value="'.e($_SESSION['csrf']).'">'; }
@@ -104,21 +99,11 @@ try {
         exit;
     }
     if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/operations' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
-        // Never trust user-provided X-Forwarded-Proto or Host for administrative
-        // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
+        // Authenticate the request authority for HTTP as well as HTTPS deployments.
+        // The web server must explicitly pass HTTPS=on when terminating TLS.
+        try { AdminRequestGuard::check($d['settings']['url'], $_SERVER, $path, $method); }
+        catch (RequestRejected $rejection) { stop($rejection->httpStatus, $rejection->getMessage()); }
         if (str_starts_with($d['settings']['url'], 'https://')) {
-            if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS']==='off') {
-                stop(403, 'Administrative access requires HTTPS');
-            }
-            $expectedHost=parse_url($d['settings']['url'],PHP_URL_HOST);
-            $expectedPort=parse_url($d['settings']['url'],PHP_URL_PORT) ?? 443;
-            $received=$_SERVER['HTTP_HOST'] ?? '';
-            $host=is_string($received) ? parse_url('https://'.$received, PHP_URL_HOST) : null;
-            $port=is_string($received) ? (parse_url('https://'.$received, PHP_URL_PORT) ?? 443) : null;
-            if (!is_string($expectedHost) || !is_string($host) ||
-                !hash_equals(strtolower($expectedHost),strtolower($host)) || $port!==$expectedPort) {
-                stop(421,'Unrecognized admin hostname');
-            }
             header('Strict-Transport-Security: max-age=31536000');
         }
         header('Cache-Control: no-store'); header('X-Robots-Tag: noindex, nofollow');

@@ -73,8 +73,13 @@ final class CmsOperations
     {
         if (!in_array($kind,['backup','export'],true)) throw new \InvalidArgumentException('Invalid archive kind');
         $operation=OperationLock::acquire($this->root,true);
-        $stage=$this->stage();
-        $target=$kind==='backup' ? $this->backupFile($this->backupName()) : $stage.'/portable.tar';
+        try {
+            $stage=$this->stage();
+            $target=$kind==='backup' ? $this->backupFile($this->backupName()) : $stage.'/portable.tar';
+        } catch (\Throwable $failure) {
+            OperationLock::release($operation);
+            throw $failure;
+        }
         $created=false;
         try {
             $this->media->guard(function () use ($kind,$stage,$target): void {
@@ -121,11 +126,12 @@ final class CmsOperations
             if ($kind==='backup') return basename($target);
             return $target;
         } finally {
-            if (!$created || $kind==='backup') {
-                if (!$created && is_file($target)) unlink($target);
-                self::cleanup($stage);
-            }
-            OperationLock::release($operation);
+            try {
+                if (!$created || $kind==='backup') {
+                    if (!$created && is_file($target)) unlink($target);
+                    self::cleanup($stage);
+                }
+            } finally { OperationLock::release($operation); }
         }
     }
     public function createBackup(): string { return $this->archive('backup'); }
@@ -218,7 +224,8 @@ final class CmsOperations
     {
         self::safeFile($source);
         $operation=OperationLock::acquire($this->root,true);
-        $stage=$this->stage();
+        try { $stage=$this->stage(); }
+        catch (\Throwable $failure) { OperationLock::release($operation); throw $failure; }
         try {
             $decoded=$this->inspect($source,$stage);
             $imported=SiteState::migrate($decoded['state']);
@@ -236,12 +243,30 @@ final class CmsOperations
                     SiteState::validate($next);
                     // Always create a recoverable pre-import copy before changing site.json.
                     (new BackupService($this->repo))->createLocked('pre-restore');
-                    (new SessionRegistry($this->root))->invalidateAll($next);
-                    $this->repo->commit($next);
+                    // The site and media transaction must roll back if session revocation
+                    // fails (for instance, an unreadable registry or a full filesystem).
+                    // Revocation is therefore after commit, with best-effort durable
+                    // site rollback before the media library restores its previous index.
+                    try {
+                        $this->repo->commit($next);
+                        (new SessionRegistry($this->root))->invalidateAll($next);
+                    } catch (\Throwable $failure) {
+                        // A failed filesystem sync can throw *after* an atomic
+                        // rename has already made the new site visible. Restore
+                        // the old site even when commit itself reported failure.
+                        try { $this->repo->commit($live); }
+                        catch (\Throwable $rollbackFailure) {
+                            throw new \RuntimeException('CMS import rollback failed; restore manually from pre-restore backup',0,$rollbackFailure);
+                        }
+                        throw $failure;
+                    }
                 });
             });
             return 'imported';
-        } finally { self::cleanup($stage);OperationLock::release($operation); }
+        } finally {
+            try { self::cleanup($stage); }
+            finally { OperationLock::release($operation); }
+        }
     }
     public function restoreBackup(string $name): string { return $this->importFile($this->backupPath($name)); }
 
