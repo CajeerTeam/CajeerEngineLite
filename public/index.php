@@ -5,6 +5,7 @@ use CajeerEngine\Lite;
 use CajeerEngine\Admin\AdminExperience;
 use CajeerEngine\Admin\PagesManagement;
 use CajeerEngine\Admin\{BlockEditor,BlockEditorView};
+use CajeerEngine\Media\{MediaLibrary,MediaView};
 use CajeerEngine\AI\{AIConfig,CostPolicy,OpenAIClient,UsageLimiter,ConversationStore,ChatView,ContentGenerator,ContentView,PageEditor,PageEditorView,PageHistory,SEOAudit,SEOAssistant,SEOView,AnalyticsInsights,AnalyticsInsightStore,AnalyticsInsightView,SupportDiagnostics,TechnicalSupport,SupportStore,SupportView,ProductionAIAcceptance};
 use CajeerEngine\Auth\{OidcClient,OidcFlow,OwnerIdentity,SessionRegistry,AuthPolicy,StableAcceptance};
 use CajeerEngine\Public\PublicPath;
@@ -36,7 +37,7 @@ function go(string $path): never {
 function shell(string $title,string $html,bool $aiChat=false): never {
     header('Content-Type: text/html; charset=utf-8');
     $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
-    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || str_starts_with($route,'/admin/ai')) &&
+    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || str_starts_with($route,'/admin/ai')) &&
         $title!=='Вход в админ-панель';
     if ($admin) {
         $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
@@ -71,7 +72,24 @@ try {
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     if (!is_file($app->file())) stop(503,'Not installed. Run php bin/cajeer install.');
     $d=$app->load();
-    if ($path==='/admin' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
+    if (preg_match('~^/media/([a-f0-9]{32})$~D', $path, $mediaMatch)) {
+        if ($method!=='GET' && $method!=='HEAD') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
+        $media=(new MediaLibrary($app->root))->read($mediaMatch[1]);
+        if ($media===null) stop(404,'Media not found');
+        $meta=$media['meta'];$bytes=$media['bytes'];
+        header('Content-Type: '.$meta['mime']);
+        header('Content-Length: '.strlen($bytes));
+        header('Cross-Origin-Resource-Policy: same-origin');
+        header("Content-Security-Policy: sandbox; default-src 'none'");
+        header('Cache-Control: public, max-age=300');
+        $etag='"'.$meta['sha256'].'"';header('ETag: '.$etag);
+        $isDownload=$meta['mime']==='application/pdf' || (($_GET['download']??null)==='1');
+        header('Content-Disposition: '.($isDownload?'attachment':'inline').'; filename="media.'.$meta['extension'].'"');
+        if (($ifNoneMatch=$_SERVER['HTTP_IF_NONE_MATCH']??null) === $etag) { http_response_code(304);header_remove('Content-Length');exit; }
+        if ($method==='GET') echo $bytes;
+        exit;
+    }
+    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Never trust user-provided X-Forwarded-Proto or Host for administrative
         // authentication. TLS termination must pass HTTPS=on to PHP-FPM.
         if (str_starts_with($d['settings']['url'], 'https://')) {
@@ -136,6 +154,48 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/media') {
+            if (!$auth) stop(403,'Administrator login required');
+            if ($method==='POST' && (int)($_SERVER['CONTENT_LENGTH']??0)>10_000_000) stop(413,'Media upload request exceeds 10 MB');
+            $mediaLibrary=new MediaLibrary($app->root);
+            $mediaError='';
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null) || !hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                try {
+                    switch ($_POST['action']??null) {
+                        case 'upload':
+                            $uploaded=$_FILES['media_file']??null;
+                            if (!is_array($uploaded)) throw new InvalidArgumentException('File is required (check upload_max_filesize and post_max_size)');
+                            $mediaLibrary->upload($uploaded);
+                            $_SESSION['admin_notice']='Файл загружен.';
+                            break;
+                        case 'rename':
+                            if (!is_string($_POST['id']??null) || !is_string($_POST['name']??null)) throw new InvalidArgumentException('Invalid media operation');
+                            $mediaLibrary->rename($_POST['id'],$_POST['name']);
+                            $_SESSION['admin_notice']='Имя файла изменено.';
+                            break;
+                        case 'delete':
+                            if (!is_string($_POST['id']??null)) throw new InvalidArgumentException('Invalid media operation');
+                            $mediaLibrary->delete($_POST['id']);
+                            $_SESSION['admin_notice']='Файл удалён.';
+                            break;
+                        default: stop(400,'Unknown media operation');
+                    }
+                    go('/admin/media');
+                } catch (InvalidArgumentException $failure) {
+                    http_response_code(422);
+                    $mediaError=$failure->getMessage();
+                }
+            }
+            $query=$_GET['q']??'';$type=$_GET['type']??'all';
+            if (!is_string($query) || !is_string($type)) stop(400,'Invalid media query');
+            try { $content=MediaView::render($mediaLibrary,$_SESSION['csrf'],$query,$type); }
+            catch (InvalidArgumentException) { stop(400,'Invalid media query'); }
+            $notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
+            $feedback=$mediaError!==''?'<p class="error" role="alert">'.e($mediaError).'</p>':
+                (is_string($notice)?'<p class="admin-feedback" role="status">'.e($notice).'</p>':'');
+            shell('Медиатека',$feedback.$content);
+        }
         if ($path==='/admin/editor' || $path==='/admin/editor/preview') {
             if (!$auth) stop(403,'Administrator login required');
             if ($method==='POST') {

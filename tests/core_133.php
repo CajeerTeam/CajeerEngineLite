@@ -11,7 +11,7 @@ function reject133(callable $run,string $label):void {
     try{$run();}catch(InvalidArgumentException|RuntimeException){return;}
     throw new RuntimeException('Expected invalid block: '.$label);
 }
-check133(Lite::VERSION==='1.3.3'&&SiteState::SCHEMA===14,'version/schema');
+check133(version_compare(Lite::VERSION,'1.3.3','>=')&&SiteState::SCHEMA===14,'version/schema');
 $blocks=[
     ['type'=>'heading','level'=>2,'text'=>'Заголовок <script>alert(1)</script>'],
     ['type'=>'paragraph','text'=>"Безопасный текст  \nВторая строка"],

@@ -1,4 +1,4 @@
-# CajeerEngine Lite Edition 1.3.3
+# CajeerEngine Lite Edition 1.3.4
 
 Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
 
@@ -1336,3 +1336,26 @@ The authenticated `/admin/editor` page is a functional client-side block editor:
 Schema **14** adds an optional `blocks` array to each page while retaining the plain `body` field for search and AI. Migration from schema 13 preserves all original text and publication flags; back up `storage/site.json`, `storage/ai/` before upgrade. AI metadata changes preserve blocks; AI body rewrites intentionally return pages to plain-text mode (the old structured document is available via page history). Block content is escaped server-side and never interpreted as submitted HTML or JavaScript.
 
 Checks: `php tests/core_133.php`, `bash tests/block_editor_http.sh`, `python tests/browser_133.py`.
+
+
+### 1.3.4 — Media Library
+
+The authenticated `/admin/media` screen accepts JPEG, PNG, WebP, GIF and PDF uploads (8 MB/file,
+250 files and 100 MB total). Images must be at most 24 megapixels; extension, detected MIME and
+image structure are validated server-side. Stored filenames use unpredictable identifiers.
+
+Files and `index.json` live in `storage/media/`, outside `public/` and are created with
+private permissions. `/media/<32-hex-id>` serves only indexed, integrity-checked files with
+fixed MIME, `nosniff` and a sandbox CSP; PDFs always download as attachments.
+The original filename is display metadata only and never controls disk paths.
+
+Deployment: set `upload_max_filesize=8M`, `post_max_size=10M`, and ensure `file_uploads=On`
+in PHP-FPM. The example Nginx config now allows a 10 MB request body and routes `/media/`
+through `index.php`; do **not** configure an alias to `storage/media/`. The directory
+`storage/media/` must remain writable by the PHP worker and outside the web root.
+The library uses PHP's `fileinfo` and `getimagesizefromstring` extensions.
+It does not embed media into content blocks (planned for 1.3.5).
+Back up `storage/media/` alongside `storage/site.json`; exports containing site.json alone
+do not include media assets. Existing site schema remains 14.
+
+Tests: `php tests/core_134.php`, `bash tests/media_library_http.sh`.
