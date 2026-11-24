@@ -17,9 +17,14 @@ class ReleaseHttp
             !str_starts_with($parsed['path']??'','/')) throw new \RuntimeException('Untrusted release host or URL');
     }
     /** @return array{status:int,headers:array<string,string>,stream:resource} */
-    private function open(string $url, string $accept): array
+    protected function open(string $url, string $accept, ?string $etag = null): array
     {
-        $headers=['User-Agent: CajeerEngineLite-Update/1.4.5','Accept: '.$accept,'Connection: close'];
+        $headers=['User-Agent: CajeerEngineLite-Update/1.5.1','Accept: '.$accept,'Connection: close'];
+        if ($etag !== null) {
+            if (!self::validEtag($etag)) throw new \RuntimeException('Invalid release ETag');
+            $headers[] = 'If-None-Match: '.$etag;
+        }
+        if ($accept === 'application/vnd.github+json') $headers[] = 'X-GitHub-Api-Version: 2022-11-28';
         $ctx=stream_context_create([
             'http'=>['method'=>'GET','timeout'=>20,'follow_location'=>0,'ignore_errors'=>true,
                 'max_redirects'=>0,'header'=>implode("\r\n",$headers)],
@@ -37,10 +42,10 @@ class ReleaseHttp
         $map=[];
         foreach($lines as $line) if(is_string($line)&&preg_match('/^([A-Za-z0-9-]+):\s*(.*)$/D',$line,$match)) {
             $key=strtolower($match[1]);
-            if(isset($map[$key]) && in_array($key,['location','content-length','content-encoding'],true)) {
+            if(isset($map[$key]) && in_array($key,['location','content-length','content-encoding','etag','retry-after','x-ratelimit-remaining','x-ratelimit-reset'],true)) {
                 fclose($stream);throw new \RuntimeException('Conflicting HTTP metadata');
             }
-            $map[$key]=trim($match[2]);
+            $map[$key]=$key==='link' && isset($map[$key]) ? $map[$key].','.trim($match[2]) : trim($match[2]);
         }
         return ['status'=>(int)$m[1],'headers'=>$map,'stream'=>$stream];
     }
@@ -67,21 +72,45 @@ class ReleaseHttp
         }
         throw new \RuntimeException('Too many GitHub redirects');
     }
+    public static function validEtag(string $etag): bool
+    {
+        return strlen($etag) <= 256 && preg_match('~^(?:W/)?"[!\x23-\x7e]*"$~D', $etag) === 1;
+    }
+
+    /** Release metadata never follows redirects or sends credentials. Each page is independently revalidated. */
+    public function page(string $url, ?string $etag = null): array
+    {
+        self::assertSafeUrl($url);
+        if (!preg_match('~^https://api\.github\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases\?per_page=30(?:&page=[1-9][0-9]*)?$~D', $url)) {
+            throw new \RuntimeException('Invalid GitHub release API endpoint');
+        }
+        $reply = $this->open($url, 'application/vnd.github+json', $etag);
+        $stream = $reply['stream'];
+        try {
+            $status = $reply['status']; $headers = $reply['headers'];
+            if ($status !== 200) return ['status'=>$status,'headers'=>$headers,'releases'=>null];
+            if (($headers['content-encoding'] ?? 'identity') !== 'identity') throw new \RuntimeException('Compressed release metadata is not supported');
+            if (isset($headers['content-length']) && (!ctype_digit($headers['content-length']) || (float)$headers['content-length'] > 512000)) {
+                throw new \RuntimeException('GitHub response exceeds size limit');
+            }
+            $body = ''; $deadline = hrtime(true) + 20_000_000_000;
+            while (!feof($stream)) {
+                $chunk = fread($stream,32768);
+                if ($chunk === false || ($chunk === '' && !feof($stream)) || hrtime(true) > $deadline) throw new \RuntimeException('Incomplete GitHub JSON response');
+                $body .= $chunk;
+                if (strlen($body) > 512000) throw new \RuntimeException('GitHub response exceeds size limit');
+            }
+            if (isset($headers['content-length']) && strlen($body) !== (int)$headers['content-length']) throw new \RuntimeException('Incomplete GitHub JSON response');
+            $data = json_decode($body,true,64,JSON_THROW_ON_ERROR);
+            if (!is_array($data) || !array_is_list($data) || count($data)>30) throw new \RuntimeException('Unexpected GitHub releases response');
+            return ['status'=>200,'headers'=>$headers,'releases'=>$data];
+        } finally { fclose($stream); }
+    }
     public function json(string $url): array
     {
-        $stream=$this->follow($url,'application/vnd.github+json');
-        $body='';
-        try {
-            while(!feof($stream)) {
-                $chunk=fread($stream,32768);
-                if($chunk===false||($chunk===''&&!feof($stream))) throw new \RuntimeException('Incomplete GitHub JSON response');
-                $body.=$chunk;
-                if(strlen($body)>512000)throw new \RuntimeException('GitHub response exceeds size limit');
-            }
-        } finally {fclose($stream);}
-        $data=json_decode($body,true,64,JSON_THROW_ON_ERROR);
-        if(!is_array($data)||!array_is_list($data))throw new \RuntimeException('Unexpected GitHub releases response');
-        return $data;
+        $reply = $this->page($url);
+        if ($reply['status'] !== 200) throw new \RuntimeException('GitHub release HTTP status '.$reply['status']);
+        return $reply['releases'];
     }
     public function download(string $url,string $destination,int $expectedSize,?string $digest): array
     {

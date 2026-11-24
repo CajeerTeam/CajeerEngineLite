@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.0
+# CajeerEngine Lite Edition 1.5.1
 
+
+### 1.5.1 — GitHub Release Discovery
+
+The existing auto-update commands now scan up to 20 GitHub release pages, use private per-page ETag/304 caching, bounded transient retries and persistent rate-limit cooldowns. Discovery fails closed on incomplete scans rather than installing stale cached metadata. Stable remains the default; preview discovery includes numeric-version GitHub prereleases, with a separate opt-in for preview installation. `available` is the nearest eligible release, `latest` the highest observed eligible release; neither is a signed compatibility verdict. The existing signed exact-base installation and rollback remain mandatory. See [GITHUB_RELEASE_DISCOVERY.md](GITHUB_RELEASE_DISCOVERY.md). Schema 14 is unchanged.
 
 ### 1.5.0 — Production Stable
 

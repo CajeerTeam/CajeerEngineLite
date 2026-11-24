@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1 — GitHub Release Discovery
+
+- Bounded GitHub pagination, per-page conditional requests with private ETag cache, nearest/latest selection and strict official asset URLs.
+- Transient HTTP/network retries, persistent rate-limit cooldown, no stale or partial installation selection, stable and opt-in preview channels.
+- Regression coverage of HTTP decoding, discovery, signed installation and version-independent release acceptance; no data schema change.
+
 ## 1.5.0 — Production Stable
 
 - Signed runtime inventory and verification of the complete artifact set, installed executable/template bytes, compatibility, live TLS/version and fresh monitoring.

@@ -26,9 +26,9 @@ class FixtureReleases145 extends ReleaseHttp {
     public string $package='';
     public bool $mutate=false;
     public int $downloads=0;
-    public function json(string $url): array {
+    public function page(string $url, ?string $etag=null): array {
         if($url!=='https://api.github.com/repos/CajeerTeam/CajeerEngineLite/releases?per_page=30')throw new RuntimeException('Incorrect GitHub API endpoint');
-        return $this->releases;
+        return ['status'=>200,'headers'=>[],'releases'=>$this->releases];
     }
     public function download(string $url,string $destination,int $expectedSize,?string $digest): array {
         $this->downloads++;

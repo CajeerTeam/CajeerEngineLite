@@ -22,8 +22,11 @@ def main():
             out=target/name;out.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,out)
         base=args.base.resolve() if args.base else work/'base'
         if not args.base:
-            shutil.copytree(target,base);(base/'VERSION').write_text('1.4.9\n')
-            lite=base/'core/Lite.php';lite.write_text(lite.read_text().replace("VERSION = '1.5.0'","VERSION = '1.4.9'"))
+            version=(target/'VERSION').read_text().strip()
+            major,minor,patch=map(int,version.split('.'))
+            prior=f'{major}.{minor}.{patch-1}' if patch else f'{major}.{minor-1}.9'
+            shutil.copytree(target,base);(base/'VERSION').write_text(prior+'\n')
+            lite=base/'core/Lite.php';lite.write_text(lite.read_text().replace(f"VERSION = '{version}'",f"VERSION = '{prior}'"))
         private=work/'private.pem';public=work/'public.pem';dist=work/'dist'
         subprocess.run(['openssl','genpkey','-algorithm','RSA','-pkeyopt','rsa_keygen_bits:2048','-out',str(private)],check=True,stderr=subprocess.DEVNULL)
         private.chmod(0o600)

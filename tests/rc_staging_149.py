@@ -141,7 +141,7 @@ proxy_set_header X-Forwarded-Host $http_host; proxy_set_header X-Forwarded-Proto
                     # Exercise the final gate over actual HTTPS, using independently signed disposable artifacts.
                     env['CAJEER_UPDATE_TRUSTED_KEY_FILE']=str(trust)
                     for _ in range(30): assert request('/')[0]==200
-                    assert request('/health/ready')[2].get('X-Cajeer-Release')=='1.5.0'
+                    assert request('/health/ready')[2].get('X-Cajeer-Release')==(root/'VERSION').read_text().strip()
                     flag='--artifacts='+str(artifacts)
                     local=json.loads(cli('release','production-check',flag,expected=2))
                     assert local['status']=='pending_live' and not local['production_accepted']
@@ -155,7 +155,7 @@ proxy_set_header X-Forwarded-Host $http_host; proxy_set_header X-Forwarded-Proto
                     for name in ('ci','browser_e2e','staging_fpm_tls','providers_and_consent','offhost_restore','upgrade_rollback','load_soak','production_observation'):
                         content=('SYNTHETIC TEST ONLY - '+name+'\n').encode()
                         (evidence/(name+'.txt')).write_bytes(content);hashes[name]=hashlib.sha256(content).hexdigest()
-                    approval={'reviewer':'Test reviewer','decision':'approve','version':'1.5.0','receipt_sha256':report['artifact']['receipt_sha256'],'origin_sha256':report['origin_sha256'],'site_sha256':report['site_sha256'],'evidence':hashes}
+                    approval={'reviewer':'Test reviewer','decision':'approve','version':(root/'VERSION').read_text().strip(),'receipt_sha256':report['artifact']['receipt_sha256'],'origin_sha256':report['origin_sha256'],'site_sha256':report['site_sha256'],'evidence':hashes}
                     (evidence/'approval.json').write_text(json.dumps(approval))
                     signflag='--evidence='+str(evidence)
                     cli('release','sign-off',flag,'--live',signflag,expected=1,extra=consent)

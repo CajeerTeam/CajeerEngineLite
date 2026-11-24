@@ -51,39 +51,13 @@ final class AutomaticUpdates
     }
     private function fetch(): array
     {
-        $url='https://api.github.com/repos/'.self::repository().'/releases?per_page=30';
-        $releases=($this->transport??new ReleaseHttp())->json($url);
-        $installed=UpdatePackage::version($this->root);
-        $options=[];
-        foreach($releases as $release) {
-            if(!is_array($release)||($release['draft']??null)!==false||($release['prerelease']??null)!==false||!is_array($release['assets']??null)) continue;
-            $tag=$release['tag_name']??null;
-            if(!is_string($tag)||!preg_match('/^v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/D',$tag,$m))continue;
-            $version=$m[1];
-            if(version_compare($version,$installed,'<='))continue;
-            $expected='CajeerEngineLite-'.$version.'.cjrupdate';
-            $matches=[];
-            foreach($release['assets'] as $asset)if(is_array($asset)&&($asset['name']??null)===$expected&&($asset['state']??null)==='uploaded')$matches[]=$asset;
-            if(count($matches)!==1)continue;
-            $asset=$matches[0];$url=$asset['browser_download_url']??null;$bytes=$asset['size']??null;
-            if(!is_string($url)||!is_int($bytes)||$bytes<60||$bytes>UpdatePackage::MAX_BYTES)continue;
-            $path=parse_url($url,PHP_URL_PATH);
-            if($path!=='/'.self::repository().'/releases/download/'.$tag.'/'.$expected)continue;
-            ReleaseHttp::assertSafeUrl($url);
-            $digest=$asset['digest']??null;
-            if($digest!==null && (!is_string($digest)||!preg_match('/^sha256:([a-f0-9]{64})$/D',$digest,$d)))continue;
-            if(isset($options[$version]))throw new \RuntimeException('Ambiguous GitHub release: '.$version);
-            $options[$version]=['version'=>$version,'tag'=>$tag,'url'=>$url,'bytes'=>$bytes,
-                'sha256'=>$digest===null?null:substr($digest,7)];
-        }
-        if(!$options)return ['installed'=>$installed,'available'=>null];
-        uksort($options,'version_compare');
-        // Pick the nearest available release; signed packages may be incremental.
-        return ['installed'=>$installed,'available'=>reset($options)];
+        return (new ReleaseDiscovery($this->root,$this->transport??new ReleaseHttp()))->fetch(
+            self::repository(),UpdatePackage::version($this->root),ReleaseDiscovery::channel());
     }
     public function status(): array
     {
         return ['installed_version'=>UpdatePackage::version($this->root),
+            'channel'=>ReleaseDiscovery::channel(),
             'enabled'=>self::flag('CAJEER_AUTO_UPDATE_ENABLED'),
             'automatic_install'=>self::flag('CAJEER_AUTO_UPDATE_INSTALL'),
             'pending'=>$this->engine()->status()['pending'],
@@ -95,8 +69,13 @@ final class AutomaticUpdates
         try {
             $result=$this->fetch();
             $this->record('checked',['installed'=>$result['installed'],
-                'available'=>$result['available']['version']??null]);
+                'available'=>$result['available']['version']??null,'channel'=>$result['channel'],
+                'pages'=>$result['pages'],'revalidated_pages'=>$result['revalidated_pages']]);
             return ['action'=>'checked']+$result;
+        } catch(\Throwable $e) {
+            try {$this->record('failed',['failure_type'=>get_class($e)]);}
+            catch(\Throwable) {error_log('Auto update could not record discovery failure');}
+            throw $e;
         } finally {OperationLock::release($lock);}
     }
     public function run(): array
@@ -125,6 +104,8 @@ final class AutomaticUpdates
                 $this->record('up_to_date',['installed'=>$result['installed']]);
                 return ['action'=>'up_to_date','version'=>$result['installed']];
             }
+            if ($release['prerelease'] && !self::flag('CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL')) throw new \RuntimeException('Preview installation requires CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL=1');
+            if (!self::window()) return ['action'=>'window_closed','version'=>$result['installed']];
             OperationFiles::dir($this->path(self::DOWNLOAD),0700);
             $download=$this->path(self::DOWNLOAD.'/'.bin2hex(random_bytes(16)).'.cjrupdate');
             $file=($this->transport??new ReleaseHttp())->download($release['url'],$download,$release['bytes'],$release['sha256']);

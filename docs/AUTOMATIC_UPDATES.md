@@ -1,8 +1,12 @@
 # CajeerEngine Lite 1.4.5 — Automatic Updates
 
+## Discovery behavior since 1.5.1
+
+See [GITHUB_RELEASE_DISCOVERY.md](GITHUB_RELEASE_DISCOVERY.md) for pagination, conditional caching, retry/cooldown behavior, stable/preview channels and exact discovery limits. The installation safeguards below are unchanged. Preview installs additionally require `CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL=1`.
+
 ## What is actually automated
 
-`php bin/cajeer update auto check` reads **public GitHub Releases** over verified HTTPS and picks the **lowest stable SemVer release higher** than the installed version that contains an asset named exactly `CajeerEngineLite-X.Y.Z.cjrupdate`. Drafts, prereleases, missing/ambiguous assets, invalid tag names, invalid sizes, and untrusted URLs are skipped or rejected. This check reads release metadata only: it does **not** imply that the release file has been authenticated.
+`php bin/cajeer update auto check` reads **public GitHub Releases** over verified HTTPS and picks the **lowest eligible numeric SemVer release higher** than the installed version that contains an asset named exactly `CajeerEngineLite-X.Y.Z.cjrupdate`. Drafts, prereleases in the default stable channel, missing/ambiguous assets, invalid tag names, invalid sizes, and untrusted URLs are skipped or rejected. This check reads release metadata only: it does **not** imply that the release file has been authenticated.
 
 `php bin/cajeer update auto run` performs the same selection, downloads the asset to a private 0600 file with size caps, optionally checks GitHub's `sha256:` digest, then **always** verifies the custom package's RSA-SHA256 signature with the independently pinned `CAJEER_UPDATE_TRUSTED_KEY_FILE`, the signed manifest, all file hashes, the exact installed base version, PHP and site schema, and PHP syntax before any file installation. It invokes the real 1.4.4 transactional installer, including backups, per-file atomic replacement, journaling, rollback and crash recovery. Only code-only packages compatible with JSON schema 14 are supported.
 
@@ -23,7 +27,7 @@ CAJEER_AUTO_UPDATE_WORKERS_QUIESCED=1
 CAJEER_AUTO_UPDATE_RECOVER=1
 ```
 
-- **Enabled** and **install** must both be `1`. Merely checking for updates is read-only and does not require either flag.
+- **Enabled** and **install** must both be `1`. Checking does not modify installed code or site data; it writes private discovery/cache status and does not require either flag.
 - The time window is explicitly specified in **UTC** (`HH:MM-HH:MM`), end-exclusive; overnight windows such as `23:30-00:30` work. Invalid or zero-length windows fail closed. No download or install occurs outside the window.
 - **WORKERS_QUIESCED is an operator attestation, not a command that stops workers.** Configure the scheduler/service manager to drain HTTP traffic, stop PHP-FPM workers/cron/queues that may execute the CMS, verify quiescence, then run `update auto run`, restart/invalidate PHP OPcache and check `/health/ready`. Do **not** set it globally while serving live traffic. An in-process shared file lock and the active-update 503 guard cannot guarantee quiescence of pre-existing workers or statically served files.
 - The trusted public key must be provisioned out of band and pinned to the real release owner's private signing key. Do not place the private signing key in the deployed CMS, GitHub repository, or the released package. Do not enable automatic install using unsigned, third-party, or unknown-key releases.
