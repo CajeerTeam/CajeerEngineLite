@@ -2,6 +2,8 @@
 
 The authenticated `/admin/updates` console manages GitHub releases. It is a private mailbox, not a privileged web installer. HTTP does not contact GitHub, download packages, launch subprocesses, set process environment or install code. The worker executes one job per invocation; system scheduling and FPM/service orchestration are separate deployment steps.
 
+For scheduled execution in 1.5.4 see [UPDATE_SCHEDULER.md](UPDATE_SCHEDULER.md).
+
 ## Operator setup
 
 The GitHub repository and trusted RSA public key remain deployment-owned, outside the HTTP application's writable paths. Configure the following in the CLI worker environment (replace repository/key with the actual official values):

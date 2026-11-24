@@ -1,0 +1,23 @@
+[Unit]
+Description=CajeerEngine Lite update scheduler (one tick)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=cajeer
+Group=cajeer
+WorkingDirectory=/srv/cajeer
+Environment=CAJEER_UPDATE_CONTROL_WORKER=1
+EnvironmentFile=/etc/cajeer/update-scheduler.env
+ExecStart=/usr/bin/php /srv/cajeer/bin/cajeer update scheduler tick
+TimeoutStartSec=10min
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/cajeer/storage
+# Default service is discovery-only. For installation use an operator-controlled
+# offline invocation with actual quiescence; never persist that assertion here.
+UnsetEnvironment=CAJEER_AUTO_UPDATE_WORKERS_QUIESCED CAJEER_AUTO_UPDATE_INSTALL

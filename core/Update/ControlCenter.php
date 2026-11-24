@@ -9,6 +9,7 @@ final class ControlCenter
 {
     private const DIR='storage/app/update-control';
     private const TTL=86400;
+    private const RETRY_DELAYS=[300,900];
     public function __construct(private readonly string $root, private readonly ?ReleaseHttp $transport=null) {}
     private function path(string $name): string {return OperationFiles::path($this->root,self::DIR.'/'.$name);}
     private static function defaults(): array {return ['channel'=>'stable','checks'=>false,'install'=>false,'interval'=>6,'window'=>'02:00-04:00'];}
@@ -33,7 +34,9 @@ final class ControlCenter
     {
         return is_array($j)&&is_string($j['id']??null)&&preg_match('/^[a-f0-9]{24}$/D',$j['id'])&&in_array($j['type']??null,['check','install'],true)&&
             in_array($j['status']??null,['queued','running'],true)&&is_int($j['at']??null)&&in_array($j['channel']??null,['stable','preview'],true)&&
-            ($j['type']==='check'?($j['target']??null)===null:self::verified($j['target']??null));
+            ($j['type']==='check'?($j['target']??null)===null:self::verified($j['target']??null))&&
+            (!array_key_exists('attempts',$j)||(is_int($j['attempts'])&&$j['attempts']>=0&&$j['attempts']<=count(self::RETRY_DELAYS)+1))&&
+            (!array_key_exists('not_before',$j)||(is_int($j['not_before'])&&$j['not_before']>=0&&$j['not_before']<=$j['at']+self::TTL));
     }
     private function read(): array
     {
@@ -74,7 +77,7 @@ final class ControlCenter
     public function status(): array
     {
         $s=$this->read();$engine=(new UpdateEngine($this->root))->status();
-        return $s+['revision'=>self::digest($s),'fresh'=>$this->fresh($s),'installed'=>$engine['installed_version'],'pending'=>$engine['pending']!==null];
+        return $s+['revision'=>self::digest($s),'fresh'=>$this->fresh($s),'installed'=>$engine['installed_version'],'pending'=>$engine['pending']!==null,'scheduler'=>(new Scheduler($this->root))->heartbeat()];
     }
     private static function finish(array &$s,string $result): void
     {
@@ -83,7 +86,7 @@ final class ControlCenter
     }
     private static function queue(array &$s,string $type,?array $target=null): void
     {
-        $s['job']=['id'=>bin2hex(random_bytes(12)),'type'=>$type,'status'=>'queued','at'=>time(),'channel'=>$s['settings']['channel'],'target'=>$target];
+        $s['job']=['id'=>bin2hex(random_bytes(12)),'type'=>$type,'status'=>'queued','at'=>time(),'channel'=>$s['settings']['channel'],'target'=>$target,'attempts'=>0,'not_before'=>0];
     }
     /** All public mutations use a compare-and-swap revision. */
     public function submit(array $form): void
@@ -122,28 +125,31 @@ final class ControlCenter
             AutomaticUpdates::window()&&AutomaticUpdates::window($s['settings']['window']);
     }
     /** One job per invocation; no privilege escalation, shell commands or service control. */
-    public function work(): array
+    public function work(bool $scheduled=false): array
     {
         if(PHP_SAPI!=='cli'||getenv('CAJEER_UPDATE_CONTROL_WORKER')!=='1')throw new \RuntimeException('CLI worker requires explicit operator opt-in');
         $lease=$this->lock('worker.lock');
         try {
-            $claim=$this->edit(function(array &$s):array {
-                if(($s['job']['status']??null)==='running') {self::finish($s,'interrupted');$s['check']=null;$s['last_attempt']=time();return ['action'=>'interrupted'];}
+            $claim=$this->edit(function(array &$s)use($scheduled):array {
+                if(($s['job']['status']??null)==='running') {if($scheduled&&$s['job']['type']==='install')$s['settings']['install']=false;self::finish($s,'interrupted');$s['check']=null;$s['last_attempt']=time();return ['action'=>'interrupted'];}
                 if((new UpdateEngine($this->root))->status()['pending']!==null)return ['action'=>'recovery_required'];
                 if($s['job']===null) {
-                    if($s['settings']['checks']&&time()-$s['last_attempt'] >= $s['settings']['interval']*3600)self::queue($s,'check');
-                    elseif($s['settings']['install']&&$this->fresh($s)&&self::verified($s['check']['verified'])) {
+                    if($s['settings']['install']&&$this->fresh($s)&&self::verified($s['check']['verified'])) {
                         // Do not enqueue unattended work outside the system-approved window.
                         $probe=['type'=>'install','target'=>$s['check']['verified']];
                         if(self::allowed($s,$probe))self::queue($s,'install',$probe['target']);
                     }
+                    if($s['job']===null&&$s['settings']['checks']&&($s['last_attempt']>time()||time()-$s['last_attempt'] >= $s['settings']['interval']*3600))self::queue($s,'check');
                 }
                 if($s['job']===null)return ['action'=>'idle'];
                 if(time()-$s['job']['at']>self::TTL||$s['job']['at']>time()||($s['job']['type']==='install'&&(!$this->fresh($s)||$s['job']['target']!==$s['check']['verified']))) {
                     self::finish($s,'expired');return ['action'=>'expired'];
                 }
+                if(($s['job']['not_before']??0)>time())return ['action'=>'retry_wait','id'=>$s['job']['id'],'next_at'=>$s['job']['not_before']];
                 if(!self::allowed($s,$s['job']))return ['action'=>'deferred','id'=>$s['job']['id']];
-                $s['job']['status']='running';$s['last_attempt']=time();
+                $s['job']['status']='running';
+                if($s['job']['type']==='check')$s['job']['attempts']=min(count(self::RETRY_DELAYS)+1,($s['job']['attempts']??0)+1);
+                $s['last_attempt']=time();
                 return ['action'=>'claimed','job'=>$s['job'],'settings'=>$s['settings']];
             });
             if($claim['action']!=='claimed')return $claim;
@@ -154,14 +160,26 @@ final class ControlCenter
                     $check=null;$run=$auto->run($job['target'],$job['channel'],$claim['settings']['window']);
                     $result=$run['action']==='installed'?'installed':null;
                 }
-                $this->edit(function(array &$s)use($job,$check,$result):void {
+                $this->edit(function(array &$s)use($job,$check,$result,$scheduled):void {
                     if(($s['job']['id']??null)!==$job['id']||$s['job']['status']!=='running')throw new \RuntimeException('Job state changed');
                     if($result===null){$s['job']['status']='queued';return;}
                     $s['check']=$check;self::finish($s,$result);
+                    if($scheduled&&$result==='installed')$s['last_attempt']=0; // Re-discover the next step in a fresh process.
                 });
                 return ['action'=>$result??'deferred','id'=>$job['id']];
             } catch(\Throwable $e) {
-                $this->edit(function(array &$s)use($job):void {if(($s['job']['id']??null)===$job['id']){$s['check']=null;self::finish($s,'failed');}});
+                $retry=$this->edit(function(array &$s)use($job,$scheduled):?int {
+                    if(($s['job']['id']??null)!==$job['id'])return null;
+                    $s['check']=null;
+                    $delay=self::RETRY_DELAYS[($job['attempts']??1)-1]??null;
+                    if($scheduled&&$job['type']==='check'&&$delay!==null&&time()+$delay<=$job['at']+self::TTL){
+                        $s['job']['status']='queued';$s['job']['not_before']=time()+$delay;return $s['job']['not_before'];
+                    }
+                    // Never replay a failed installation unattended. Require renewed opt-in.
+                    if($scheduled&&$job['type']==='install')$s['settings']['install']=false;
+                    self::finish($s,'failed');return null;
+                });
+                if($retry!==null)return ['action'=>'retry_scheduled','id'=>$job['id'],'next_at'=>$retry,'attempts'=>$job['attempts']];
                 throw $e;
             }
         } finally {OperationLock::release($lease);}

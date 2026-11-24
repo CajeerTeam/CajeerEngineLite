@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Update\{UpdatePackage,UpdateEngine,AutomaticUpdates,ControlCenter};
+use CajeerEngine\Update\{UpdatePackage,UpdateEngine,AutomaticUpdates,ControlCenter,Scheduler};
 use CajeerEngine\Security\SecurityAudit;
 use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics,Acceptance,ProductionAIAcceptance};
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
@@ -56,6 +56,14 @@ try {
                 if($argv[3]==='status')$report=$control->status();
                 elseif($argv[3]==='work')$report=$control->work();
                 else throw new InvalidArgumentException('Usage: update control status|work');
+            } elseif($action==='scheduler' && count($argv)===4) {
+                $scheduler=new Scheduler($app->root);
+                if($argv[3]==='status')$report=$scheduler->status();
+                elseif($argv[3]==='tick')$report=$scheduler->tick();
+                else throw new InvalidArgumentException('Usage: update scheduler status|tick');
+                if(($report['action']??null)==='recovery_required') {
+                    echo json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";exit(2);
+                }
             } elseif($action==='auto') {
                 $auto=new AutomaticUpdates($app->root);
                 $sub=$argv[3]??'';
@@ -74,7 +82,7 @@ try {
                 $signing=getenv('CAJEER_UPDATE_SIGNING_KEY_FILE');
                 if(!is_string($signing)||!str_starts_with($signing,'/')) throw new InvalidArgumentException('Set absolute CAJEER_UPDATE_SIGNING_KEY_FILE');
                 $report=UpdatePackage::build($app->root,$argv[3],$argv[4],$signing);
-            } else throw new InvalidArgumentException('Usage: update status|control status|control work|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
+            } else throw new InvalidArgumentException('Usage: update status|control status|control work|scheduler status|scheduler tick|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
             echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
             break;
         case 'security':
@@ -432,7 +440,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer monitor check|status [--minutes=60] [--verify-backup]\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\nphp bin/cajeer compatibility check [--json] | compatibility migration preview|apply\n".
-                 "php bin/cajeer update status|control status|control work|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
+                 "php bin/cajeer update status|control status|control work|scheduler status|scheduler tick|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".

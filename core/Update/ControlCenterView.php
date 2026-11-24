@@ -22,9 +22,13 @@ final class ControlCenterView
         foreach(['Установленная версия'=>$s['installed'],'Канал'=>$p['channel'],'Проверенный переход'=>$s['fresh']&&$v!==null?$v['to']:'—','Последняя доступная'=>$s['fresh']?($c['latest']??'—'):'—'] as $k=>$value)
             $html.='<div><small>'.self::h($k).'</small><strong>'.self::h($value).'</strong></div>';
         $html.='</div><section><h2>Проверка и установка</h2>';
+        $heartbeat=$s['scheduler']??null;
+        $html.='<p>Планировщик: '.($heartbeat===null?'нет запусков':self::h(gmdate('Y-m-d H:i:s',$heartbeat['finished_at']??$heartbeat['started_at'])).' UTC — '.self::h($heartbeat['action'])).'.</p>';
+        if($heartbeat!==null&&(time()-($heartbeat['finished_at']??$heartbeat['started_at'])>900||($heartbeat['finished_at']??$heartbeat['started_at'])>time()))$html.='<p class="error">Нет свежего сигнала планировщика.</p>';
         if($s['pending'])$html.='<p class="error">Незавершённое обновление. Оператор должен выполнить update recover.</p>';
         if($j!==null){
             $html.='<p role="status">Задание: '.self::h($j['type']==='check'?'проверка':'установка').' — '.self::h($j['status']==='queued'?'в очереди':'выполняется').'. ID: <code>'.self::h($j['id']).'</code></p>';
+            if(($j['not_before']??0)>time())$html.='<p>Следующая попытка: '.self::h(gmdate('Y-m-d H:i:s',$j['not_before'])).' UTC.</p>';
             if($j['status']==='queued')$html.=self::form($csrf,$rev,'cancel','<button type="submit">Отменить задание</button>');
             $html.='<p><a href="/admin/updates">Обновить состояние</a></p>';
         } elseif(!$s['pending']) $html.=self::form($csrf,$rev,'check','<button type="submit">Проверить обновления</button>');
@@ -47,7 +51,7 @@ final class ControlCenterView
             '<label><input type="checkbox" name="install" value="1"'.($p['install']?' checked':'').'> Автоматическая установка проверенных пакетов (opt-in)</label>'.
             '<label>Интервал проверки, часов <input type="number" name="interval" min="1" max="168" required value="'.$p['interval'].'"></label>'.
             '<label>Окно обслуживания UTC <input name="window" required value="'.self::h($p['window']).'" placeholder="02:00-04:00"></label><button type="submit">Сохранить настройки</button>');
-        $html.='<p class="cms-ops-note">Источник, доверенный ключ и разрешения задаются оператором в окружении worker; панель не может изменить их. Планировщик и остановка сервисов настраиваются вне CMS.</p></section>';
+        $html.='<p class="cms-ops-note">Источник, доверенный ключ и разрешения задаются оператором в окружении worker; панель не может изменить их. Планировщик systemd/cron настраивается оператором. Остановка сервисов выполняется отдельно.</p></section>';
         $html.='<section><h2>История заданий</h2><div class="dev-table-wrap"><table><thead><tr><th>UTC</th><th>Действие</th><th>Версия</th><th>Результат</th></tr></thead><tbody>';
         $labels=['checked'=>'Проверено','installed'=>'Установлено','failed'=>'Ошибка (см. CLI)','cancelled'=>'Отменено','interrupted'=>'Прервано','expired'=>'Истекло'];
         foreach(array_reverse($s['history']) as $row)$html.='<tr><td>'.self::h(gmdate('Y-m-d H:i:s',$row['at'])).'</td><td>'.($row['type']==='check'?'Проверка':'Установка').'</td><td>'.self::h($row['to']??'—').'</td><td>'.self::h($labels[$row['result']]).'</td></tr>';

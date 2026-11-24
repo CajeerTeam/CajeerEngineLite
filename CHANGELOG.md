@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.4 — Update Scheduler
+
+- Durable scheduler tick with non-overlapping execution, heartbeat, delayed check retries, expiry and failed-install auto-install pause.
+- systemd timer/service and cron deployment examples; installation remains gated by operator quiescence. Schema 14 unchanged.
+
 ## 1.5.3 — Update Control Center
 
 - Authenticated update console with CSRF, revision checks, private queue, channel, maintenance policy and history.

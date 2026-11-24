@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.3
+# CajeerEngine Lite Edition 1.5.4
 
+
+### 1.5.4 — Update Scheduler
+
+Durable one-tick scheduler, bounded retry of check jobs, heartbeat, installation failure pause and systemd/cron deployment examples. Existing signed installation and quiescence gates remain mandatory. See [UPDATE_SCHEDULER.md](UPDATE_SCHEDULER.md).
 
 ### 1.5.3 — Update Control Center
 

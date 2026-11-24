@@ -17,7 +17,7 @@ csrf=$(grep -o 'name="csrf" value="[a-f0-9]*"' "$tmp/login" | head -1 | cut -d '
 refresh() { curl -fsS -b "$tmp/cookies" "$base/admin/updates" > "$tmp/control"; csrf=$(grep -o 'name="csrf" value="[a-f0-9]*"' "$tmp/control" | head -1 | cut -d '"' -f4); rev=$(grep -o 'name="revision" value="[a-f0-9]*"' "$tmp/control" | head -1 | cut -d '"' -f4); }
 post() { status -b "$tmp/cookies" --data-urlencode "csrf=$csrf" --data-urlencode "revision=$rev" "$@" "$base/admin/updates"; }
 refresh
-grep -Fq 'Update Control Center' "$tmp/control"; grep -Fq '1.5.3' "$tmp/control"; grep -Fq 'История пуста' "$tmp/control"
+grep -Fq 'Update Control Center' "$tmp/control"; grep -Fq "$(cat VERSION)" "$tmp/control"; grep -Fq 'История пуста' "$tmp/control"
 [[ $(status -b "$tmp/cookies" -d 'action=check' "$base/admin/updates") == 403 ]]
 [[ $(post -H 'Origin: https://evil.example' -d 'action=check') == 403 ]]
 [[ $(post -d 'action=settings&channel=stable&interval=0&window=02:00-04:00') == 422 ]]
@@ -38,5 +38,11 @@ refresh; grep -Fq 'Отменено' "$tmp/control"
 [[ $(post -d 'action=check') == 303 ]]
 if CAJEER_UPDATE_CONTROL_WORKER=1 CAJEER_AUTO_UPDATE_GITHUB_REPO=invalid php bin/cajeer update control work > /dev/null 2>&1; then exit 1; fi
 refresh; grep -Fq 'Ошибка (см. CLI)' "$tmp/control"
+# The scheduled worker records a retry across processes and exposes the heartbeat only to the administrator.
+[[ $(post -d 'action=check') == 303 ]]
+CAJEER_UPDATE_CONTROL_WORKER=1 CAJEER_AUTO_UPDATE_GITHUB_REPO=invalid php bin/cajeer update scheduler tick > "$tmp/retry"
+refresh; grep -Fq 'retry_scheduled' "$tmp/control"; grep -Fq 'Следующая попытка:' "$tmp/control"
+[[ $(status "$base/storage/app/update-control/scheduler.json") == 404 ]]
+[[ $(post -d 'action=cancel') == 303 ]]
 [[ $(status "$base/health/ready") == 200 ]]
 echo 'Update Control HTTP: authentication, origin/CSRF, validation, settings, queue/cancel, real CLI failure and private history OK'
