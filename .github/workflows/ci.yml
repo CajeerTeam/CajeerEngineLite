@@ -67,6 +67,8 @@ jobs:
       - run: php tests/site_concurrency_141.php
       - run: php tests/core_142.php
       - run: php tests/core_143.php
+      - run: php tests/core_144.php
+      - run: bash tests/update_engine_cli_144.sh
       - run: php bin/cajeer security audit --json
       - run: php tests/media_concurrency_134.php
       - run: bash tests/admin_experience_http.sh

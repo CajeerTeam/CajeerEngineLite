@@ -1,5 +1,16 @@
 <?php
 declare(strict_types=1);
+// Refuse new PHP requests while release files are being replaced or recovered.
+// Direct static assets remain the web server's responsibility: stop PHP-FPM/jobs
+// before using the offline CLI installer.
+if (is_file(dirname(__DIR__).'/storage/app/updates/active.json')) {
+    http_response_code(503);
+    header('Retry-After: 30');
+    header('Cache-Control: no-store');
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'CMS update in progress; run php bin/cajeer update recover if interrupted.';
+    exit;
+}
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
 use CajeerEngine\Admin\AdminExperience;

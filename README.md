@@ -1,5 +1,15 @@
-# CajeerEngine Lite Edition 1.4.3
+# CajeerEngine Lite Edition 1.4.4
 
+
+### 1.4.4 — Update Engine (verified offline release installation)
+
+Implemented CLI commands `update status|verify|install|recover|rollback|package` with RSA-SHA256 signature verification against a separately pinned public key, SHA-256 verification of each code file and existing base files, exact version/schema compatibility, a shared operations lock, PHP syntax preflight, private pre-update code and site snapshots, durable interruption journal, real file installation/deletion, and actual automatic/manual rollback. Update packages are custom signed `.cjrupdate` streams, **not** unsigned ZIP or generic TAR archives. HTTP workers return 503 during an active update journal; running PHP-FPM/jobs must still be stopped before installation.
+
+**Bootstrap:** the first upgrade **1.4.3 → 1.4.4 is a manual ZIP patch** because older versions do not have the new `update` CLI. After installing 1.4.4, sign future versioned updates on a trusted build machine and provision the authorized public key separately on each server. No key is bundled or automatically trusted. No automatic download/installation exists yet. Only code-only updates compatible with JSON schema 14 are supported. Full procedures and recovery instructions: [`UPDATE_ENGINE.md`](UPDATE_ENGINE.md).
+
+New test suites: `php tests/core_144.php` and `bash tests/update_engine_cli_144.sh`.
+
+**Manual patch installation:** stop PHP-FPM and scheduled jobs, back up the entire project including `storage/` and secrets, apply the 1.4.4 patch over 1.4.3, then run `php tests/core_144.php`, `bash tests/update_engine_cli_144.sh`, `php bin/cajeer doctor` and the existing CI/staging acceptance tests. No schema migration is required.
 
 ### 1.4.3 — Security Hardening (session, CSRF, OIDC, CSP, TAR and dependency inventory)
 

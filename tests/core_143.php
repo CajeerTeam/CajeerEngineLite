@@ -23,7 +23,7 @@ function clean143(string $dir):void {
     rmdir($dir);
 }
 function b143(string $s):string {return rtrim(strtr(base64_encode($s),'+/','-_'),'=');}
-ok143(Lite::VERSION==='1.4.3','release version');
+ok143(version_compare(Lite::VERSION,'1.4.3','>=') && \CajeerEngine\Storage\SiteState::SCHEMA===14,'release version and schema');
 $origin='http://localhost:19043';
 $server=['HTTP_HOST'=>'localhost:19043','CONTENT_TYPE'=>'application/x-www-form-urlencoded','CONTENT_LENGTH'=>'10','HTTP_SEC_FETCH_SITE'=>'same-origin'];
 AdminRequestGuard::check($origin,$server,'/admin','POST');
