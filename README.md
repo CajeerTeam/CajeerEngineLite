@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.4.9
+# CajeerEngine Lite Edition 1.5.0
 
+
+### 1.5.0 — Production Stable
+
+The production gate verifies signed release artifacts and the entire installed runtime, compatibility, backup/recovery, live TLS readiness/version and recent monitoring. A separate explicit operator sign-off records reviewed evidence and a fresh passing live gate in private storage. Official 1.5.0 updates use 1.4.8 as the stable base; 1.4.9 operators can use a separate exact-base signed package or manual patch. Schema 14 is unchanged. See [PRODUCTION_STABLE.md](PRODUCTION_STABLE.md) for commands, evidence requirements and limits. No production sign-off is inferred from local tests.
 
 ### 1.4.9 — Production Release Candidate
 

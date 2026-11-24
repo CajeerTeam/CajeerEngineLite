@@ -238,6 +238,31 @@ try {
             if (!$report['ok']) exit(1);
             break;
         case 'release':
+            if (in_array($argv[2]??'', ['production-check','sign-off'],true)) {
+                $action=$argv[2];$dir=null;$evidence=null;$providers=[];$live=false;$paid=false;$seen=[];
+                foreach (array_slice($argv,3) as $flag) {
+                    if (isset($seen[$flag])) throw new InvalidArgumentException('Duplicate production option');
+                    $seen[$flag]=true;
+                    if ($flag==='--live') $live=true;
+                    elseif ($flag==='--paid') $paid=true;
+                    elseif ($flag==='--json') continue;
+                    elseif (str_starts_with($flag,'--provider=')) $providers[]=substr($flag,11);
+                    elseif (str_starts_with($flag,'--artifacts=')&&$dir===null) $dir=substr($flag,12);
+                    elseif (str_starts_with($flag,'--evidence=')&&$evidence===null) $evidence=substr($flag,11);
+                    else throw new InvalidArgumentException('Invalid production option');
+                }
+                $key=getenv('CAJEER_UPDATE_TRUSTED_KEY_FILE');
+                if (!$dir||!$key||($action==='sign-off'&&(!$live||!$evidence||getenv('CAJEER_PRODUCTION_SIGNOFF_CONFIRM')!=='I_REVIEWED_PRODUCTION_EVIDENCE'))||($action==='production-check'&&$evidence!==null)) throw new InvalidArgumentException('Production gate needs --artifacts=DIR, pinned key; sign-off also needs --live, --evidence=DIR and confirmation');
+                $site=(new \CajeerEngine\Storage\SiteRepository($app->root))->read();
+                if ($site===null||$site['schema']!==\CajeerEngine\Storage\SiteState::SCHEMA) throw new RuntimeException('Install or explicitly migrate the site before production acceptance');
+                $report=\CajeerEngine\Release\ProductionStable::run($app->root,$site,$dir,$key,$live,$providers,$paid);
+                if ($action==='sign-off'&&$report['automated_ok']) {
+                    $record=\CajeerEngine\Release\ProductionStable::signoff($app->root,$report,$evidence);
+                    echo json_encode($record,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";exit(0);
+                }
+                echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+                exit($report['automated_ok']?2:1);
+            }
             if (($argv[2]??'')==='rc-check') {
                 $live=false;$paid=false;$providers=[];$seen=[];
                 foreach (array_slice($argv,3) as $flag) {
@@ -409,7 +434,7 @@ try {
                  "php bin/cajeer operations check | recover | audit | repair-orphans | backup create|list|verify|restore | export <absolute-file> | import <file> | cache clear | prune <keep>\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
-                 "php bin/cajeer release check [--json] | release stable-check [--json] [--live]\nphp bin/cajeer release rc-check [--live] [--provider=oidc|openai|ga4|metrica|matomo|clarity|gsc|yandex_webmaster] [--paid]\nphp bin/cajeer auth check [--json]\n".
+                 "php bin/cajeer release check [--json] | release stable-check [--json] [--live]\nphp bin/cajeer release production-check|sign-off --artifacts=DIR [--live] [--evidence=DIR] [--provider=NAME]\nphp bin/cajeer release rc-check [--live] [--provider=oidc|openai|ga4|metrica|matomo|clarity|gsc|yandex_webmaster] [--paid]\nphp bin/cajeer auth check [--json]\n".
                  "php bin/cajeer auth release-check [--json] [--live]\n".
                  "php bin/cajeer analytics refresh|status [--days=7]\n";
     }

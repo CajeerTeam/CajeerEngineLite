@@ -47,3 +47,7 @@ Run `python3 tests/release_engineering_148.py` (disposable keys, install/remove/
 ### Production release candidate (1.4.9)
 
 The exact-tag rehearsal uses a populated site and checks page delivery, media hashes and verified TAR backup before/after upgrade and rollback. CI also runs `tests/rc_staging_149.py` with Nginx and actual certificate validation. Official 1.4.9 publication must be a GitHub prerelease (not latest). Auto-update discovery skips prereleases; install manually on staging with a pinned trusted key. Do not mark 1.4.9 stable to bypass the 1.5 acceptance gate. See RELEASE_CANDIDATE.md.
+
+## 1.5.0 stable publication
+
+Dispatch on v1.5.0 with base_tag v1.4.8 (last stable). The protected release-publish reviewer must review the signed artifacts and actual staging/CI/provider/rollback evidence before allowing publication. The receipt includes the signed runtime inventory. The release report never asserts production acceptance. Each installation requires its own [production gate and sign-off](PRODUCTION_STABLE.md). For an existing 1.4.9 installation, build a separate exact-base signed transition outside the official channel or use a verified manual patch.

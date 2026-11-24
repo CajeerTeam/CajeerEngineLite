@@ -36,6 +36,7 @@ jobs:
           [[ "$(cat VERSION)" == "${TARGET_TAG#v}" ]]
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse "refs/tags/$TARGET_TAG^{commit}")" ]]
           [[ "$(git show "refs/tags/$BASE_TAG:VERSION")" == "${BASE_TAG#v}" ]]
+          if [[ "${TARGET_TAG#v}" == 1.5.0 ]]; then [[ "${BASE_TAG#v}" == 1.4.8 ]]; fi
           git merge-base --is-ancestor "refs/tags/$BASE_TAG" HEAD
           [[ "$(git rev-parse "refs/tags/$BASE_TAG^{commit}")" != "$(git rev-parse HEAD)" ]]
           echo "base_sha=$(git rev-parse "refs/tags/$BASE_TAG^{commit}")" >> "$GITHUB_OUTPUT"
@@ -157,7 +158,7 @@ jobs:
           diff -u <(printf '%s\n' "CajeerEngineLite-$version.cjrupdate" "CajeerEngineLite-$version.zip" release-report.json | sort) <(awk '{print $2}' SHA256SUMS | sort)
           sha256sum --strict -c SHA256SUMS
           jq -e --arg to "$version" --arg from "$base" --arg target_sha "$TARGET_SHA" --arg base_sha "$BASE_SHA" \
-            '.to == $to and .from == $from and .target_commit == $target_sha and .base_commit == $base_sha and .production_accepted == false' release-report.json >/dev/null
+            '.to == $to and .from == $from and .target_commit == $target_sha and .base_commit == $base_sha and .production_accepted == false and (.runtime_files | type == "object")' release-report.json >/dev/null
           [[ -s "CajeerEngineLite-$version.cjrupdate" && -s "CajeerEngineLite-$version.zip" ]]
           # Resolve the immutable tag to its commit; annotated and lightweight tags work.
           [[ "$(gh api "repos/$GH_REPO/commits/$TARGET_TAG" --jq .sha)" == "$TARGET_SHA" ]]

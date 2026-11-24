@@ -1,4 +1,6 @@
-# CajeerEngine Lite 1.4.8+: production release checklist
+# CajeerEngine Lite: production release checklist
+
+For 1.5.0 use the additional required [signed production gate and operator sign-off](PRODUCTION_STABLE.md). The legacy stable-check and RC gate alone never approve a deployment.
 
 The executable gate is `php bin/cajeer release stable-check --json [--live]`.
 Exit 1 means a failed check. Exit 2 means automated checks passed but manual release acceptance is still pending; it is **not** a deployment success code. The command never authenticates real users, sends a paid AI request or checks a real analytics account.

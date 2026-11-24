@@ -33,7 +33,7 @@ def port():
         return s.getsockname()[1]
 
 
-def main():
+def main(artifacts=None, trust=None):
     if not shutil.which('nginx'):
         raise RuntimeError('Nginx is required for this staging test')
     with tempfile.TemporaryDirectory(prefix='cajeer-rc149-') as folder:
@@ -137,6 +137,42 @@ proxy_set_header X-Forwarded-Host $http_host; proxy_set_header X-Forwarded-Proto
                 assert all(c['status']=='not_run' for c in live['checks'] if c['id'].startswith('provider.'))
                 unconfigured=json.loads(cli('release','rc-check','--live','--provider=ga4',expected=1,extra={'CAJEER_RC_STAGING_CONFIRM':'STAGING'}))
                 assert {'id':'provider.ga4','status':'fail'} in unconfigured['checks']
+                if artifacts is not None:
+                    # Exercise the final gate over actual HTTPS, using independently signed disposable artifacts.
+                    env['CAJEER_UPDATE_TRUSTED_KEY_FILE']=str(trust)
+                    for _ in range(30): assert request('/')[0]==200
+                    assert request('/health/ready')[2].get('X-Cajeer-Release')=='1.5.0'
+                    flag='--artifacts='+str(artifacts)
+                    local=json.loads(cli('release','production-check',flag,expected=2))
+                    assert local['status']=='pending_live' and not local['production_accepted']
+                    cli('release','production-check',flag,'--live',expected=1)
+                    consent={'CAJEER_PRODUCTION_LIVE_CONFIRM':'LIVE'}
+                    report=json.loads(cli('release','production-check',flag,'--live',expected=2,extra=consent))
+                    assert report['status']=='pending_signoff' and report['automated_ok'],report
+                    evidence=work/'evidence';evidence.mkdir()
+                    hashes={}
+                    import hashlib
+                    for name in ('ci','browser_e2e','staging_fpm_tls','providers_and_consent','offhost_restore','upgrade_rollback','load_soak','production_observation'):
+                        content=('SYNTHETIC TEST ONLY - '+name+'\n').encode()
+                        (evidence/(name+'.txt')).write_bytes(content);hashes[name]=hashlib.sha256(content).hexdigest()
+                    approval={'reviewer':'Test reviewer','decision':'approve','version':'1.5.0','receipt_sha256':report['artifact']['receipt_sha256'],'origin_sha256':report['origin_sha256'],'site_sha256':report['site_sha256'],'evidence':hashes}
+                    (evidence/'approval.json').write_text(json.dumps(approval))
+                    signflag='--evidence='+str(evidence)
+                    cli('release','sign-off',flag,'--live',signflag,expected=1,extra=consent)
+                    consent['CAJEER_PRODUCTION_SIGNOFF_CONFIRM']='I_REVIEWED_PRODUCTION_EVIDENCE'
+                    (evidence/'ci.txt').write_text('tampered')
+                    cli('release','sign-off',flag,'--live',signflag,expected=1,extra=consent)
+                    (evidence/'ci.txt').write_text('SYNTHETIC TEST ONLY - ci\n')
+                    record=json.loads(cli('release','sign-off',flag,'--live',signflag,extra=consent))
+                    assert record['status']=='operator_attested' and record['production_accepted'] and record['evidence_sha256']==hashes
+                    saved=root/'storage/app/release-signoff'/(record['id']+'.json')
+                    assert json.loads(saved.read_text())==record and saved.stat().st_mode&0o077==0
+                    asset=root/'public/assets/consent.js';original=asset.read_bytes();asset.write_bytes(original+b'\n')
+                    cli('release','production-check',flag,expected=1);asset.write_bytes(original)
+                    extra=root/'public/extra.txt';extra.write_text('unexpected');cli('release','production-check',flag,expected=1);extra.unlink()
+                    result=json.loads(cli('release','production-check',flag,'--live',expected=1,extra={**consent,'CAJEER_MONITORING':'0'}))
+                    assert {'id':'monitor.recent_samples','status':'fail'} in result['checks']
+                    print('1.5.0 production gate: exact signed code, real HTTPS, live version, monitoring, explicit test sign-off and tamper rejection OK')
                 print('RC 1.4.9: verified TLS, Nginx, HTTP login/page/media/backup/restore, session revocation, live gate and unconfigured provider refusal OK; no real provider credentials')
             finally:
                 for p in reversed(processes):
@@ -144,4 +180,7 @@ proxy_set_header X-Forwarded-Host $http_host; proxy_set_header X-Forwarded-Proto
                     try: p.wait(timeout=5)
                     except subprocess.TimeoutExpired: p.kill();p.wait()
 
-if __name__=='__main__': main()
+if __name__=='__main__':
+    if len(sys.argv)==1: main()
+    elif len(sys.argv)==3: main(Path(sys.argv[1]).resolve(),Path(sys.argv[2]).resolve())
+    else: raise SystemExit('Usage: rc_staging_149.py [artifacts trust-key]')

@@ -44,3 +44,7 @@ For interrupted installation: `php bin/cajeer update recover`. For a completed u
 ## Automatic updates
 
 See [AUTOMATIC_UPDATES.md](AUTOMATIC_UPDATES.md). Enable only after signed releases, trusted key, actual traffic drain, backup/recovery and staging acceptance are in place. The scheduler must quiesce workers externally. Opt-in, UTC window, worker flag and recovery permissions are separate. No automatic update setting is enabled by this release.
+
+## Stable 1.5.0 transition
+
+The official signed incremental package is from 1.4.8, not 1.4.9. RC installations require a separate signed exact-base package or independently verified manual source overlay, with writers stopped and an independent backup. After deployment follow [PRODUCTION_STABLE.md](PRODUCTION_STABLE.md).

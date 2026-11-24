@@ -109,6 +109,7 @@ try {
         if ($method!=='GET' && $method!=='HEAD') { header('Allow: GET, HEAD'); stop(405,'Method not allowed'); }
         header('Cache-Control: no-store');
         header('Content-Type: application/json; charset=utf-8');
+        header('X-Cajeer-Release: '.Lite::VERSION);
         $ready=false;
         try {
             $health=(new \CajeerEngine\Storage\SiteRepository($app->root))->read();

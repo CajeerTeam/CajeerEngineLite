@@ -295,6 +295,7 @@ def build(base, candidate, output, private, public, base_commit=None, target_com
                    'base_commit': base_commit, 'target_commit': target_commit,
                    'base_tree_sha256': hashlib.sha256(json.dumps(old, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
                    'target_tree_sha256': hashlib.sha256(json.dumps(new, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+                   'runtime_files': {k: v for k, v in new.items() if k in {'VERSION','bootstrap.php','router.php','bin/cajeer'} or k.startswith(('core/','public/','templates/'))},
                    'source_only_changes': sorted(k for k in SOURCE_ONLY if old.get(k) != new.get(k)),
                    'checks': ['zip_inventory', 'fresh_install', 'loopback_http', 'signature', 'exact_upgrade', 'site_preserved', 'populated_site_media_preserved', 'backup_verified_before_after_rollback', 'rollback', 'tamper_rejected'],
                    'production_accepted': False}

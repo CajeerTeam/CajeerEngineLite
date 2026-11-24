@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 — Production Stable
+
+- Signed runtime inventory and verification of the complete artifact set, installed executable/template bytes, compatibility, live TLS/version and fresh monitoring.
+- Explicit operator sign-off with a fresh live gate, evidence hashes, private atomic audit record and no automatic approval.
+- Official stable update from 1.4.8; exact 1.4.9 upgrade remains supported by separate signed rehearsal. Schema 14 unchanged.
+- Disposable HTTPS acceptance and tamper regression; real deployment acceptance remains operator-specific.
+
 ## 1.4.9 — Production Release Candidate
 
 - Freeze features and schema 14. Reject unsupported direct OIDC login before checking optional provider configuration, preventing false live readiness failure.
