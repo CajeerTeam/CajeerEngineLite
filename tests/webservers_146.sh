@@ -12,10 +12,16 @@ mkdir -p "$TMP/ssl" "$TMP/www" "$TMP/logs"
 cp /etc/nginx/fastcgi_params "$TMP/fastcgi_params"
 openssl req -newkey rsa:2048 -nodes -keyout "$TMP/ssl/key.pem" -x509 -days 1 \
   -out "$TMP/ssl/cert.pem" -subj '/CN=example.com' >/dev/null 2>&1
+# nginx -t can bind configured sockets, including during syntax-only checks.
+# Use an unprivileged TLS port in the disposable copies (not deploy/).
+# Keep SSL enabled and Apache's Listen and VirtualHost ports in sync.
+TLS_TEST_PORT=18443
 for name in nginx.conf nginx-reverse-proxy.conf nginx-maintenance-health.conf apache-vhost.conf apache-maintenance-health.conf; do
   sed -e "s#/etc/ssl/example.com/fullchain.pem#$TMP/ssl/cert.pem#g" \
       -e "s#/etc/ssl/example.com/privkey.pem#$TMP/ssl/key.pem#g" \
       -e "s#/var/www/cajeer-lite/public#$TMP/www#g" \
+      -e "s/^\([[:space:]]*listen[[:space:]]\+\)443\([[:space:];]\)/\1${TLS_TEST_PORT}\2/" \
+      -e "s/^\(<VirtualHost[[:space:]]\+\*:\)443>/\1${TLS_TEST_PORT}>/" \
       "$ROOT/deploy/$name" > "$TMP/$name"
 done
 # Keep every writable Nginx path inside the disposable fixture, even on
@@ -43,7 +49,7 @@ ServerRoot "/etc/apache2"
 ServerName example.com
 PidFile "$TMP/apache.pid"
 ErrorLog "$TMP/apache.log"
-Listen 443
+Listen ${TLS_TEST_PORT} https
 LoadModule mpm_event_module /usr/lib/apache2/modules/mod_mpm_event.so
 LoadModule authz_core_module /usr/lib/apache2/modules/mod_authz_core.so
 LoadModule authz_host_module /usr/lib/apache2/modules/mod_authz_host.so
