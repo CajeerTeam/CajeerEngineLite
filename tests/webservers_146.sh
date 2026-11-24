@@ -18,8 +18,25 @@ for name in nginx.conf nginx-reverse-proxy.conf nginx-maintenance-health.conf ap
       -e "s#/var/www/cajeer-lite/public#$TMP/www#g" \
       "$ROOT/deploy/$name" > "$TMP/$name"
 done
-printf 'events {}\nhttp { include /etc/nginx/mime.types; include %s/nginx.conf; include %s/nginx-reverse-proxy.conf; include %s/nginx-maintenance-health.conf; }\n' \
-  "$TMP" "$TMP" "$TMP" > "$TMP/nginx-root.conf"
+# Keep every writable Nginx path inside the disposable fixture, even on
+# distro builds with absolute paths compiled in (nginx -p alone is not enough).
+cat > "$TMP/nginx-root.conf" <<NGINX
+pid "$TMP/nginx.pid";
+error_log "$TMP/logs/nginx-error.log";
+events {}
+http {
+    access_log "$TMP/logs/nginx-access.log";
+    client_body_temp_path "$TMP/client";
+    proxy_temp_path "$TMP/proxy";
+    fastcgi_temp_path "$TMP/fastcgi";
+    uwsgi_temp_path "$TMP/uwsgi";
+    scgi_temp_path "$TMP/scgi";
+    include /etc/nginx/mime.types;
+    include "$TMP/nginx.conf";
+    include "$TMP/nginx-reverse-proxy.conf";
+    include "$TMP/nginx-maintenance-health.conf";
+}
+NGINX
 nginx -t -p "$TMP" -c "$TMP/nginx-root.conf" >"$TMP/nginx-log" 2>&1 || { cat "$TMP/nginx-log";exit 1; }
 cat > "$TMP/apache.conf" <<APACHE
 ServerRoot "/etc/apache2"

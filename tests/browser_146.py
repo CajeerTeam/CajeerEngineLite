@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='cajeer-browser-146-') as folder:
     environment=os.environ.copy()
     environment['CAJEER_ADMIN_PASSWORD']='CompatibilityBrowser146Password!'
     subprocess.run(['php','bin/cajeer','install',url,'Compatibility browser'],cwd=root,env=environment,check=True,capture_output=True)
-    server=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','router.php'],cwd=root,
+    server=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t','public','router.php'],cwd=root,
                             stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,env=environment)
     try:
         for i in range(100):
@@ -53,6 +53,13 @@ with tempfile.TemporaryDirectory(prefix='cajeer-browser-146-') as folder:
             browser=launcher.launch(**launch)
             try:
                 context=browser.new_context(viewport={'width':1280,'height':900})
+                # Verify real HTTP asset delivery before testing rendered geometry.
+                for asset, mime in (('style.css','text/css'), ('admin.css','text/css'),
+                                    ('block-editor.js','javascript')):
+                    response=context.request.get(url+'/assets/'+asset)
+                    assert response.status==200,(asset,response.status)
+                    assert mime in response.headers.get('content-type',''),(asset,response.headers)
+                    assert response.body()==(root/'public/assets'/asset).read_bytes(),asset
                 page=context.new_page()
                 response=page.goto(url+'/health/ready',wait_until='load')
                 assert response.status==200
@@ -71,6 +78,8 @@ with tempfile.TemporaryDirectory(prefix='cajeer-browser-146-') as folder:
                     assert response.status==200,(route,response.status)
                     assert page.locator(selector).count()>0,(route,selector)
                     assert 'Administrator login required' not in page.locator('body').inner_text()
+                    assert page.locator('link[href="/assets/admin.css"]').evaluate('el => !!el.sheet && el.sheet.cssRules.length > 0'),route
+                    assert page.locator('link[href="/assets/style.css"]').evaluate('el => !!el.sheet && el.sheet.cssRules.length > 0'),route
                     for width in (1280,768,390):
                         page.set_viewport_size({'width':width,'height':900})
                         assert page.locator('body').evaluate('el=>el.scrollWidth <= innerWidth + 4'),(args.browser,route,width)

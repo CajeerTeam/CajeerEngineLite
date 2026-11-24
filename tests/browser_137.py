@@ -30,7 +30,11 @@ with sync_playwright() as playwright:
     page=browser.new_page(viewport={'width':1280,'height':900})
     page.set_content(html)
     assert page.locator('.dev-tools').count()==1
-    assert page.locator('.dev-tabs a').count()==3
+    assert page.locator('.dev-tabs a').evaluate_all('(links) => links.map(a => a.getAttribute("href"))') == [
+        '/admin/developer?tab=diagnostics', '/admin/developer?tab=templates',
+        '/admin/developer?tab=events', '/admin/developer?tab=monitoring',
+    ]
+    assert page.locator('.dev-tabs a[aria-current=page]').get_attribute('href') == '/admin/developer?tab=templates'
     assert page.locator('form.dev-template-form').count()==1
     assert page.locator('textarea[name="source"]').input_value()=='</textarea><script>alert(1)</script>'
     assert page.locator('script').count()==0
