@@ -11,10 +11,10 @@ final class DeveloperView
 
     public static function render(string $root,array $site,string $csrf,string $tab,string $selected,string $error='',string $notice='',?string $draft=null): string
     {
-        if (!in_array($tab,['diagnostics','templates','events'],true)) throw new \InvalidArgumentException('Invalid developer tab');
+        if (!in_array($tab,['diagnostics','templates','events','monitoring'],true)) throw new \InvalidArgumentException('Invalid developer tab');
         $html='<div class="dev-tools"><p>Проверки выполняются локально. Секреты, идентификаторы владельцев, абсолютные пути и содержимое PHP-логов не выводятся.</p>';
         $html.='<nav class="dev-tabs" aria-label="Инструменты разработчика">';
-        foreach (['diagnostics'=>'Диагностика','templates'=>'Шаблоны','events'=>'Отладка и события'] as $key=>$title) {
+        foreach (['diagnostics'=>'Диагностика','templates'=>'Шаблоны','events'=>'Отладка и события','monitoring'=>'Мониторинг'] as $key=>$title) {
             $html.='<a href="/admin/developer?tab='.$key.'"'.($key===$tab?' aria-current="page"':'').'>'.self::h($title).'</a>';
         }
         $html.='</nav>';
@@ -32,6 +32,15 @@ final class DeveloperView
                     ($check['status']==='pass'?'':'<small>'.self::h($check['remedy']).'</small>').'</td></tr>';
             }
             return $html.'</tbody></table></div><p class="dev-muted">Внешняя доставка аналитики, OIDC и интеграции не проверяются этим локальным отчётом.</p></section></div>';
+        }
+        if ($tab==='monitoring') {
+            try { $report=\CajeerEngine\Monitoring\OperationalHealth::run($root); }
+            catch (\Throwable) { return $html.'<p class="error">Мониторинг недоступен. Проверьте конфигурацию и права хранения.</p></div>'; }
+            $html.='<section><h2>Мониторинг эксплуатации</h2><p>Последние 60 минут: учитываются сохранённые PHP-запросы. Статические файлы и пропущенные при конкуренции записи не учитываются.</p><div class="dev-table-wrap"><table><thead><tr><th>Проверка</th><th>Статус</th><th>Значение</th></tr></thead><tbody>';
+            foreach ($report['checks'] as $check) $html.='<tr><th scope="row">'.self::h($check['id']).'</th><td>'.self::h($check['status']).'</td><td>'.self::h(json_encode($check['value'],JSON_THROW_ON_ERROR)).'</td></tr>';
+            $html.='</tbody></table></div><h3>Задержка по группам</h3><div class="dev-table-wrap"><table><thead><tr><th>Группа</th><th>Запросы</th><th>5xx</th><th>p95, мс</th></tr></thead><tbody>';
+            foreach (($report['metrics']['groups']??[]) as $group=>$row) $html.='<tr><th scope="row">'.self::h($group).'</th><td>'.$row['requests'].'</td><td>'.$row['errors_5xx'].'</td><td>'.self::h((string)($row['p95_ms']??'—')).'</td></tr>';
+            return $html.'</tbody></table></div><p>Свежесть копии не подтверждает её целостность. Для полной проверки: <code>php bin/cajeer monitor check --verify-backup</code>.</p></section></div>';
         }
         if ($tab==='events') {
             $html.='<section><h2>Структурированные события</h2><p>Здесь отображаются только коды операций, время UTC и случайные ID. Тексты исключений и пользовательские данные не записываются.</p>';

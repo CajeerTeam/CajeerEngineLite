@@ -31,6 +31,7 @@ use CajeerEngine\Compatibility\TrustedProxy;
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
+\CajeerEngine\Monitoring\RequestLog::start($app->root);
 function e(string $s): string { return Lite::esc($s); }
 function stop(int $status,string $msg): never { http_response_code($status); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 function go(string $path): never {
@@ -90,7 +91,7 @@ try {
     try { $path=PublicPath::normalize($raw); } catch(InvalidArgumentException) { stop(400,'Bad path'); }
     $method=$_SERVER['REQUEST_METHOD']??'GET';
     if (!in_array($method,['GET','HEAD','POST'],true)) { header('Allow: GET, HEAD, POST'); stop(405,'Method not allowed'); }
-    if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
+    if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Cache-Control: no-store'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
     // A worker interrupted during a full CMS import leaves a private undo
     // journal. Recover before serving pages, assets or administrative writes;
     // competing workers return 503 rather than exposing a half-imported site.
@@ -110,7 +111,8 @@ try {
         header('Content-Type: application/json; charset=utf-8');
         $ready=false;
         try {
-            $health=$app->load();
+            $health=(new \CajeerEngine\Storage\SiteRepository($app->root))->read();
+            if ($health===null) throw new \RuntimeException('Not installed');
             if ($health['schema']!==\CajeerEngine\Storage\SiteState::SCHEMA ||
                 !is_writable(dirname($app->file())) ||
                 !is_array($health['pages']['/']??null) ||
@@ -269,7 +271,7 @@ try {
             if (!is_string($selected)) stop(400,'Invalid template name');
             if ($selected!=='') { try { $manager->path($selected); } catch (InvalidArgumentException|RuntimeException) { stop(422,'Invalid template name'); } }
             $tab=$_GET['tab']??($method==='POST'?'templates':'diagnostics');
-            if (!is_string($tab) || !in_array($tab,['diagnostics','templates','events'],true)) stop(400,'Invalid developer tab');
+            if (!is_string($tab) || !in_array($tab,['diagnostics','templates','events','monitoring'],true)) stop(400,'Invalid developer tab');
             if ($method==='POST' && (int)($_SERVER['CONTENT_LENGTH']??0)>180000) stop(413,'Template request exceeds 180 kB');
             $error=''; $notice=''; $draft=null;
             if ($method==='POST') {
@@ -1573,6 +1575,6 @@ try {
     catch (Throwable) { $pending=true; }
     if ($pending) { header('Retry-After: 5'); stop(503,'CMS storage recovery pending'); }
     try { DeveloperEvents::record($app->root,'runtime.unhandled','error'); } catch(Throwable) {}
-    error_log('CajeerEngine Lite: '.$ex->getMessage());
+    error_log('CajeerEngine Lite runtime failure: '.get_class($ex));
     stop(500,'Internal server error');
 }

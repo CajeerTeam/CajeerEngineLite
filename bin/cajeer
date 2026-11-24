@@ -18,6 +18,20 @@ $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
     switch ($cmd) {
+        case 'monitor':
+            $action=$argv[2]??'';$minutes=60;$verify=false;$seen=[];
+            if (!in_array($action,['check','status'],true)) throw new InvalidArgumentException('Usage: monitor check|status [--minutes=60] [--verify-backup]');
+            foreach (array_slice($argv,3) as $arg) {
+                if (preg_match('/^--minutes=([0-9]{1,4})$/D',$arg,$m)&&!isset($seen['minutes'])) {$minutes=(int)$m[1];$seen['minutes']=true;}
+                elseif ($arg==='--verify-backup'&&$action==='check'&&!$verify) $verify=true;
+                elseif ($arg==='--json'&&!isset($seen['json'])) $seen['json']=true;
+                else throw new InvalidArgumentException('Invalid monitor option');
+            }
+            if ($minutes<1||$minutes>1440) throw new InvalidArgumentException('Window must be 1–1440 minutes');
+            $report=$action==='check'?\CajeerEngine\Monitoring\OperationalHealth::run($app->root,$minutes,$verify):\CajeerEngine\Monitoring\RequestLog::report($app->root,$minutes);
+            echo json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";
+            if ($action==='check'&&!$report['ok']) exit(1);
+            break;
         case 'compatibility':
             $action=$argv[2]??'';
             if ($action==='check' && (count($argv)===3 || (count($argv)===4 && $argv[3]==='--json'))) {
@@ -372,7 +386,7 @@ try {
             break;
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
-                 "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\nphp bin/cajeer compatibility check [--json] | compatibility migration preview|apply\n".
+                 "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer monitor check|status [--minutes=60] [--verify-backup]\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\nphp bin/cajeer compatibility check [--json] | compatibility migration preview|apply\n".
                  "php bin/cajeer update status|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".

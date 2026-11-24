@@ -71,7 +71,10 @@ jobs:
       - run: bash tests/update_engine_cli_144.sh
       - run: php tests/core_145.php
       - run: php tests/core_146.php
+      - run: php tests/core_147.php
       - run: bash tests/compatibility_http_146.sh
+      - run: bash tests/operational_http_147.sh
+      - run: python3 tests/operational_load_147.py --seconds 15 --workers 4
       - run: php bin/cajeer compatibility check --json
       - run: bash tests/automatic_updates_cli_145.sh
       - run: php bin/cajeer security audit --json
@@ -177,9 +180,12 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
       - run: php tests/core_146.php
+      - run: php tests/core_147.php
       - run: php tests/core_144.php
       - run: php tests/core_145.php
       - run: bash tests/compatibility_http_146.sh
+      - run: bash tests/operational_http_147.sh
+      - run: python3 tests/operational_load_147.py --seconds 15 --workers 4
   webserver-config:
     runs-on: ubuntu-latest
     steps:

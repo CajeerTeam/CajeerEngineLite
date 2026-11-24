@@ -1,5 +1,11 @@
-# CajeerEngine Lite Edition 1.4.6
+# CajeerEngine Lite Edition 1.4.7
 
+
+### 1.4.7 — Operational Reliability (monitoring, diagnostics, load regression)
+
+Added actual request instrumentation, bounded private rotating JSONL logs, percentile/error/memory statistics, configurable operational checks, backup freshness and optional actual archive integrity verification. The authenticated Developer Tools monitoring tab displays retained measurements; CLI: `php bin/cajeer monitor status --minutes=15` and `php bin/cajeer monitor check --verify-backup`. Readiness checks do not implicitly migrate legacy JSON. Generic unhandled-exception logging omits raw exception messages. Telemetry is best effort and excludes static requests and pre-bootstrap failures; it is not a replacement for external uptime or FPM monitoring. See [`OPERATIONAL_RELIABILITY.md`](OPERATIONAL_RELIABILITY.md) for settings, scheduler, limitations and deployment.
+
+Tests: `php tests/core_147.php`, `bash tests/operational_http_147.sh`, `python3 tests/operational_load_147.py --seconds 15 --workers 4`. The local load test uses a disposable CMS, not the production server. Schema remains 14.
 
 ### 1.4.6 — Compatibility Assurance (runtime, web server, proxy, legacy site data)
 

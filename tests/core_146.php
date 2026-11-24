@@ -36,13 +36,13 @@ function rm146(string $dir): void {
     foreach($items as $item) $item->isDir()&&!$item->isLink()?rmdir($item->getPathname()):unlink($item->getPathname());
     rmdir($dir);
 }
-ensure146(Lite::VERSION==='1.4.6','version');
+ensure146(version_compare(Lite::VERSION,'1.4.6','>='),'version');
 $root=sys_get_temp_dir().'/cajeer-compat-146-'.bin2hex(random_bytes(6));
 mkdir($root,0700);
 try {
     mkdir($root.'/public',0755);
     copy(dirname(__DIR__).'/public/index.php',$root.'/public/index.php');
-    file_put_contents($root.'/VERSION',"1.4.6\n");
+    file_put_contents($root.'/VERSION',Lite::VERSION."\n");
     $cms=new Lite($root);
     $cms->install('CompatStrongPassword146!','https://test.example.org','Legacy-compatible site');
     $current=$cms->load();
