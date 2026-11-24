@@ -1,0 +1,25 @@
+[Unit]
+Description=CajeerEngine Lite maintenance and update supervisor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/
+EnvironmentFile=/etc/cajeer/maintenance.env
+ExecStart=/usr/local/sbin/cajeer-maintenance
+TimeoutStartSec=20min
+TimeoutStopSec=60s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+StateDirectory=cajeer-maintenance
+StateDirectoryMode=0755
+RuntimeDirectory=cajeer-maintenance
+RuntimeDirectoryMode=0755
+ReadWritePaths=/srv/cajeer

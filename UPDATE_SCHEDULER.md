@@ -1,5 +1,7 @@
 # Update Scheduler (1.5.4)
 
+For unattended service orchestration in 1.5.5, follow [MAINTENANCE_ORCHESTRATION.md](MAINTENANCE_ORCHESTRATION.md). The existing timer remains discovery-only; do not enable both timers.
+
 The scheduler drives the existing private Update Control Center mailbox using one bounded tick per process. No HTTP request starts a process, no daemon is embedded in PHP, and no scheduler code stops or restarts services. Schema 14 is unchanged.
 
 ## CLI and policy
@@ -22,7 +24,7 @@ CAJEER_AUTO_UPDATE_GITHUB_REPO=CajeerTeam/CajeerEngineLite
 CAJEER_UPDATE_TRUSTED_KEY_FILE=/etc/cajeer/update-trusted.pem
 ```
 
-The trusted public key must be readable by the service identity and not writable by it. Keep signing keys off the server. The service removes install and quiescence variables and mounts code read-only: unattended discovery is enabled, not unattended PHP-FPM shutdown/installation. Do not relax this boundary just to make installation work. With workers genuinely stopped and verified backups available, invoke `update scheduler tick` manually as the deployment identity using the separate installation permissions in the control center runbook. Automated maintenance lifecycle belongs to 1.5.5.
+The trusted public key must be readable by the service identity and not writable by it. Keep signing keys off the server. The service removes install and quiescence variables and mounts code read-only: unattended discovery is enabled, not unattended PHP-FPM shutdown/installation. Do not relax this boundary just to make installation work. With workers genuinely stopped and verified backups available, invoke `update scheduler tick` manually as the deployment identity using the separate installation permissions in the control center runbook. Automated maintenance lifecycle is available via the separate 1.5.5 supervisor; do not enable both timers.
 
 ```sh
 # From the deployed project, as an administrator after reviewing paths/identity:
@@ -50,4 +52,4 @@ php tests/core_153.php
 bash tests/update_control_http_153.sh
 ```
 
-Tests use disposable files and keys, controlled release responses, actual signed installation, retries and persisted locks. On a real server validate the unit with `systemd-analyze verify`, check the timer and journal, and verify the configured official GitHub release. Production unattended installation still requires the maintenance orchestration stage.
+Tests use disposable files and keys, controlled release responses, actual signed installation, retries and persisted locks. On a real server validate the unit with `systemd-analyze verify`, check the timer and journal, and verify the configured official GitHub release. Production unattended installation requires the separately configured maintenance supervisor.

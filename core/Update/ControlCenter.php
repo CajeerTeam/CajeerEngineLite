@@ -116,13 +116,56 @@ final class ControlCenter
             throw new \InvalidArgumentException('Неизвестное действие');
         });
     }
-    private static function allowed(array $s,array $j): bool
+    private static function allowed(array $s,array $j,bool $requireQuiescence=true): bool
     {
         if($j['type']==='check')return true;
         if(isset($j['channel'])&&$j['channel']!==$s['settings']['channel'])throw new \RuntimeException('Job channel no longer matches settings');
         return getenv('CAJEER_AUTO_UPDATE_ENABLED')==='1'&&getenv('CAJEER_AUTO_UPDATE_INSTALL')==='1'&&
-            getenv('CAJEER_AUTO_UPDATE_WORKERS_QUIESCED')==='1'&&(!$j['target']['preview']||getenv('CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL')==='1')&&
+            (!$requireQuiescence||getenv('CAJEER_AUTO_UPDATE_WORKERS_QUIESCED')==='1')&&(!$j['target']['preview']||getenv('CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL')==='1')&&
             AutomaticUpdates::window()&&AutomaticUpdates::window($s['settings']['window']);
+    }
+    /** Read-only hint to the independent service supervisor. The actual worker
+     * rechecks every permission, exact digest, queue revision and time window. */
+    public function maintenancePlan(): string
+    {
+        if(PHP_SAPI!=='cli'||getenv('CAJEER_UPDATE_CONTROL_WORKER')!=='1')throw new \RuntimeException('CLI worker opt-in required');
+        $s=$this->read();
+        if(OperationLock::maintenance($this->root)||\CajeerEngine\Operations\RecoveryJournal::pending($this->root))return 'blocked';
+        $j=$s['job'];
+        if($j!==null) {
+            if($j['status']!=='queued'||$j['type']!=='install'||$j['at']>time()||time()-$j['at']>self::TTL||($j['not_before']??0)>time()||
+                !$this->fresh($s)||$j['target']!==$s['check']['verified'])return 'tick';
+        } elseif($s['settings']['install']&&$this->fresh($s)&&self::verified($s['check']['verified'])) {
+            $j=['type'=>'install','target'=>$s['check']['verified'],'channel'=>$s['settings']['channel']];
+        } else return 'tick';
+        return self::allowed($s,$j,false)?'install':'tick';
+    }
+    /** Recovery is serialized against both scheduler and ordinary control worker.
+     * The supervisor must already have stopped all configured services. */
+    public function maintenanceRecover(): array
+    {
+        if(PHP_SAPI!=='cli'||getenv('CAJEER_UPDATE_CONTROL_WORKER')!=='1'||getenv('CAJEER_AUTO_UPDATE_WORKERS_QUIESCED')!=='1')
+            throw new \RuntimeException('Maintenance recovery requires quiesced CLI worker');
+        $scheduler=$this->lock('scheduler.lock');
+        try {
+            $worker=$this->lock('worker.lock');
+            try {return (new UpdateEngine($this->root))->recover();}
+            finally {OperationLock::release($worker);}
+        } finally {OperationLock::release($scheduler);}
+    }
+    /** Fresh PHP process after install/recovery: no migration or data mutation. */
+    public function maintenanceVerify(): array
+    {
+        if(PHP_SAPI!=='cli'||getenv('CAJEER_UPDATE_CONTROL_WORKER')!=='1'||getenv('CAJEER_AUTO_UPDATE_WORKERS_QUIESCED')!=='1')
+            throw new \RuntimeException('Maintenance verification requires quiesced CLI worker');
+        $lock=OperationLock::acquire($this->root,true);
+        try {
+            $version=UpdatePackage::version($this->root);
+            if(OperationLock::maintenance($this->root)||\CajeerEngine\Operations\RecoveryJournal::pending($this->root)||$version!==\CajeerEngine\Lite::VERSION)throw new \RuntimeException('Unresolved maintenance or version mismatch');
+            $site=(new \CajeerEngine\Storage\SiteRepository($this->root))->read();
+            if($site===null||$site['schema']!==\CajeerEngine\Storage\SiteState::SCHEMA)throw new \RuntimeException('CMS site not installed or schema incompatible');
+            return ['status'=>'ready_to_start','version'=>$version];
+        } finally {OperationLock::release($lock);}
     }
     /** One job per invocation; no privilege escalation, shell commands or service control. */
     public function work(bool $scheduled=false): array

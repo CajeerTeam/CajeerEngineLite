@@ -51,7 +51,7 @@ final class ControlCenterView
             '<label><input type="checkbox" name="install" value="1"'.($p['install']?' checked':'').'> Автоматическая установка проверенных пакетов (opt-in)</label>'.
             '<label>Интервал проверки, часов <input type="number" name="interval" min="1" max="168" required value="'.$p['interval'].'"></label>'.
             '<label>Окно обслуживания UTC <input name="window" required value="'.self::h($p['window']).'" placeholder="02:00-04:00"></label><button type="submit">Сохранить настройки</button>');
-        $html.='<p class="cms-ops-note">Источник, доверенный ключ и разрешения задаются оператором в окружении worker; панель не может изменить их. Планировщик systemd/cron настраивается оператором. Остановка сервисов выполняется отдельно.</p></section>';
+        $html.='<p class="cms-ops-note">Источник, доверенный ключ и разрешения задаются оператором в окружении worker; панель не может изменить их. Планировщик systemd/cron настраивается оператором. При подключённом системном оркестраторе сервисы останавливаются и запускаются автоматически; иначе оператор выполняет обслуживание вручную.</p></section>';
         $html.='<section><h2>История заданий</h2><div class="dev-table-wrap"><table><thead><tr><th>UTC</th><th>Действие</th><th>Версия</th><th>Результат</th></tr></thead><tbody>';
         $labels=['checked'=>'Проверено','installed'=>'Установлено','failed'=>'Ошибка (см. CLI)','cancelled'=>'Отменено','interrupted'=>'Прервано','expired'=>'Истекло'];
         foreach(array_reverse($s['history']) as $row)$html.='<tr><td>'.self::h(gmdate('Y-m-d H:i:s',$row['at'])).'</td><td>'.($row['type']==='check'?'Проверка':'Установка').'</td><td>'.self::h($row['to']??'—').'</td><td>'.self::h($labels[$row['result']]).'</td></tr>';

@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.4
+# CajeerEngine Lite Edition 1.5.5
 
+
+### 1.5.5 — Maintenance Orchestration
+
+Optional root-owned systemd supervisor with a persistent web-server maintenance gate, guarded service startup, actual service stop/start, non-root signed-update worker, offline verification and interrupted-cycle recovery. Requires a dedicated FPM service, read-only code mount for HTTP/background services and one-time operator bootstrap. See [MAINTENANCE_ORCHESTRATION.md](MAINTENANCE_ORCHESTRATION.md). Live health/rollback after restart is not part of this version. Schema 14 unchanged.
 
 ### 1.5.4 — Update Scheduler
 

@@ -40,13 +40,15 @@ try {
     $http->fail=false;$submit(['action'=>'settings','channel'=>'stable','interval'=>'1','window'=>$window,'checks'=>'1','install'=>'1']);
     $alter(static function(&$s){$s['last_attempt']=time()-3601;});
     ok154($tick()['action']==='checked'&&$c->status()['check']['verified']['to']==='1.5.5','periodic verified check');
+    ok154($c->maintenancePlan()==='install','supervisor detects opted-in install before quiescence');
     ok154($tick()['action']==='idle','quiescence gate and interval');
-    $submit(['action'=>'install','confirm'=>'1.5.5']);ok154($tick()['action']==='deferred','manual install deferred without quiescence');
+    $submit(['action'=>'install','confirm'=>'1.5.5']);ok154($c->maintenancePlan()==='install','supervisor detects queued install');ok154($tick()['action']==='deferred','manual install deferred without quiescence');
     putenv('CAJEER_AUTO_UPDATE_WORKERS_QUIESCED=1');
     $http->fail=true;reject154($tick,'install failure no replay');ok154(!$c->status()['settings']['install']&&$c->status()['job']===null,'automatic install paused');
     $http->fail=false;$submit(['action'=>'settings','channel'=>'stable','interval'=>'1','window'=>$window,'checks'=>'1','install'=>'1']);
     $submit(['action'=>'check']);ok154($tick()['action']==='checked','explicit new verification');
     putenv('CAJEER_AUTO_UPDATE_WINDOW_UTC='.gmdate('H:i',time()+3600).'-'.gmdate('H:i',time()+7200));
+    ok154($c->maintenancePlan()==='tick','supervisor does not stop services outside window');
     ok154($tick()['action']==='idle'&&UpdatePackage::version($root)==='1.5.4','maintenance window enforced');
     putenv('CAJEER_AUTO_UPDATE_WINDOW_UTC='.$window);
     ok154($tick()['action']==='installed'&&UpdatePackage::version($root)==='1.5.5','real signed automatic install');

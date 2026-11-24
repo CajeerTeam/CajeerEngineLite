@@ -75,6 +75,8 @@ jobs:
       - run: php tests/core_153.php
       - run: php tests/core_154.php
       - run: bash tests/update_scheduler_cli_154.sh
+      - run: bash tests/maintenance_orchestration_155.sh
+      - run: bash tests/maintenance_cli_155.sh
       - run: bash tests/update_control_http_153.sh
       - run: php tests/core_146.php
       - run: php tests/core_147.php
@@ -197,6 +199,8 @@ jobs:
       - run: php tests/core_153.php
       - run: php tests/core_154.php
       - run: bash tests/update_scheduler_cli_154.sh
+      - run: bash tests/maintenance_orchestration_155.sh
+      - run: bash tests/maintenance_cli_155.sh
       - run: bash tests/update_control_http_153.sh
       - run: bash tests/compatibility_http_146.sh
       - run: bash tests/operational_http_147.sh
@@ -207,6 +211,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx apache2 openssl
       - run: bash tests/webservers_146.sh
+      - run: python3 tests/maintenance_gate_155.py
+      - run: bash tests/maintenance_units_155.sh
 
   rc-staging:
     runs-on: ubuntu-latest

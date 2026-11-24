@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.5 — Maintenance Orchestration
+
+- Root-owned external systemd supervisor, persistent HTTP 503 gate, startup guard and service state journal. Actual FPM and background service stop/start around the existing non-root signed installer.
+- Fresh-process offline compatibility verification and interrupted maintenance recovery, preserving prior service states. Discovery does not require downtime. New deployment prerequisites are opt-in; schema 14 unchanged.
+
 ## 1.5.4 — Update Scheduler
 
 - Durable scheduler tick with non-overlapping execution, heartbeat, delayed check retries, expiry and failed-install auto-install pause.
