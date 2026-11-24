@@ -51,6 +51,7 @@ final class AdminExperience
         $nav .= self::link('/admin/seo', 'SEO Control Center', $path === '/admin/seo');
         $nav .= self::link('/admin/developer', 'Developer Tools', $path === '/admin/developer');
         $nav .= self::link('/admin/operations', 'CMS Operations', $path === '/admin/operations');
+        $nav .= self::link('/admin/updates', 'Обновления', $path === '/admin/updates');
         $nav .= self::link('/admin/editor?new=1', 'Блочный редактор', $path === '/admin/editor');
         $nav .= '<div class="admin-nav-divider" aria-hidden="true"></div><p class="admin-nav-label">AI-инструменты</p>';
         foreach ([
@@ -113,6 +114,7 @@ final class AdminExperience
             '/admin/seo'=>'SEO Control Center',
             '/admin/developer'=>'Developer Tools: диагностика и шаблоны',
             '/admin/operations'=>'CMS Operations: бэкапы и обслуживание',
+            '/admin/updates'=>'Update Control Center',
             '/admin/ai/editor'=>'AI-редактор',
             '/admin/ai/seo'=>'SEO-аудит',
             '/admin?view=analytics&analytics=1'=>'Отчёты аналитики',

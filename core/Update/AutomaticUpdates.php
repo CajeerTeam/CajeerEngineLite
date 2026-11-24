@@ -49,10 +49,10 @@ final class AutomaticUpdates
         if(!flock($handle,LOCK_EX|LOCK_NB)){fclose($handle);throw new \RuntimeException('Automatic update already running');}
         return $handle;
     }
-    private function fetch(): array
+    private function fetch(?string $channel=null): array
     {
         return (new ReleaseDiscovery($this->root,$this->transport??new ReleaseHttp()))->fetch(
-            self::repository(),UpdatePackage::version($this->root),ReleaseDiscovery::channel());
+            self::repository(),UpdatePackage::version($this->root),$channel??ReleaseDiscovery::channel());
     }
     public function status(): array
     {
@@ -79,18 +79,47 @@ final class AutomaticUpdates
             throw $e;
         } finally {OperationLock::release($lock);}
     }
-    public function run(): array
+    private function within(?string $window): bool
+    {
+        return self::window() && ($window===null || self::window($window));
+    }
+    /** Download and verify exact-base package, without modifying runtime files. */
+    public function verifiedCheck(string $channel): array
+    {
+        if(!in_array($channel,['stable','preview'],true)) throw new \InvalidArgumentException('Invalid channel');
+        $lock=$this->lock(); $download=null;
+        try {
+            $result=$this->fetch($channel); $release=$result['available']; $verified=null;
+            if($release!==null) {
+                OperationFiles::dir($this->path(self::DOWNLOAD),0700);
+                $download=$this->path(self::DOWNLOAD.'/'.bin2hex(random_bytes(16)).'.cjrupdate');
+                $receipt=($this->transport??new ReleaseHttp())->download($release['url'],$download,$release['bytes'],$release['sha256']);
+                $check=$this->engine()->verify($download);
+                if($receipt['bytes']!==$release['bytes'] || $check['from']!==$result['installed'] || $check['to']!==$release['version'] ||
+                   !hash_equals($check['package_sha256'],$receipt['sha256']) || ($release['sha256']!==null&&!hash_equals($release['sha256'],$receipt['sha256'])))
+                    throw new \RuntimeException('Package verification mismatch');
+                $verified=['from'=>$check['from'],'to'=>$check['to'],'sha256'=>$check['package_sha256'],'files'=>$check['files'],'preview'=>$release['prerelease']];
+            }
+            return ['installed'=>$result['installed'],'latest'=>$result['latest']['version']??null,'verified'=>$verified,'channel'=>$channel,
+                'notes'=>$release['notes']??'','plan'=>array_column($result['plan'],'version'),'at'=>time()];
+        } finally {
+            try {if(is_string($download)&&is_file($download)&&!is_link($download))OperationFiles::remove($download);}
+            finally {OperationLock::release($lock);}
+        }
+    }
+    public function run(?array $expected=null, ?string $channel=null, ?string $window=null): array
     {
         if(!self::flag('CAJEER_AUTO_UPDATE_ENABLED'))throw new \RuntimeException('Auto updates disabled: CAJEER_AUTO_UPDATE_ENABLED=1 required');
         if(!self::flag('CAJEER_AUTO_UPDATE_INSTALL'))throw new \RuntimeException('Auto install disabled: CAJEER_AUTO_UPDATE_INSTALL=1 required');
         if(!self::flag('CAJEER_AUTO_UPDATE_WORKERS_QUIESCED'))throw new \RuntimeException('Worker quiescence acknowledgement required');
         // Prevent any network requests or file changes outside the operator-approved window.
-        if(!self::window())return ['action'=>'outside_window','version'=>UpdatePackage::version($this->root)];
+        if(!$this->within($window))return ['action'=>'outside_window','version'=>UpdatePackage::version($this->root)];
         $lock=$this->lock();
         $download=null;
         try {
             $pending=$this->engine()->status()['pending'];
             if($pending!==null) {
+                if($expected!==null)throw new \RuntimeException('Interrupted update requires operator recovery');
                 if(!self::flag('CAJEER_AUTO_UPDATE_RECOVER'))throw new \RuntimeException('Interrupted update requires update recover (or explicit auto recovery opt-in)');
                 $result=$this->engine()->recover();
                 try {$this->record('recovered',['result'=>$result]);}
@@ -98,15 +127,16 @@ final class AutomaticUpdates
                 return ['action'=>'recovered','result'=>$result];
             }
             // Re-evaluate the window after locking; cron may start near its end.
-            if(!self::window())return ['action'=>'outside_window','version'=>UpdatePackage::version($this->root)];
-            $result=$this->fetch();
+            if(!$this->within($window))return ['action'=>'outside_window','version'=>UpdatePackage::version($this->root)];
+            $result=$this->fetch($channel);
             $release=$result['available'];
+            if ($expected!==null && ($result['installed']!==$expected['from'] || ($release['version']??null)!==$expected['to'] || ($release['prerelease']??null)!==$expected['preview'])) throw new \RuntimeException('Requested update is no longer the available exact transition');
             if($release===null) {
                 $this->record('up_to_date',['installed'=>$result['installed']]);
                 return ['action'=>'up_to_date','version'=>$result['installed']];
             }
             if ($release['prerelease'] && !self::flag('CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL')) throw new \RuntimeException('Preview installation requires CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL=1');
-            if (!self::window()) return ['action'=>'window_closed','version'=>$result['installed']];
+            if (!$this->within($window)) return ['action'=>'window_closed','version'=>$result['installed']];
             OperationFiles::dir($this->path(self::DOWNLOAD),0700);
             $download=$this->path(self::DOWNLOAD.'/'.bin2hex(random_bytes(16)).'.cjrupdate');
             $file=($this->transport??new ReleaseHttp())->download($release['url'],$download,$release['bytes'],$release['sha256']);
@@ -114,13 +144,14 @@ final class AutomaticUpdates
             $check=$this->engine()->verify($download);
             if($check['from']!==$result['installed']||$check['to']!==$release['version']||
                 !hash_equals($check['package_sha256'],$file['sha256']))throw new \RuntimeException('Signed package version or checksum mismatch');
-            if(!self::window()) {
+            if($expected!==null && !hash_equals($expected['sha256'],$check['package_sha256'])) throw new \RuntimeException('Verified package changed; check again');
+            if(!$this->within($window)) {
                 $this->record('window_closed',['available'=>$release['version']]);
                 return ['action'=>'window_closed','version'=>$result['installed']];
             }
             $previous=getenv('CAJEER_UPDATE_CONFIRM');
             putenv('CAJEER_UPDATE_CONFIRM=INSTALL');
-            try {$installed=$this->engine()->install($download);}
+            try {$installed=$this->engine()->install($download,$check['package_sha256']);}
             finally {$previous===false?putenv('CAJEER_UPDATE_CONFIRM'):putenv('CAJEER_UPDATE_CONFIRM='.$previous);}
             try {$this->record('installed',['version'=>$release['version'],'id'=>$installed['id'],
                 'package_sha256'=>$file['sha256']]);}
@@ -132,8 +163,8 @@ final class AutomaticUpdates
             catch(\Throwable $logError) {error_log('Auto update could not record failure status');}
             throw $e;
         } finally {
-            if(is_string($download)&&is_file($download)&&!is_link($download))OperationFiles::remove($download);
-            OperationLock::release($lock);
+            try {if(is_string($download)&&is_file($download)&&!is_link($download))OperationFiles::remove($download);}
+            finally {OperationLock::release($lock);}
         }
     }
 }

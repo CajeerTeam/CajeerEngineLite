@@ -108,7 +108,7 @@ final class UpdateEngine
             }
         }
     }
-    public function install(string $package): array
+    public function install(string $package,?string $expectedSha256=null): array
     {
         if(getenv('CAJEER_UPDATE_CONFIRM')!=='INSTALL') throw new \RuntimeException('Stop PHP-FPM/workers and set CAJEER_UPDATE_CONFIRM=INSTALL');
         $lock=OperationLock::acquire($this->root,true);
@@ -120,6 +120,7 @@ final class UpdateEngine
             if($this->journal()!==null) throw new \RuntimeException('Incomplete update; recover first');
             $this->fresh($stage);
             $validated=UpdatePackage::verify($package,$this->trusted(),$stage);
+            if($expectedSha256!==null&&!hash_equals($expectedSha256,$validated['package_sha256']))throw new \RuntimeException('Staged package differs from verified download');
             $manifest=$validated['manifest'];
             $this->preflight($manifest);
             $newVersion=$this->fromStaged($stage,'VERSION');

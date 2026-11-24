@@ -210,3 +210,7 @@
 .cms-operations .dev-table-wrap table{min-width:680px}
 .cms-ops-note{font-size:.86rem;color:#61718a}
 @media(max-width:650px){.admin-body .cms-operations{padding:12px}.cms-operations section{padding:13px}.cms-ops-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Update Control Center: keep long release notes and digests within narrow screens. */
+.update-notes {white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;}
+.update-digest {overflow-wrap:anywhere;word-break:break-word;}

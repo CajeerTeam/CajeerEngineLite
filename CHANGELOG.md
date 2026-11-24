@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.3 — Update Control Center
+
+- Authenticated update console with CSRF, revision checks, private queue, channel, maintenance policy and history.
+- Worker verifies downloaded packages and pins the exact digest through staging; release notes are untrusted escaped text.
+- Separate operator opt-in, maintenance windows and worker quiescence still required. No automatic service management. Schema 14 unchanged.
+
 ## 1.5.2 — Update Package Distribution
 
 - Signed distribution index, multiple exact-base packages, verified update route and one-step installation.

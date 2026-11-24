@@ -139,13 +139,14 @@ final class UpdatePackage
             $offset+=$count;
         }
     }
-    private static function exact(mixed $handle,int $size): string
+    private static function exact(mixed $handle,int $size,?\HashContext $digest=null): string
     {
         $result='';
         while (strlen($result)<$size) {
             $piece=fread($handle,min(65536,$size-strlen($result)));
             if (!is_string($piece)||$piece==='') throw new \RuntimeException('Truncated update package');
             $result.=$piece;
+            if($digest!==null)hash_update($digest,$piece);
         }
         return $result;
     }
@@ -164,16 +165,17 @@ final class UpdatePackage
         if(!is_resource($h)) throw new \RuntimeException('Cannot read update package');
         try {
             $opened=fstat($h);clearstatcache(true,$package);$now=@lstat($package);
-            if (!is_array($opened)||!is_array($now)||$opened['ino']!==$now['ino']||$opened['dev']!==$now['dev']||$opened['nlink']!==1) throw new \RuntimeException('Update package changed');
-            if(self::exact($h,strlen(self::MAGIC))!==self::MAGIC) throw new \RuntimeException('Not a Cajeer update package');
-            $size=self::exact($h,9);
+            $packageDigest=hash_init('sha256');
+            if (!is_array($opened)||!is_array($now)||$opened['ino']!==$now['ino']||$opened['dev']!==$now['dev']||$opened['nlink']!==1||$opened['ino']!==$st['ino']||$opened['dev']!==$st['dev']||$opened['size']!==$st['size']||($opened['mode']&0170000)!==0100000) throw new \RuntimeException('Update package changed');
+            if(self::exact($h,strlen(self::MAGIC),$packageDigest)!==self::MAGIC) throw new \RuntimeException('Not a Cajeer update package');
+            $size=self::exact($h,9,$packageDigest);
             if(!preg_match('/^[0-9a-f]{8}\n$/D',$size)) throw new \RuntimeException('Invalid release header');
             $length=hexdec(substr($size,0,8));
             if($length<80||$length>262144) throw new \RuntimeException('Release manifest length invalid');
-            $json=self::exact($h,$length);
-            $sigLength=self::exact($h,5);
+            $json=self::exact($h,$length,$packageDigest);
+            $sigLength=self::exact($h,5,$packageDigest);
             if(!preg_match('/^[0-9a-f]{4}\n$/D',$sigLength)) throw new \RuntimeException('Invalid signature framing');
-            $signature=self::exact($h,hexdec(substr($sigLength,0,4)));
+            $signature=self::exact($h,hexdec(substr($sigLength,0,4)),$packageDigest);
             if(openssl_verify($json,$signature,$key,OPENSSL_ALGO_SHA256)!==1) throw new \RuntimeException('Untrusted or invalid release signature');
             $manifest=json_decode($json,true,32,JSON_THROW_ON_ERROR);
             self::validate($manifest);
@@ -193,7 +195,7 @@ final class UpdatePackage
                 $ctx=hash_init('sha256');$remaining=$size;
                 try {
                     while($remaining>0) {
-                        $chunk=self::exact($h,min($remaining,65536));
+                        $chunk=self::exact($h,min($remaining,65536),$packageDigest);
                         hash_update($ctx,$chunk);
                         if($dst!==null)self::put($out,$chunk);
                         $remaining-=strlen($chunk);
@@ -205,7 +207,7 @@ final class UpdatePackage
             if(fread($h,1)!=='') throw new \RuntimeException('Unexpected trailing update data');
             $ended=fstat($h);
             if (!is_array($ended)||$ended['size']!==$opened['size']||$ended['mtime']!==$opened['mtime']||$ended['ctime']!==$opened['ctime']) throw new \RuntimeException('Package mutated during verification');
-            return ['manifest'=>$manifest,'key_sha256'=>hash('sha256',$details['key']),'package_sha256'=>OperationFiles::hash($package)];
+            return ['manifest'=>$manifest,'key_sha256'=>hash('sha256',$details['key']),'package_sha256'=>hash_final($packageDigest)];
         } finally {fclose($h);}
     }
     private static function validate(mixed $data): void

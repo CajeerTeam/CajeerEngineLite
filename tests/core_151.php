@@ -22,7 +22,7 @@ class Fixture151 extends ReleaseHttp {
 }
 function rel151(string $v,int $id,bool $preview=false): array {
     $name='CajeerEngineLite-'.$v.'.cjrupdate';
-    return ['id'=>$id,'tag_name'=>'v'.$v,'draft'=>false,'prerelease'=>$preview,'body'=>'unneeded metadata', 'assets'=>[
+    return ['id'=>$id,'tag_name'=>'v'.$v,'draft'=>false,'prerelease'=>$preview,'body'=>'Release notes', 'irrelevant'=>'unneeded metadata', 'assets'=>[
         ['name'=>$name,'state'=>'uploaded','browser_download_url'=>'https://github.com/CajeerTeam/CajeerEngineLite/releases/download/v'.$v.'/'.$name,'size'=>1024,'digest'=>'sha256:'.str_repeat('a',64)]]];
 }
 function clear151(string $dir): void {
@@ -43,6 +43,7 @@ try {
     $r=$auto->check();yes151($r['available']['version']==='1.5.7'&&$r['latest']['version']==='1.5.40'&&$r['pages']===2,'stable pagination and nearest/latest');
     yes151($http->calls[1][0]==='https://api.github.com/repos/'.$repo.'/releases?per_page=30&page=2','next URL constructed, not followed');
     $cache=$tmp.'/storage/app/updates/auto/discovery.json';yes151((fileperms($cache)&0777)===0600&&!str_contains(file_get_contents($cache),'unneeded metadata'),'private compact cache');
+    yes151($r['available']['notes']==='Release notes','bounded release notes retained');
     $http->responses=[[304,[],[]],[304,[],[]]];putenv('CAJEER_AUTO_UPDATE_CHANNEL=preview');
     $r=$auto->check();yes151($r['available']['version']==='1.5.6'&&$r['available']['prerelease']&&$r['revalidated_pages']===2,'conditional cache and preview');
     yes151($http->calls[2][1]==='W/"a"'&&$http->calls[3][1]==='"b"','correct per-page ETags');

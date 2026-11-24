@@ -42,7 +42,7 @@ final class ReleaseDiscovery
         } finally { fclose($h); }
         try { $data = json_decode($raw,true,64,JSON_THROW_ON_ERROR); }
         catch (\JsonException) { return []; }
-        if (!is_array($data) || ($data['format']??null)!==2 || ($data['repo']??null)!==$repo || !is_array($data['pages']??null) || !array_is_list($data['pages']) || count($data['pages'])>self::MAX_PAGES) return [];
+        if (!is_array($data) || !in_array($data['format']??null,[2,3],true) || ($data['repo']??null)!==$repo || !is_array($data['pages']??null) || !array_is_list($data['pages']) || count($data['pages'])>self::MAX_PAGES) return [];
         foreach ($data['pages'] as $page) {
             if (!is_array($page) || !is_array($page['releases']??null) || !array_is_list($page['releases']) || count($page['releases'])>30 || !is_bool($page['next']??null) ||
                 (isset($page['etag']) && (!is_string($page['etag']) || !ReleaseHttp::validEtag($page['etag'])))) return [];
@@ -52,7 +52,7 @@ final class ReleaseDiscovery
 
     private function save(string $repo,array $pages,int $blockedUntil=0): void
     {
-        $data = json_encode(['format'=>2,'repo'=>$repo,'blocked_until'=>$blockedUntil,'pages'=>$pages],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
+        $data = json_encode(['format'=>3,'repo'=>$repo,'blocked_until'=>$blockedUntil,'pages'=>$pages],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
         if (strlen($data)>self::MAX_CACHE) throw new \RuntimeException('Release cache exceeds size limit');
         OperationFiles::write($this->path(),$data,0600);
     }
@@ -96,7 +96,7 @@ final class ReleaseDiscovery
 
     public function fetch(string $repo,string $installed,string $channel): array
     {
-        $cached=$this->cache($repo); $oldPages=$cached['pages']??[];
+        $cached=$this->cache($repo); $oldPages=($cached['format']??null)===3?($cached['pages']??[]):[];
         $blocked=$cached['blocked_until']??0;
         if (is_int($blocked) && $blocked>time()) throw new \RuntimeException('GitHub discovery throttled until '.gmdate('c',$blocked));
         $pages=[]; $options=[]; $indexed=[]; $seen=[]; $revalidated=0; $deadline=hrtime(true)+120_000_000_000;
@@ -147,7 +147,7 @@ final class ReleaseDiscovery
                     $mode='signed';$edges=[];$distribution=new DistributionIndex($this->root,$this->http);
                     foreach($indexed as $release){
                         if(hrtime(true)>$deadline)throw new \RuntimeException('Distribution discovery time budget exceeded');
-                        array_push($edges,...$distribution->edges($release,$repo));
+                        foreach($distribution->edges($release,$repo) as $edge) $edges[]=$edge+['notes'=>self::notes($release)];
                     }
                     $plan=DistributionIndex::plan($installed,$edges);
                     $available=$plan[0]??null;$latest=$plan?end($plan):null;
@@ -166,6 +166,7 @@ final class ReleaseDiscovery
         if (!is_array($release)) throw new \RuntimeException('Invalid GitHub release entry');
         $data = array_intersect_key($release,array_flip(['id','draft','prerelease','tag_name']));
         foreach ($data as $key=>$value) if (!is_scalar($value) || (is_string($value) && strlen($value)>256)) unset($data[$key]);
+        $data['body']=self::notes($release);
         if (is_array($release['assets']??null)) {
             $data['assets']=[];
             $tag=$data['tag_name']??null;
@@ -186,6 +187,14 @@ final class ReleaseDiscovery
         return $data;
     }
 
+    private static function notes(array $release): string
+    {
+        $body=$release['body']??'';
+        if(!is_string($body)||!preg_match('//u',$body))return '';
+        $body=substr($body,0,4000);
+        while(!preg_match('//u',$body))$body=substr($body,0,-1);
+        return $body;
+    }
     private static function hasNext(string $link): bool { return preg_match('/;\s*rel\s*=\s*"next"/i',$link)===1; }
 
     private static function candidate(array $release,string $repo,string $installed,string $channel): ?array
@@ -204,6 +213,6 @@ final class ReleaseDiscovery
         if (strtolower(substr($url,0,strlen($prefix)))!==strtolower($prefix) || substr($url,strlen($prefix))!==$suffix) return null;
         $digest=$asset['digest']??null;
         if ($digest!==null && (!is_string($digest) || !preg_match('/^sha256:[a-f0-9]{64}$/D',$digest))) return null;
-        return ['version'=>$version,'tag'=>$tag,'url'=>$url,'bytes'=>$bytes,'sha256'=>$digest===null?null:substr($digest,7),'prerelease'=>$release['prerelease']];
+        return ['version'=>$version,'tag'=>$tag,'url'=>$url,'bytes'=>$bytes,'sha256'=>$digest===null?null:substr($digest,7),'prerelease'=>$release['prerelease'],'notes'=>self::notes($release)];
     }
 }

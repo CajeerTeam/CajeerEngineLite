@@ -26,6 +26,7 @@ use CajeerEngine\Modules\ModuleConfig;
 use CajeerEngine\SEO\{SEOControl,SEOControlView};
 use CajeerEngine\Developer\{DeveloperDiagnostics,DeveloperView,TemplateManager,DeveloperEvents};
 use CajeerEngine\Operations\{CmsOperations,OperationsView};
+use CajeerEngine\Update\{ControlCenter,ControlCenterView};
 use CajeerEngine\Security\{AdminRequestGuard,RequestRejected,PrivateArchiveDownload};
 use CajeerEngine\Compatibility\TrustedProxy;
 use CajeerEngine\Consent\ConsentConfig;
@@ -55,7 +56,7 @@ function go(string $path): never {
 function shell(string $title,string $html,bool $aiChat=false): never {
     header('Content-Type: text/html; charset=utf-8');
     $route=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
-    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || $route==='/admin/developer' || $route==='/admin/operations' || str_starts_with($route,'/admin/ai')) &&
+    $admin=is_string($route) && ($route==='/admin' || $route==='/admin/editor' || $route==='/admin/media' || $route==='/admin/seo' || $route==='/admin/developer' || $route==='/admin/operations' || $route==='/admin/updates' || str_starts_with($route,'/admin/ai')) &&
         $title!=='Вход в админ-панель';
     if ($admin) {
         $view=$route==='/admin' ? AdminExperience::view($_GET) : 'ai';
@@ -148,7 +149,7 @@ try {
         if ($method==='GET') echo $bytes;
         exit;
     }
-    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/operations' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
+    if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/operations' || $path==='/admin/updates' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Authenticate the request authority for HTTP as well as HTTPS deployments.
         // The web server must explicitly pass HTTPS=on when terminating TLS.
         try { AdminRequestGuard::check($d['settings']['url'], TrustedProxy::normalize($d['settings']['url'], $_SERVER), $path, $method); }
@@ -205,6 +206,20 @@ try {
         }
         if ($auth) $auth=$sessions->valid($_SESSION,$d);
         if ($auth) $_SESSION['seen']=time();
+        if ($path==='/admin/updates') {
+            if (!$auth) stop(403,'Administrator login required');
+            $center=new ControlCenter($app->root);$error='';$notice='';
+            if ($method==='POST') {
+                if (!is_string($_POST['csrf']??null)||!hash_equals($_SESSION['csrf'],$_POST['csrf'])) stop(403,'Invalid CSRF token');
+                try { $center->submit($_POST); $_SESSION['update_notice']='Изменения сохранены.'; go('/admin/updates'); }
+                catch (InvalidArgumentException $failure) { http_response_code(422);$error=$failure->getMessage(); }
+                catch (Throwable $failure) { error_log('Update control submit: '.get_class($failure));http_response_code(503);$error='Управление обновлениями временно недоступно. Проверьте журнал сервера.'; }
+            }
+            if (isset($_SESSION['update_notice'])) {$notice=(string)$_SESSION['update_notice'];unset($_SESSION['update_notice']);}
+            try { $state=$center->status(); }
+            catch(Throwable $failure) { error_log('Update control status: '.get_class($failure));stop(503,'Update control unavailable'); }
+            shell('Update Control Center',ControlCenterView::render($state,$_SESSION['csrf'],$error,$notice));
+        }
         if ($path==='/admin/operations') {
             if (!$auth) stop(403,'Administrator login required');
             $ops=new CmsOperations($app->root);

@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.2
+# CajeerEngine Lite Edition 1.5.3
 
+
+### 1.5.3 — Update Control Center
+
+Authenticated `/admin/updates` provides verified update checks, release notes, exact-digest install requests, channel and periodic policy, cancellation and bounded history. Separate opt-in CLI worker performs network and installation operations; HTTP never executes the installer. See [UPDATE_CONTROL_CENTER.md](UPDATE_CONTROL_CENTER.md). Schema 14 is unchanged.
 
 ### 1.5.2 — Update Package Distribution
 
