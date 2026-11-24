@@ -42,7 +42,7 @@ final class ReleaseDiscovery
         } finally { fclose($h); }
         try { $data = json_decode($raw,true,64,JSON_THROW_ON_ERROR); }
         catch (\JsonException) { return []; }
-        if (!is_array($data) || ($data['format']??null)!==1 || ($data['repo']??null)!==$repo || !is_array($data['pages']??null) || !array_is_list($data['pages']) || count($data['pages'])>self::MAX_PAGES) return [];
+        if (!is_array($data) || ($data['format']??null)!==2 || ($data['repo']??null)!==$repo || !is_array($data['pages']??null) || !array_is_list($data['pages']) || count($data['pages'])>self::MAX_PAGES) return [];
         foreach ($data['pages'] as $page) {
             if (!is_array($page) || !is_array($page['releases']??null) || !array_is_list($page['releases']) || count($page['releases'])>30 || !is_bool($page['next']??null) ||
                 (isset($page['etag']) && (!is_string($page['etag']) || !ReleaseHttp::validEtag($page['etag'])))) return [];
@@ -52,7 +52,7 @@ final class ReleaseDiscovery
 
     private function save(string $repo,array $pages,int $blockedUntil=0): void
     {
-        $data = json_encode(['format'=>1,'repo'=>$repo,'blocked_until'=>$blockedUntil,'pages'=>$pages],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
+        $data = json_encode(['format'=>2,'repo'=>$repo,'blocked_until'=>$blockedUntil,'pages'=>$pages],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
         if (strlen($data)>self::MAX_CACHE) throw new \RuntimeException('Release cache exceeds size limit');
         OperationFiles::write($this->path(),$data,0600);
     }
@@ -99,7 +99,7 @@ final class ReleaseDiscovery
         $cached=$this->cache($repo); $oldPages=$cached['pages']??[];
         $blocked=$cached['blocked_until']??0;
         if (is_int($blocked) && $blocked>time()) throw new \RuntimeException('GitHub discovery throttled until '.gmdate('c',$blocked));
-        $pages=[]; $options=[]; $seen=[]; $revalidated=0; $deadline=hrtime(true)+120_000_000_000;
+        $pages=[]; $options=[]; $indexed=[]; $seen=[]; $revalidated=0; $deadline=hrtime(true)+120_000_000_000;
         for ($n=1;$n<=self::MAX_PAGES;$n++) {
             $old=$oldPages[$n-1]??null; $etag=$old['etag']??null;
             $url='https://api.github.com/repos/'.$repo.'/releases?per_page=30'.($n===1?'':'&page='.$n);
@@ -125,6 +125,13 @@ final class ReleaseDiscovery
                     if (isset($seen[$release['id']])) throw new \RuntimeException('GitHub releases changed during pagination; retry discovery');
                     $seen[$release['id']]=true;
                 }
+                $tag=$release['tag_name']??null;
+                if (($release['draft']??null)===false && is_bool($release['prerelease']??null) && ($channel!=='stable'||!$release['prerelease']) && is_string($tag) && preg_match('/^v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/D',$tag,$m) && version_compare($m[1],$installed,'>') && is_array($release['assets']??null)) {
+                    foreach ($release['assets'] as $asset) if (($asset['name']??null)===DistributionIndex::NAME) {
+                        if(isset($indexed[$m[1]]))throw new \RuntimeException('Ambiguous indexed release');
+                        $indexed[$m[1]]=$release;break;
+                    }
+                }
                 $option=self::candidate($release,$repo,$installed,$channel);
                 if ($option===null) continue;
                 $version=$option['version'];
@@ -134,7 +141,19 @@ final class ReleaseDiscovery
             if (!$page['next']) {
                 $this->save($repo,$pages);
                 uksort($options,'version_compare');
-                return ['installed'=>$installed,'available'=>$options?reset($options):null,'latest'=>$options?end($options):null,
+                $plan=[];$mode='legacy';$available=$options?reset($options):null;$latest=$options?end($options):null;
+                if($indexed){
+                    if(count($indexed)>60)throw new \RuntimeException('Distribution index count exceeds limit');
+                    $mode='signed';$edges=[];$distribution=new DistributionIndex($this->root,$this->http);
+                    foreach($indexed as $release){
+                        if(hrtime(true)>$deadline)throw new \RuntimeException('Distribution discovery time budget exceeded');
+                        array_push($edges,...$distribution->edges($release,$repo));
+                    }
+                    $plan=DistributionIndex::plan($installed,$edges);
+                    $available=$plan[0]??null;$latest=$plan?end($plan):null;
+                    if(!$plan)throw new \RuntimeException('No signed update path from installed version');
+                }
+                return ['installed'=>$installed,'available'=>$available,'latest'=>$latest,'distribution'=>$mode,'plan'=>$plan,
                     'channel'=>$channel,'pages'=>count($pages),'revalidated_pages'=>$revalidated,'checked_at'=>gmdate('c')];
             }
         }
@@ -153,12 +172,15 @@ final class ReleaseDiscovery
             if (!is_string($tag)) return $data;
             $name='CajeerEngineLite-'.ltrim($tag,'v').'.cjrupdate';
             foreach ($release['assets'] as $asset) {
-                if (!is_array($asset) || ($asset['name']??null)!==$name || ($asset['state']??null)!=='uploaded') continue;
+                if (!is_array($asset) || !is_string($asset['name']??null)) continue;
+                $assetName=$asset['name'];
+                if ($assetName!==DistributionIndex::NAME && $assetName!==$name && !preg_match('/^CajeerEngineLite-[0-9]+\.[0-9]+\.[0-9]+-to-'.preg_quote(ltrim($tag,'v'),'/').'\.cjrupdate$/D',$assetName)) continue;
+                if ($assetName===$name && ($asset['state']??null)!=='uploaded') continue;
                 $entry=array_intersect_key($asset,array_flip(['name','state','browser_download_url','size','digest']));
                 // Do not turn invalid digests into absent digests when sanitizing.
                 foreach ($entry as $key=>$value) if ((!is_scalar($value) && $value!==null) || (is_string($value)&&strlen($value)>4096)) $entry[$key]=false;
                 $data['assets'][]=$entry;
-                if (count($data['assets'])===2) break; // Ambiguity is all that is needed.
+                if (count($data['assets'])>32) throw new \RuntimeException('Too many distribution assets');
             }
         }
         return $data;

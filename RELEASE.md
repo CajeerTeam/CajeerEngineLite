@@ -51,3 +51,7 @@ The exact-tag rehearsal uses a populated site and checks page delivery, media ha
 ## 1.5.0 stable publication
 
 Dispatch on v1.5.0 with base_tag v1.4.8 (last stable). The protected release-publish reviewer must review the signed artifacts and actual staging/CI/provider/rollback evidence before allowing publication. The receipt includes the signed runtime inventory. The release report never asserts production acceptance. Each installation requires its own [production gate and sign-off](PRODUCTION_STABLE.md). For an existing 1.4.9 installation, build a separate exact-base signed transition outside the official channel or use a verified manual patch.
+
+## Multiple exact bases (1.5.2)
+
+See [UPDATE_DISTRIBUTION.md](UPDATE_DISTRIBUTION.md) for signed index, optional `extra_base_tags` and verification. The primary legacy checksum inventory remains unchanged.

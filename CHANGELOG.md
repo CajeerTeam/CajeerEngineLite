@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.2 — Update Package Distribution
+
+- Signed distribution index, multiple exact-base packages, verified update route and one-step installation.
+- Release workflow rehearses each base independently; primary artifact remains backwards compatible.
+- Schema 14 unchanged.
+
 ## 1.5.1 — GitHub Release Discovery
 
 - Bounded GitHub pagination, per-page conditional requests with private ETag cache, nearest/latest selection and strict official asset URLs.

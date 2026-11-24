@@ -4,7 +4,7 @@ namespace CajeerEngine\Release;
 
 use CajeerEngine\Lite;
 use CajeerEngine\Monitoring\OperationalHealth;
-use CajeerEngine\Update\{OperationFiles,OperationLock,UpdatePackage};
+use CajeerEngine\Update\{OperationFiles,OperationLock,UpdatePackage,DistributionIndex};
 use CajeerEngine\Storage\SiteRepository;
 
 /** Operator-only acceptance. Signed build evidence and human attestation are distinct. */
@@ -80,7 +80,20 @@ final class ProductionStable
             !is_array($receipt['checks']??null)||array_diff($required,$receipt['checks'])||!is_array($receipt['runtime_files']??null)) throw new \RuntimeException('Invalid signed rehearsal receipt');
         $inventory=self::inventory($root);$signed=$receipt['runtime_files'];ksort($signed,SORT_STRING);
         if ($inventory!==$signed) throw new \RuntimeException('Installed runtime differs from signed release');
-        return ['from'=>$receipt['from'],'version'=>$version,'receipt_sha256'=>$hashes['release-report.json'],'package_sha256'=>$hashes[$package],
+        $distribution=[];
+        $indexPath=OperationFiles::path($dir,DistributionIndex::NAME);
+        if(file_exists($indexPath)) {
+            $raw=self::read($indexPath,DistributionIndex::MAX_BYTES);
+            $entries=DistributionIndex::verify($raw,$version,$keyPath);$primary=false;
+            foreach($entries as $entry){
+                $file=OperationFiles::path($dir,$entry['name']);$v=UpdatePackage::verify($file,$keyPath);
+                if($v['manifest']['from']!==$entry['from']||$v['manifest']['to']!==$version||filesize($file)!==$entry['bytes']||!hash_equals($entry['sha256'],$v['package_sha256']))throw new \RuntimeException('Signed distribution package mismatch');
+                if($entry['name']===$package&&$entry['from']===$receipt['from']&&hash_equals($entry['sha256'],$hashes[$package]))$primary=true;
+            }
+            if(!$primary)throw new \RuntimeException('Primary package missing from signed distribution');
+            $distribution=['distribution_index_sha256'=>hash('sha256',$raw),'distribution_packages'=>count($entries)];
+        }
+        return $distribution+['from'=>$receipt['from'],'version'=>$version,'receipt_sha256'=>$hashes['release-report.json'],'package_sha256'=>$hashes[$package],
             'zip_sha256'=>$hashes[$zip],'key_sha256'=>$receipt['key_sha256'],'runtime_sha256'=>hash('sha256',json_encode($inventory,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)),
             'target_commit'=>$receipt['target_commit']??null,'runtime_files'=>count($inventory)];
     }

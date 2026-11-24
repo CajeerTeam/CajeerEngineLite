@@ -71,10 +71,12 @@ jobs:
       - run: bash tests/update_engine_cli_144.sh
       - run: php tests/core_145.php
       - run: php tests/core_151.php
+      - run: php tests/core_152.php
       - run: php tests/core_146.php
       - run: php tests/core_147.php
       - run: php tests/core_149.php
       - run: python3 tests/release_engineering_148.py
+      - run: python3 tests/distribution_release_test_152.py
       - run: bash tests/compatibility_http_146.sh
       - run: bash tests/operational_http_147.sh
       - run: python3 tests/operational_load_147.py --seconds 15 --workers 4
@@ -187,6 +189,7 @@ jobs:
       - run: php tests/core_144.php
       - run: php tests/core_145.php
       - run: php tests/core_151.php
+      - run: php tests/core_152.php
       - run: bash tests/compatibility_http_146.sh
       - run: bash tests/operational_http_147.sh
       - run: python3 tests/operational_load_147.py --seconds 15 --workers 4

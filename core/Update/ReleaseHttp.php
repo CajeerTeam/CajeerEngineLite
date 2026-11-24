@@ -19,7 +19,7 @@ class ReleaseHttp
     /** @return array{status:int,headers:array<string,string>,stream:resource} */
     protected function open(string $url, string $accept, ?string $etag = null): array
     {
-        $headers=['User-Agent: CajeerEngineLite-Update/1.5.1','Accept: '.$accept,'Connection: close'];
+        $headers=['User-Agent: CajeerEngineLite-Update/1.5.2','Accept: '.$accept,'Connection: close'];
         if ($etag !== null) {
             if (!self::validEtag($etag)) throw new \RuntimeException('Invalid release ETag');
             $headers[] = 'If-None-Match: '.$etag;
@@ -123,9 +123,10 @@ class ReleaseHttp
         try {
             if(!chmod($destination,0600)) throw new \RuntimeException('Cannot secure update download');
             $stream=$this->follow($url,'application/octet-stream');
-            $hash=hash_init('sha256');$total=0;
+            $hash=hash_init('sha256');$total=0;$deadline=hrtime(true)+120_000_000_000;
             while(!feof($stream)) {
                 $data=fread($stream,65536);
+                if(hrtime(true)>$deadline)throw new \RuntimeException('Release download time budget exceeded');
                 if($data===false||($data===''&&!feof($stream)))throw new \RuntimeException('Interrupted update download');
                 $size=strlen($data);$total+=$size;
                 if($total>$expectedSize||$total>UpdatePackage::MAX_BYTES)throw new \RuntimeException('Release asset larger than declared');

@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.1
+# CajeerEngine Lite Edition 1.5.2
 
+
+### 1.5.2 — Update Package Distribution
+
+Signed per-release update indexes, exact-base packages for multiple supported versions, and shortest verified route to the highest reachable release. The old signed installer still validates each step; one step per CLI run. See [UPDATE_DISTRIBUTION.md](UPDATE_DISTRIBUTION.md).
 
 ### 1.5.1 — GitHub Release Discovery
 

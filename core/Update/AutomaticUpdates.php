@@ -70,6 +70,7 @@ final class AutomaticUpdates
             $result=$this->fetch();
             $this->record('checked',['installed'=>$result['installed'],
                 'available'=>$result['available']['version']??null,'channel'=>$result['channel'],
+                'distribution'=>$result['distribution'],'plan'=>array_column($result['plan'],'version'),
                 'pages'=>$result['pages'],'revalidated_pages'=>$result['revalidated_pages']]);
             return ['action'=>'checked']+$result;
         } catch(\Throwable $e) {
@@ -109,7 +110,7 @@ final class AutomaticUpdates
             OperationFiles::dir($this->path(self::DOWNLOAD),0700);
             $download=$this->path(self::DOWNLOAD.'/'.bin2hex(random_bytes(16)).'.cjrupdate');
             $file=($this->transport??new ReleaseHttp())->download($release['url'],$download,$release['bytes'],$release['sha256']);
-            if($file['bytes']!==$release['bytes']||!preg_match('/^[a-f0-9]{64}$/D',$file['sha256']))throw new \RuntimeException('Invalid download receipt');
+            if($file['bytes']!==$release['bytes']||!preg_match('/^[a-f0-9]{64}$/D',$file['sha256'])||($release['sha256']!==null&&!hash_equals($release['sha256'],$file['sha256'])))throw new \RuntimeException('Invalid download receipt');
             $check=$this->engine()->verify($download);
             if($check['from']!==$result['installed']||$check['to']!==$release['version']||
                 !hash_equals($check['package_sha256'],$file['sha256']))throw new \RuntimeException('Signed package version or checksum mismatch');

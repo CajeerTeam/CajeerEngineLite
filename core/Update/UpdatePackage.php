@@ -31,7 +31,7 @@ final class UpdatePackage
         return $value;
     }
 
-    private static function readRegular(string $path,int $max): string
+    public static function readRegular(string $path,int $max): string
     {
         $entry=@lstat($path);
         if (!is_array($entry) || ($entry['mode'] & 0170000)!==0100000 || $entry['nlink']!==1 || $entry['size']>$max) throw new \RuntimeException('Unsafe release input file');

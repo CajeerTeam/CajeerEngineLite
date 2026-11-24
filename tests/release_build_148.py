@@ -27,7 +27,7 @@ FIXED = {'VERSION', 'LICENSE', 'NOTICE', '.gitignore', 'bootstrap.php', 'router.
          '.github/workflows/ci.yml'} | SOURCE_ONLY
 PATTERN = re.compile(r'(?:[A-Z][A-Z0-9_]*\.md|core/[A-Za-z0-9_/-]+\.php|'
                      r'templates/[A-Za-z0-9_/-]+\.cjr|tests/[A-Za-z0-9_/-]+\.(?:php|sh|py|json)|'
-                     r'deploy/[A-Za-z0-9_.-]+\.(?:conf|md|service|sh)|'
+                     r'docs/[A-Z][A-Z0-9_]*\.md|deploy/[A-Za-z0-9_.-]+\.(?:conf|md|service|sh)|'
                      r'public/assets/[A-Za-z0-9_/-]+\.(?:css|js|svg|png|ico|woff2))\Z')
 
 
@@ -94,8 +94,12 @@ def cli(root, *args, env=None):
     return run(['php', 'bin/cajeer', *args], root, env)
 
 
+def source_only(path):
+    return path in SOURCE_ONLY or bool(re.fullmatch(r"docs/[A-Z][A-Z0-9_]*\.md", path))
+
+
 def normalized(files):
-    return {k: v for k, v in files.items() if k not in SOURCE_ONLY and k != 'storage/.gitkeep'}
+    return {k: v for k, v in files.items() if not source_only(k) and k != 'storage/.gitkeep'}
 
 
 def assert_code(root, expected):
@@ -217,7 +221,7 @@ def persistent_hashes(root):
     return {p.relative_to(root).as_posix(): digest(p) for p in paths if p.is_file()}
 
 
-def build(base, candidate, output, private, public, base_commit=None, target_commit=None):
+def build(base, candidate, output, private, public, base_commit=None, target_commit=None, allow_nonadjacent=False):
     for commit in (base_commit, target_commit):
         if commit is not None and not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit):
             raise ValueError("Invalid source commit ID")
@@ -242,9 +246,11 @@ def build(base, candidate, output, private, public, base_commit=None, target_com
     old, new = inventory(base), inventory(candidate)
     before, after = version(base), version(candidate)
     a, b, c = map(int, before.split('.')); x, y, z = map(int, after.split('.'))
-    if (a, b, c+1) != (x,y,z) and (a,b+1,0) != (x,y,z) and (a+1,0,0) != (x,y,z):
+    if (x,y,z) <= (a,b,c):
+        raise ValueError('Release must advance version')
+    if not allow_nonadjacent and (a, b, c+1) != (x,y,z) and (a,b+1,0) != (x,y,z) and (a+1,0,0) != (x,y,z):
         raise ValueError('Release must follow an adjacent version')
-    changed = sorted(k for k in old.keys() | new.keys() if old.get(k) != new.get(k) and k not in SOURCE_ONLY)
+    changed = sorted(k for k in old.keys() | new.keys() if old.get(k) != new.get(k) and not source_only(k))
     # Build using the BASE updater, not the new one. Independently compare all changed paths.
     with tempfile.TemporaryDirectory(prefix='.cajeer-release-', dir=output.parent) as work:
         work = Path(work)
@@ -296,7 +302,7 @@ def build(base, candidate, output, private, public, base_commit=None, target_com
                    'base_tree_sha256': hashlib.sha256(json.dumps(old, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
                    'target_tree_sha256': hashlib.sha256(json.dumps(new, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
                    'runtime_files': {k: v for k, v in new.items() if k in {'VERSION','bootstrap.php','router.php','bin/cajeer'} or k.startswith(('core/','public/','templates/'))},
-                   'source_only_changes': sorted(k for k in SOURCE_ONLY if old.get(k) != new.get(k)),
+                   'source_only_changes': sorted(k for k in old.keys() | new.keys() if source_only(k) and old.get(k) != new.get(k)),
                    'checks': ['zip_inventory', 'fresh_install', 'loopback_http', 'signature', 'exact_upgrade', 'site_preserved', 'populated_site_media_preserved', 'backup_verified_before_after_rollback', 'rollback', 'tamper_rejected'],
                    'production_accepted': False}
         (dist/'release-report.json').write_text(json.dumps(receipt, indent=2, sort_keys=True)+'\n')
