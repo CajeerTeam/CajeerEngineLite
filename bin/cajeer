@@ -53,6 +53,17 @@ try {
             $action=$argv[2]??'';
             if($action==='trust' && count($argv)===4 && $argv[3]==='status') {
                 $report=\CajeerEngine\Update\TrustPolicy::configured()->report();
+            } elseif($action==='monitor' && count($argv)===4 && in_array($argv[3],['status','check'],true)) {
+                $report=(new ControlCenter($app->root))->status()['monitoring'];
+                if($argv[3]==='check'&&!$report['ok']){echo json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";exit(1);}
+            } elseif($action==='snapshots' && count($argv)>=4 && count($argv)<=6 && in_array($argv[3],['status','prune'],true)) {
+                $keep=3;$days=7;$seen=[];
+                foreach(array_slice($argv,4) as $arg){
+                    if(!preg_match('/^--(keep|days)=([1-9][0-9]{0,3})$/D',$arg,$m)||isset($seen[$m[1]]))throw new InvalidArgumentException('Invalid snapshot retention option');
+                    $seen[$m[1]]=true;if($m[1]==='keep')$keep=(int)$m[2];else $days=(int)$m[2];
+                }
+                $report=$engine->snapshots($keep,$days,$argv[3]==='prune');
+                if(!$report['ok']){echo json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";exit(1);}
             } elseif($action==='control' && count($argv)===4) {
                 $control=new ControlCenter($app->root);
                 if($argv[3]==='status')$report=$control->status();
@@ -75,11 +86,12 @@ try {
             } elseif($action==='auto') {
                 $auto=new AutomaticUpdates($app->root);
                 $sub=$argv[3]??'';
-                if(count($argv)!==4)throw new InvalidArgumentException('Usage: update auto status|check|run');
+                if(count($argv)!==4)throw new InvalidArgumentException('Usage: update auto status|check|verify|run');
                 if($sub==='status')$report=$auto->status();
                 elseif($sub==='check')$report=$auto->check();
+                elseif($sub==='verify')$report=$auto->verifiedCheck(\CajeerEngine\Update\ReleaseDiscovery::channel());
                 elseif($sub==='run')$report=$auto->run();
-                else throw new InvalidArgumentException('Usage: update auto status|check|run');
+                else throw new InvalidArgumentException('Usage: update auto status|check|verify|run');
             }
             elseif($action==='status' && count($argv)===3) $report=$engine->status();
             elseif($action==='verify' && count($argv)===4) $report=$engine->verify($argv[3]);
@@ -90,7 +102,7 @@ try {
                 $signing=getenv('CAJEER_UPDATE_SIGNING_KEY_FILE');
                 if(!is_string($signing)||!str_starts_with($signing,'/')) throw new InvalidArgumentException('Set absolute CAJEER_UPDATE_SIGNING_KEY_FILE');
                 $report=UpdatePackage::build($app->root,$argv[3],$argv[4],$signing);
-            } else throw new InvalidArgumentException('Usage: update trust status|status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
+            } else throw new InvalidArgumentException('Usage: update monitor status|monitor check|snapshots status|snapshots prune|trust status|status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto verify|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
             echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
             break;
         case 'security':
@@ -448,7 +460,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer monitor check|status [--minutes=60] [--verify-backup]\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\nphp bin/cajeer compatibility check [--json] | compatibility migration preview|apply\n".
-                 "php bin/cajeer update trust status|status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
+                 "php bin/cajeer update monitor status|monitor check|snapshots status|snapshots prune|trust status|status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto verify|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".

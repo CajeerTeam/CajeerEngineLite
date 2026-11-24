@@ -24,7 +24,7 @@ grep -Fq 'Update Control Center' "$tmp/control"; grep -Fq "$(cat VERSION)" "$tmp
 [[ $(post -d 'action=install&confirm=1.5.4') == 422 ]]
 [[ $(post -d 'action=settings&channel=preview&interval=8&window=22:00-04:00&checks=1') == 303 ]]
 [[ $(post -d 'action=check') == 422 ]]
-refresh; grep -Fq 'value="preview" selected' "$tmp/control"
+refresh; grep -Fq 'value="preview" selected' "$tmp/control"; grep -Fq 'Планировщик не отвечает.' "$tmp/control"
 [[ $(post -d 'action=check') == 303 ]]
 refresh; grep -Fq 'в очереди' "$tmp/control"
 [[ $(post -d 'action=check') == 422 ]]
@@ -37,7 +37,9 @@ refresh; grep -Fq 'Отменено' "$tmp/control"
 # No network: a configured worker with invalid repository records a failed check.
 [[ $(post -d 'action=check') == 303 ]]
 if CAJEER_UPDATE_CONTROL_WORKER=1 CAJEER_AUTO_UPDATE_GITHUB_REPO=invalid php bin/cajeer update control work > /dev/null 2>&1; then exit 1; fi
-refresh; grep -Fq 'Ошибка (см. CLI)' "$tmp/control"
+refresh; grep -Fq 'Ошибка (см. CLI)' "$tmp/control"; grep -Fq 'Последняя проверка завершилась неудачно.' "$tmp/control"
+if php bin/cajeer update monitor check > "$tmp/monitor"; then exit 1; fi
+grep -Fq 'check_failure' "$tmp/monitor"
 # The scheduled worker records a retry across processes and exposes the heartbeat only to the administrator.
 [[ $(post -d 'action=check') == 303 ]]
 CAJEER_UPDATE_CONTROL_WORKER=1 CAJEER_AUTO_UPDATE_GITHUB_REPO=invalid php bin/cajeer update scheduler tick > "$tmp/retry"

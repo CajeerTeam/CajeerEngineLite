@@ -51,7 +51,10 @@ def distribute(base, extras, candidate, output, private, public, base_commit=Non
         if any(path==r or r in path.parents for r in [*roots,candidate]): raise ValueError('Keys and output must be outside source trees')
     with tempfile.TemporaryDirectory(prefix='.distribution-',dir=output.parent) as tmp:
         work=Path(tmp); dist=work/'primary'
-        build(base,candidate,dist,private,public,base_commit,target_commit)
+        # The primary base is the last published stable release, not necessarily
+        # the adjacent version (unpublished tags or preview releases may intervene).
+        # The exact-base engine still builds, installs, verifies and rolls back.
+        build(base,candidate,dist,private,public,base_commit,target_commit,allow_nonadjacent=True)
         primary=dist/f'CajeerEngineLite-{target}.cjrupdate'
         entries=[{'from':versions[0],'name':primary.name,'bytes':primary.stat().st_size,'sha256':digest(primary)}]
         for root, source in zip(extras,versions[1:]):

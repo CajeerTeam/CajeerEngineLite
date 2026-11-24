@@ -75,6 +75,7 @@ jobs:
       - run: php tests/core_153.php
       - run: php tests/core_154.php
       - run: sudo -n "$(command -v php)" tests/core_157.php
+      - run: php tests/core_158.php
       - run: bash tests/update_scheduler_cli_154.sh
       - run: bash tests/maintenance_orchestration_155.sh
       - run: bash tests/maintenance_cli_155.sh
@@ -200,6 +201,7 @@ jobs:
       - run: php tests/core_153.php
       - run: php tests/core_154.php
       - run: sudo -n "$(command -v php)" tests/core_157.php
+      - run: php tests/core_158.php
       - run: bash tests/update_scheduler_cli_154.sh
       - run: bash tests/maintenance_orchestration_155.sh
       - run: bash tests/maintenance_cli_155.sh
@@ -229,5 +231,7 @@ jobs:
           python-version: '3.12'
       - run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx openssl
       - run: python3 tests/automatic_health_156.py
+      - run: sudo -n env PATH="$PATH" "$(command -v python3)" tests/automatic_health_156.py --queue --healthy
+      - run: sudo -n env PATH="$PATH" "$(command -v python3)" tests/automatic_health_156.py --queue
       - run: python3 tests/rc_staging_149.py
       - run: python3 tests/production_stable_150.py

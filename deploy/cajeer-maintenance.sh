@@ -191,7 +191,7 @@ load_gate() {
     [[ ${#lines[@]} == $((${#units[@]}+2)) && ${lines[0]} == cajeer-maintenance-v2 ]] || { fail 'Invalid or legacy maintenance journal; operator recovery required'; return 1; }
     local extra
     read -r baseline baseline_id phase extra <<< "${lines[1]}"
-    [[ "$baseline" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && ( "$baseline_id" == - || "$baseline_id" =~ ^[a-f0-9]{24}$ ) && ( "$phase" == check || "$phase" == rollback ) && -z "$extra" ]] || { fail 'Invalid health recovery state'; return 1; }
+    [[ "$baseline" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && ( "$baseline_id" == - || "$baseline_id" =~ ^[a-f0-9]{24}$ ) && ( "$phase" == check || "$phase" == failed || "$phase" == rollback ) && -z "$extra" ]] || { fail 'Invalid health recovery state'; return 1; }
     previous=()
     local i value
     for i in "${!units[@]}"; do
@@ -276,7 +276,7 @@ rollback_and_resume() {
 }
 restore_services() {
     worker 1 maintenance recover && identify_candidate || return 1
-    if [[ "$phase" == rollback ]]; then rollback_and_resume || return $?; return 0; fi
+    if [[ "$phase" == rollback || ( "$phase" == failed && "$candidate" == 1 ) ]]; then rollback_and_resume || return $?; return 0; fi
     if start_and_probe; then finish_gate; return $?; fi
     if [[ "$candidate" == 1 ]]; then rollback_and_resume || return $?; return 0; fi
     # Baseline itself is unhealthy, or no update was installed. Never roll
@@ -307,6 +307,10 @@ cycle() {
     baseline=$current_version; baseline_id=$current_id
     prepare_gate && load_gate && stop_units || return 1
     worker 1 scheduler tick || rc=$?
+    # A worker can fail after publishing a valid receipt (e.g. its queue or
+    # heartbeat write fails). Do not accept that candidate solely on readiness.
+    # Persist this intent before attempting recovery; reboot must not lose it.
+    if [[ "$rc" != 0 ]]; then phase=failed; write_gate || return 1; fi
     restore_services || return $?
     return "$rc"
 }

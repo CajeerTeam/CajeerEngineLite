@@ -181,7 +181,7 @@ final class UpdateEngine
         } catch(\Throwable $error) {
             TrustPolicy::audit('installation_failed',['id'=>$id]);
             if($activated) {
-                try {$this->restore($this->plan($id));OperationFiles::remove($this->location(self::ACTIVE));}
+                try {$this->restore($this->plan($id));$this->discardReceipt($id);OperationFiles::remove($this->location(self::ACTIVE));}
                 catch(\Throwable $rollback) { throw new \RuntimeException('Update failed and automatic rollback failed; run update recover: '.$rollback->getMessage(),0,$error); }
             }
             throw $error;
@@ -281,6 +281,13 @@ final class UpdateEngine
         OperationFiles::dir(dirname($target),0755);
         OperationFiles::write($target,$data,$entry['before_mode']);
     }
+    /** Keep the recovery journal until the receipt of the aborted transaction
+     * has been cleared. Otherwise a crash can expose the old code with a new receipt. */
+    private function discardReceipt(string $id): void
+    {
+        $last=$this->location(self::LAST);
+        if(is_file($last)&&($this->readPrivate($last,4096)['id']??null)===$id)OperationFiles::remove($last);
+    }
     public function recover(): array
     {
         $lock=OperationLock::acquire($this->root,true);
@@ -291,11 +298,10 @@ final class UpdateEngine
             // Load audit code before rollback can remove this version's class file.
             TrustPolicy::audit('recovery_started',['id'=>$active['id']]);
             $this->restore($plan);
+            $this->discardReceipt($active['id']);
             OperationFiles::remove($this->location(self::ACTIVE));
             try {self::cleanup($this->location(self::STAGE.'/'.$active['id']));}
             catch(\Throwable $failure) {error_log('Update staging cleanup: '.get_class($failure));}
-            $last=$this->location(self::LAST);
-            if(is_file($last)&& ($this->readPrivate($last,4096)['id']??null)===$active['id'])OperationFiles::remove($last);
             TrustPolicy::audit('recovered',['id'=>$active['id'],'from'=>$plan['to'],'to'=>$plan['from']]);
             return ['status'=>'recovered','id'=>$active['id'],'version'=>$plan['from']];
         } finally {OperationLock::release($lock);}
@@ -339,6 +345,77 @@ final class UpdateEngine
         }
         $this->validateInstalled($plan,true);
         return true;
+    }
+    /** Verify every private snapshot member before considering deletion. No active or latest rollback is ever pruned. */
+    private function snapshotInfo(string $id): array
+    {
+        $plan=$this->plan($id);$root=$this->location(self::HISTORY.'/'.$id);
+        $date=\DateTimeImmutable::createFromFormat(DATE_ATOM,$plan['created_at']);
+        if($date===false||$date->format(DATE_ATOM)!==$plan['created_at']||$date->getTimestamp()>time())throw new \RuntimeException('Invalid snapshot timestamp');
+        $expected=['plan.json'=>null];
+        foreach($plan['files'] as $entry)if($entry['before']!==null)$expected['original/'.$entry['path']]=$entry['before'];
+        if($plan['site_sha256']!==null)$expected['site.json']=$plan['site_sha256'];
+        $directories=[''=>true];foreach(array_keys($expected) as $name)for($dir=dirname($name);$dir!=='.';$dir=dirname($dir))$directories[$dir]=true;
+        $bytes=0;$seen=[];
+        $walk=function(string $relative)use(&$walk,$root,$expected,$directories,&$bytes,&$seen):void{
+            $path=$relative===''?$root:OperationFiles::path($root,$relative);
+            clearstatcache(true,$path);$st=@lstat($path);
+            if(!is_array($st)||($st['mode']&0077)!==0)throw new \RuntimeException('Unsafe snapshot permissions');
+            if(($st['mode']&0170000)===0040000){
+                if(!isset($directories[$relative]))throw new \RuntimeException('Unexpected snapshot directory');
+                foreach(new \FilesystemIterator($path) as $entry)$walk(($relative===''?'':$relative.'/').$entry->getFilename());
+            } elseif(($st['mode']&0170000)===0100000&&$st['nlink']===1&&array_key_exists($relative,$expected)){
+                $raw=UpdatePackage::readRegular($path,UpdatePackage::MAX_FILE);
+                if($expected[$relative]!==null&&!hash_equals($expected[$relative],hash('sha256',$raw)))throw new \RuntimeException('Snapshot checksum mismatch');
+                $bytes+=strlen($raw);$seen[$relative]=true;
+            } else throw new \RuntimeException('Unexpected snapshot member');
+        };
+        $walk('');if(count($seen)!==count($expected))throw new \RuntimeException('Incomplete snapshot');
+        return ['id'=>$id,'from'=>$plan['from'],'to'=>$plan['to'],'created_at'=>$date->getTimestamp(),'bytes'=>$bytes];
+    }
+    /** Explicit operator retention, serialized with installation, recovery and application requests. */
+    public function snapshots(int $keep=3,int $days=7,bool $apply=false): array
+    {
+        if(PHP_SAPI!=='cli'||$keep<1||$keep>100||$days<1||$days>3650)throw new \InvalidArgumentException('Snapshot retention requires CLI, keep 1–100 and days 1–3650');
+        if($apply&&getenv('CAJEER_UPDATE_RETENTION_CONFIRM')!=='PRUNE')throw new \RuntimeException('Set CAJEER_UPDATE_RETENTION_CONFIRM=PRUNE');
+        $lock=OperationLock::acquire($this->root,$apply);
+        try {
+            $status=$this->status();
+            if($status['pending']!==null||OperationLock::maintenance($this->root)||\CajeerEngine\Operations\RecoveryJournal::pending($this->root)||file_exists('/var/lib/cajeer-maintenance/active')||is_link('/var/lib/cajeer-maintenance/active')||file_exists('/var/lib/cajeer-maintenance/hold')||is_link('/var/lib/cajeer-maintenance/hold'))throw new \RuntimeException('Retention blocked by pending maintenance or supervisor hold');
+            $last=$status['last'];$protected=null;
+            if($last!==null){
+                if(!is_string($last['id']??null))throw new \RuntimeException('Invalid rollback receipt');
+                $protected=self::id($last['id']);$plan=$this->plan($protected);
+                if(($last['from']??null)!==$plan['from']||($last['to']??null)!==$plan['to'])throw new \RuntimeException('Invalid rollback receipt');
+            }
+            $history=$this->location(self::HISTORY);$rows=[];$invalid=[];$quarantine=[];$count=0;
+            if(is_dir($history)){
+                if((fileperms($history)&0077)!==0)throw new \RuntimeException('Unsafe snapshot history directory');
+                foreach(new \FilesystemIterator($history) as $entry){
+                    if(++$count>1024)throw new \RuntimeException('Snapshot inventory exceeds limit');
+                    $id=$entry->getFilename();
+                    if(preg_match('/^\.pruned-[a-f0-9]{24}$/D',$id)){$quarantine[]=substr($id,8);continue;}
+                    if(!preg_match('/^[a-f0-9]{24}$/D',$id))throw new \RuntimeException('Unexpected snapshot history entry');
+                    try {$rows[]=$this->snapshotInfo($id);}catch(\Throwable){$invalid[]=$id;}
+                }
+            }
+            if($protected!==null&&!in_array($protected,array_column($rows,'id'),true)&&!in_array($protected,$invalid,true))$invalid[]=$protected;
+            usort($rows,static fn($a,$b)=>[$b['created_at'],$b['id']]<=>[$a['created_at'],$a['id']]);
+            $candidates=[];$retained=[];$cutoff=time()-$days*86400;
+            foreach($rows as $i=>$row){if($i<$keep||$row['id']===$protected||$row['created_at']>=$cutoff)$retained[]=$row['id'];else $candidates[]=$row['id'];}
+            $removed=[];
+            if($apply){
+                if($invalid||$quarantine)throw new \RuntimeException('Invalid or interrupted snapshot cleanup; inspect inventory before pruning');
+                foreach($candidates as $id){
+                    $this->snapshotInfo($id); // Recheck immediately before retirement.
+                    $source=$this->location(self::HISTORY.'/'.$id);$target=$this->location(self::HISTORY.'/.pruned-'.$id);
+                    if(file_exists($target)||is_link($target)||!rename($source,$target))throw new \RuntimeException('Cannot retire snapshot');
+                    OperationFiles::syncDir($history);self::cleanup($target);OperationFiles::syncDir($history);
+                    $removed[]=$id;TrustPolicy::audit('snapshot_pruned',['id'=>$id]);
+                }
+            }
+            return ['ok'=>!$invalid&&!$quarantine,'protected'=>$protected,'keep'=>$keep,'min_age_days'=>$days,'snapshots'=>$rows,'invalid'=>$invalid,'interrupted_cleanup'=>$quarantine,'retained'=>$retained,'eligible'=>$candidates,'removed'=>$removed];
+        } finally {OperationLock::release($lock);}
     }
     public function status(): array
     {

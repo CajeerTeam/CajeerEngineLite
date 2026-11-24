@@ -1,6 +1,8 @@
 name: Signed Lite release
-# Manual dispatch on a protected version tag, never on an untrusted PR.
+# Protected version tags or manual dispatch; never on an untrusted PR.
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       base_tag:
@@ -20,6 +22,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
+      base_tag: ${{ steps.versions.outputs.base_tag }}
       base_sha: ${{ steps.versions.outputs.base_sha }}
       target_sha: ${{ steps.versions.outputs.target_sha }}
       extra_shas: ${{ steps.versions.outputs.extra_shas }}
@@ -35,10 +38,18 @@ jobs:
           TARGET_TAG: ${{ github.ref_name }}
           TARGET_REF: ${{ github.ref }}
           EXTRA_TAGS: ${{ inputs.extra_base_tags }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           pattern='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
-          [[ "$TARGET_REF" == refs/tags/* && "$TARGET_TAG" =~ $pattern && "$BASE_TAG" =~ $pattern ]]
+          [[ "$TARGET_REF" == refs/tags/* && "$TARGET_TAG" =~ $pattern ]]
+          if [[ "$EVENT_NAME" == push ]]; then
+            BASE_TAG=$(gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" | python3 tests/release_publication_158.py base --target "$TARGET_TAG")
+          fi
+          [[ "$BASE_TAG" =~ $pattern ]]
+          echo "base_tag=$BASE_TAG" >> "$GITHUB_OUTPUT"
           [[ "$(cat VERSION)" == "${TARGET_TAG#v}" ]]
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse "refs/tags/$TARGET_TAG^{commit}")" ]]
           [[ "$(git show "refs/tags/$BASE_TAG:VERSION")" == "${BASE_TAG#v}" ]]
@@ -183,7 +194,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TARGET_TAG: ${{ github.ref_name }}
-          BASE_TAG: ${{ inputs.base_tag }}
+          BASE_TAG: ${{ needs.validate.outputs.base_tag }}
           TARGET_SHA: ${{ needs.validate.outputs.target_sha }}
           BASE_SHA: ${{ needs.validate.outputs.base_sha }}
           TRUSTED_KEY: ${{ vars.CAJEER_RELEASE_PUBLIC_KEY }}
@@ -213,11 +224,20 @@ jobs:
             echo 'Release already exists; inspect it manually.' >&2; exit 1
           fi
           release_flags=()
-          if [[ "$version" == 1.4.9 ]]; then release_flags+=(--prerelease --latest=false); fi
+          if [[ "$version" == 1.4.9 || "$version" == 1.5.9 ]]; then release_flags+=(--prerelease --latest=false); fi
           gh release create "$TARGET_TAG" --verify-tag --draft "${release_flags[@]}" --title "CajeerEngine Lite $version" \
             --notes "Signed incremental update from $base, full clean-install ZIP, SHA-256 signature and automated rehearsal report. Production sign-off is separate." \
             ./*
-          if [[ "$version" == 1.4.9 ]]; then
+          # Verify the actual GitHub-hosted draft, not just the local build.
+          gh release view "$TARGET_TAG" --json isDraft --jq .isDraft | grep -Fx true
+          mkdir "$work/downloaded"
+          gh release download "$TARGET_TAG" --dir "$work/downloaded" --pattern '*'
+          cd ..
+          python3 tests/release_publication_158.py verify-draft --local release --remote "$work/downloaded" --trusted-key "$work/trust.pem" --target "$version"
+          [[ "$(gh api "repos/$GH_REPO/commits/$TARGET_TAG" --jq .sha)" == "$TARGET_SHA" ]]
+          [[ "$(gh api "repos/$GH_REPO/commits/$BASE_TAG" --jq .sha)" == "$BASE_SHA" ]]
+          gh release view "$TARGET_TAG" --json isDraft --jq .isDraft | grep -Fx true
+          if [[ "$version" == 1.4.9 || "$version" == 1.5.9 ]]; then
             # Release candidate stays out of the stable automatic-update channel.
             gh release edit "$TARGET_TAG" --prerelease --latest=false --draft=false
           else

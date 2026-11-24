@@ -8,6 +8,8 @@ use CajeerEngine\Update\OperationLock;
 function check147(bool $yes,string $why):void {if(!$yes)throw new RuntimeException($why);}
 $root=sys_get_temp_dir().'/cajeer-monitor-'.bin2hex(random_bytes(8));mkdir($root,0700);
 try {
+    // Operational diagnostics now include the installed release/control state.
+    file_put_contents($root.'/VERSION',Lite::VERSION."\n");
     (new Lite($root))->install('Operational147Pass!','http://localhost:8080','Monitor test');
     check147(RequestLog::report($root)['all']['requests']===0,'no invented telemetry');
     for($i=1;$i<=20;$i++)check147(RequestLog::record($root,'public',$i===20?500:200,$i*1000,4194304),'append');

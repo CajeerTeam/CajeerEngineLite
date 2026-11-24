@@ -38,7 +38,15 @@ if php bin/cajeer update maintenance verify >/dev/null 2>&1; then exit 1; fi
 cp "$tmp/clean-lite" core/Lite.php
 php -r 'require "bootstrap.php";$r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);CajeerEngine\Update\OperationFiles::json(getcwd()."/storage/app/updates/active.json",["id"=>$r["id"],"mode"=>"install"]);' "$tmp/installed.json"
 [[ $(php bin/cajeer update maintenance plan) == blocked ]]
+# A damaged receipt must not allow the journal to disappear after file rollback.
+cp storage/app/updates/last.json "$tmp/receipt.json"
+printf '{broken' > storage/app/updates/last.json
+if php bin/cajeer update maintenance recover >/dev/null 2>&1; then exit 1; fi
+[[ -f storage/app/updates/active.json && $(cat VERSION) == "$current" ]]
+cp "$tmp/receipt.json" storage/app/updates/last.json
+chmod 600 storage/app/updates/last.json
 php bin/cajeer update maintenance recover | grep -q recovered
+[[ ! -e storage/app/updates/active.json && ! -e storage/app/updates/last.json ]]
 php bin/cajeer update maintenance verify | grep -Fq "$current"
 [[ $(sha256sum storage/site.json) == "$before" ]]
 echo 'Maintenance CLI: opt-in, real signed installation, interrupted update recovery, fresh-process verification, leases and site integrity OK'

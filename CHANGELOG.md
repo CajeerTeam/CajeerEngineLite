@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.9 — Automatic Updates Release Candidate
+
+- Preserve the update recovery journal until an aborted transaction receipt is cleared.
+- Persist failed scheduler intent and roll back an already committed but failed worker transaction, even with healthy HTTPS.
+- Allow an exact non-adjacent published stable base for the primary distribution; full upgrade/rollback rehearsal remains mandatory.
+- Read-only runtime package verification through `update auto verify` (private cache and temporary download only).
+- End-to-end scheduled preview update and rollback tests with signed index, injected GitHub outage, managed trust and actual TLS readiness.
+- Publish as prerelease; final real-service and live GitHub acceptance is pending. Schema 14 unchanged.
+
+## 1.5.8 — Release Automation & Monitoring
+
+- Protected tag-triggered release workflow with paginated stable-base selection and manual override, separated signing/publishing, and re-download/signature/byte verification of draft assets before publication. 1.5.9 stays in Preview.
+- In-app update alerts, CLI monitor status/check and integration with operational diagnostics.
+- Explicit snapshot retention with verified private inventory, age/count policy, active/latest protection, exclusive lease and audit events. Schema 14 unchanged.
+
 ## 1.5.7 — Update Security Hardening
 
 - External root-owned trust policy with overlapping RSA key rotation, explicit fingerprint revocation, minimum permitted target and no fallback when invalid. Applied to signed packages, distribution indexes and production acceptance.

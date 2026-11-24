@@ -1,5 +1,13 @@
-# CajeerEngine Lite Edition 1.5.7
+# CajeerEngine Lite Edition 1.5.9
 
+
+### 1.5.9 — Automatic Updates Release Candidate
+
+Preview-only release. The recovery journal now remains until the aborted transaction receipt is cleared; a failed scheduler exit after a committed installation triggers a durable rollback intent even if HTTPS readiness passes. The CLI `update auto verify` downloads and validates the selected signed package without installing it. The acceptance suite exercises the managed trust policy, signed distribution, scheduler retries, opt-in preview, HTTP maintenance, successful commit and automatic rollback through actual TLS/Nginx and a disposable PHP backend. See [AUTOMATIC_UPDATES_RC.md](AUTOMATIC_UPDATES_RC.md) for staging and release gates; live GitHub, PHP-FPM/systemd and long-running staging acceptance remain separate. Schema 14 unchanged.
+
+### 1.5.8 — Release Automation & Monitoring
+
+Protected version tags trigger the signed release workflow with a published stable base, protected signing and verification of downloaded GitHub draft assets before publication. Update Control Center exposes operational alerts and CLI monitoring; verified rollback snapshot retention is explicit, serialized and preserves the latest recovery point. See [RELEASE_AUTOMATION_MONITORING.md](RELEASE_AUTOMATION_MONITORING.md). Schema 14 unchanged.
 
 ### 1.5.7 — Update Security Hardening
 

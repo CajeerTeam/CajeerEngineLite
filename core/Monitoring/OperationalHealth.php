@@ -52,6 +52,10 @@ final class OperationalHealth
             $add('http.peak_memory_bytes',$all['requests']===0?'warn':($all['peak_memory_bytes']>$maxMemory?'fail':'pass'),$all['peak_memory_bytes']);
             $add('http.error_percent',$all['requests']<20?'warn':($all['error_percent']>$maxError?'fail':'pass'),$all['error_percent']);
         } catch(\Throwable) {$add('monitoring.records','fail',null);}
+        try {
+            $update=(new \CajeerEngine\Update\ControlCenter($root))->status()['monitoring'];
+            $add('update.monitoring',$update['ok']?(array_filter($update['alerts'],static fn($a)=>$a['severity']==='warning')?'warn':'pass'):'fail',array_column($update['alerts'],'id'));
+        } catch(\Throwable) {$add('update.monitoring','fail',null);}
         $counts=['pass'=>0,'warn'=>0,'fail'=>0];foreach($checks as $c) ++$counts[$c['status']];
         return ['version'=>Lite::VERSION,'collected_at'=>gmdate('c'),'ok'=>$counts['fail']===0,'counts'=>$counts,'checks'=>$checks,'metrics'=>$metrics,'thresholds'=>['min_free_bytes'=>$min,'backup_max_age_seconds'=>$maxAge,'p95_ms'=>$maxP95,'error_percent'=>$maxError,'peak_memory_bytes'=>$maxMemory]];
     }

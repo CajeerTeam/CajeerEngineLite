@@ -120,6 +120,16 @@ if grep -q 'scheduler tick\|stop ' "$logfile"; then exit 1; fi
 # A previous unrelated receipt is never rolled back when no new install occurred.
 reset; printf '1.5.5 111111111111111111111111 1.5.4 1.5.5\n' > "$fixture_dir/version"; bad_verify=1
 if cycle; then exit 1; fi; [[ -f "$state_dir/active" ]]; if grep -q '1 rollback ' "$logfile"; then exit 1; fi
+# A nonzero worker exit after a committed install must roll back even when TLS is healthy.
+reset; install_new=1; bad_tick=7; rc=0; cycle || rc=$?; [[ $rc == 3 ]]; assert_restored
+[[ -f "$state_dir/hold" && $(cat "$fixture_dir/version") == '1.5.5 - - -' ]]
+# Restart after a failed rollback attempt: resume rollback rather than install.
+reset; install_new=1; bad_tick=7; bad_rollback=1; if cycle; then exit 1; fi
+[[ -f "$state_dir/active" ]]; bad_rollback=0; rc=0; cycle || rc=$?; [[ $rc == 3 ]]; assert_restored
+# A persisted failure intent is honored on restart even before recovery began.
+reset; baseline=1.5.5; baseline_id=-; prepare_gate; phase=failed; write_gate
+printf '1.5.6 0123456789abcdef01234567 1.5.5 1.5.6\n' > "$fixture_dir/version"
+rc=0; cycle || rc=$?; [[ $rc == 3 ]]; assert_restored; [[ -f "$state_dir/hold" ]]
 # New release succeeds; no hold is created.
 reset; install_new=1; cycle; assert_restored; [[ ! -e "$state_dir/hold" ]]; grep -q 'health 1.5.6' "$logfile"
 echo 'Maintenance supervisor: gate before drain, no downtime for checks, stop/start order, interrupted recovery, fail-closed guard/journal and failure propagation OK'

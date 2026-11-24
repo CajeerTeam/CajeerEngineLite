@@ -77,7 +77,8 @@ final class ControlCenter
     public function status(): array
     {
         $s=$this->read();$engine=(new UpdateEngine($this->root))->status();
-        return $s+['revision'=>self::digest($s),'fresh'=>$this->fresh($s),'installed'=>$engine['installed_version'],'pending'=>$engine['pending']!==null,'scheduler'=>(new Scheduler($this->root))->heartbeat()];
+        $status=$s+['revision'=>self::digest($s),'fresh'=>$this->fresh($s),'installed'=>$engine['installed_version'],'pending'=>$engine['pending']!==null,'scheduler'=>(new Scheduler($this->root))->heartbeat()];
+        return $status+['monitoring'=>UpdateMonitoring::report($status)];
     }
     private static function finish(array &$s,string $result): void
     {
