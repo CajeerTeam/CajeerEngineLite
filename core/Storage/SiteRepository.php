@@ -119,9 +119,17 @@ final class SiteRepository
         });
     }
 
-    public function migrate(): bool
+    public function migrate(?string $expectedSha256 = null): bool
     {
-        return $this->exclusive(function (): bool {
+        return $this->exclusive(function () use ($expectedSha256): bool {
+            // Refuse a stale preview: another worker may have changed the site
+            // between the compatibility check and the exclusive migration lock.
+            if ($expectedSha256 !== null) {
+                $raw=$this->raw();
+                if ($raw===null || !hash_equals($expectedSha256,hash('sha256',$raw))) {
+                    throw new \RuntimeException('Site state changed since migration preview; rerun compatibility migration preview');
+                }
+            }
             $state = $this->read();
             if ($state === null) throw new \RuntimeException('Site not installed');
             if ($state['schema'] === SiteState::SCHEMA) return false;

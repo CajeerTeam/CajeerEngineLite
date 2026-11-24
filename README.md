@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.4.5
+# CajeerEngine Lite Edition 1.4.6
 
+
+### 1.4.6 — Compatibility Assurance (runtime, web server, proxy, legacy site data)
+
+Implemented read-only runtime and data compatibility checks, explicit migration preview/apply for supported schema 1–13 → 14, a verified backup before migration, exact-peer trusted reverse proxy normalization, Apache/Nginx sample deployment configurations and real-browser HTTP-navigation acceptance. Commands: `php bin/cajeer compatibility check --json`, `php bin/cajeer compatibility migration preview`, and `CAJEER_COMPATIBILITY_CONFIRM=MIGRATE php bin/cajeer compatibility migration apply`. Legacy migrations are not executed automatically by the signed code-only updater. See [`COMPATIBILITY.md`](COMPATIBILITY.md); tests: `php tests/core_146.php`, `bash tests/compatibility_http_146.sh`, `python tests/browser_146.py --browser chromium|firefox|webkit`.
 
 ### 1.4.5 — Automatic Updates (GitHub Releases, opt-in, signed package installation)
 

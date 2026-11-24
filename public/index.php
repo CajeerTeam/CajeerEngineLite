@@ -27,6 +27,7 @@ use CajeerEngine\SEO\{SEOControl,SEOControlView};
 use CajeerEngine\Developer\{DeveloperDiagnostics,DeveloperView,TemplateManager,DeveloperEvents};
 use CajeerEngine\Operations\{CmsOperations,OperationsView};
 use CajeerEngine\Security\{AdminRequestGuard,RequestRejected,PrivateArchiveDownload};
+use CajeerEngine\Compatibility\TrustedProxy;
 use CajeerEngine\Consent\ConsentConfig;
 use CajeerEngine\Integrations\{GA4Config,MetricaConfig,GTMConfig,ClarityConfig,MatomoConfig,PublicCsp,IntegrationDiagnostics,ProductionAcceptance};
 $app=new Lite(dirname(__DIR__));
@@ -147,7 +148,7 @@ try {
     if ($path==='/admin' || $path==='/admin/media' || $path==='/admin/seo' || $path==='/admin/developer' || $path==='/admin/operations' || $path==='/admin/developer/preview' || $path==='/admin/editor' || $path==='/admin/editor/preview' || $path==='/admin/ai' || $path==='/admin/ai/content' || $path==='/admin/ai/editor' || $path==='/admin/ai/seo' || $path==='/admin/ai/analytics' || $path==='/admin/ai/support' || str_starts_with($path, '/admin/oidc/')) {
         // Authenticate the request authority for HTTP as well as HTTPS deployments.
         // The web server must explicitly pass HTTPS=on when terminating TLS.
-        try { AdminRequestGuard::check($d['settings']['url'], $_SERVER, $path, $method); }
+        try { AdminRequestGuard::check($d['settings']['url'], TrustedProxy::normalize($d['settings']['url'], $_SERVER), $path, $method); }
         catch (RequestRejected $rejection) { stop($rejection->httpStatus, $rejection->getMessage()); }
         if (str_starts_with($d['settings']['url'], 'https://')) {
             header('Strict-Transport-Security: max-age=31536000');
