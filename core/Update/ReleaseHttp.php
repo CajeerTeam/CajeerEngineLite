@@ -108,6 +108,31 @@ class ReleaseHttp
             return ['status'=>200,'headers'=>$headers,'releases'=>$data];
         } finally { fclose($stream); }
     }
+    /** Uncached exact-tag metadata for operator publication acceptance. No redirects. */
+    public function releaseByTag(string $repo,string $tag): array
+    {
+        if(!preg_match('~^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$~D',$repo)||
+            !str_starts_with($tag,'v')||!DistributionIndex::version(substr($tag,1)))throw new \RuntimeException('Invalid publication repository or tag');
+        $url='https://api.github.com/repos/'.$repo.'/releases/tags/'.$tag;
+        self::assertSafeUrl($url);
+        $reply=$this->open($url,'application/vnd.github+json');$stream=$reply['stream'];
+        try {
+            if($reply['status']!==200||($reply['headers']['content-encoding']??'identity')!=='identity')throw new \RuntimeException('GitHub publication metadata unavailable');
+            $limit=512000;$length=$reply['headers']['content-length']??null;
+            if($length!==null&&(!ctype_digit($length)||(float)$length>$limit))throw new \RuntimeException('GitHub publication metadata exceeds limit');
+            $body='';$deadline=hrtime(true)+20_000_000_000;
+            while(!feof($stream)){
+                $chunk=fread($stream,32768);
+                if($chunk===false||($chunk===''&&!feof($stream))||hrtime(true)>$deadline)throw new \RuntimeException('Incomplete GitHub publication metadata');
+                $body.=$chunk;if(strlen($body)>$limit)throw new \RuntimeException('GitHub publication metadata exceeds limit');
+            }
+            if($length!==null&&strlen($body)!==(int)$length)throw new \RuntimeException('Incomplete GitHub publication metadata');
+            $data=json_decode($body,true,64,JSON_THROW_ON_ERROR);
+            if(!is_array($data)||array_is_list($data))throw new \RuntimeException('Invalid GitHub publication metadata');
+            return $data;
+        } finally {fclose($stream);}
+    }
+
     public function json(string $url): array
     {
         $reply = $this->page($url);

@@ -59,6 +59,25 @@ jobs:
           echo "base_sha=$(git rev-parse "refs/tags/$BASE_TAG^{commit}")" >> "$GITHUB_OUTPUT"
           echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           read -r -a tags <<< "$EXTRA_TAGS"
+          # GA must include the exact RC base even when its release is Preview.
+          # Include available 1.5.7/1.5.8 tags as additional supported bases.
+          if [[ "${TARGET_TAG#v}" == 1.6.0 ]]; then
+            [[ "$TARGET_TAG" == v1.6.0 ]] || { echo 'GA requires canonical v1.6.0 tag' >&2; exit 1; }
+            for v in 1.5.7 1.5.8 1.5.9; do
+              tag="v$v"
+              if ! git show-ref --verify --quiet "refs/tags/$tag"; then
+                tag="$v"
+                if ! git show-ref --verify --quiet "refs/tags/$tag"; then
+                  [[ "$v" != 1.5.9 ]] || { echo 'GA requires exact 1.5.9 source tag' >&2; exit 1; }
+                  continue
+                fi
+              fi
+              [[ "${BASE_TAG#v}" != "$v" ]] || continue
+              present=0
+              for supplied in "${tags[@]}"; do [[ "${supplied#v}" != "$v" ]] || present=1; done
+              if [[ "$present" == 0 ]]; then tags+=("$tag"); fi
+            done
+          fi
           [[ ${#tags[@]} -le 15 ]]
           shas=()
           for tag in "${tags[@]}"; do

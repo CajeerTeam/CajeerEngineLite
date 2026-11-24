@@ -21,6 +21,7 @@ final class UpdateMonitoring
         if($state['settings']['checks']&&$state['last_attempt']>0&&$now-$state['last_attempt']>$state['settings']['interval']*3600+1800)$add('check_overdue','warning');
         // The independent, root-owned supervisor uses one host-wide state directory.
         // Only the presence of its hold is reported, not its contents.
+        if(file_exists('/var/lib/cajeer-maintenance/active')||is_link('/var/lib/cajeer-maintenance/active'))$add('supervisor_maintenance','warning');
         if(file_exists('/var/lib/cajeer-maintenance/hold')||is_link('/var/lib/cajeer-maintenance/hold'))$add('supervisor_hold','error');
         return ['ok'=>!array_filter($alerts,static fn($a)=>$a['severity']==='error'),'alerts'=>$alerts,'heartbeat_age_seconds'=>$age,'last_results'=>$latest];
     }

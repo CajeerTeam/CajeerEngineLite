@@ -16,7 +16,7 @@ printf '%s\n' "$token" > "$stage/token"
 printf '%s\n' 'AfterRecoverySecure456!' > "$stage/password"
 chmod 600 "$stage/token" "$stage/password"
 php bin/cajeer recovery complete "$stage/token" "$stage/password" | grep -F 'All sessions revoked'
-php bin/cajeer doctor | grep -E 'Lite 1\.(2|3|4|5)\.[0-9]+'
+php bin/cajeer doctor | grep -F "Lite $(cat VERSION),"
 if php bin/cajeer recovery complete "$stage/token" "$stage/password" >/dev/null 2>&1; then
   echo 'Replay of consumed token accepted' >&2; exit 1
 fi

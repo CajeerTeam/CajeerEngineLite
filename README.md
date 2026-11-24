@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.9
+# CajeerEngine Lite Edition 1.6.0
 
+
+### 1.6.0 — GitHub Automatic Updates GA
+
+Stable distribution includes the exact RC base, signed publication verification, a fail-closed supervisor installation phase and a dedicated GA acceptance/sign-off gate. See [GITHUB_AUTOMATIC_UPDATES_GA.md](GITHUB_AUTOMATIC_UPDATES_GA.md) for deployment, real GitHub verification, recovery and operator evidence. GA code and local tests are not themselves a production sign-off. Schema 14 remains unchanged.
 
 ### 1.5.9 — Automatic Updates Release Candidate
 

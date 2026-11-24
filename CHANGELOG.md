@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0 — GitHub Automatic Updates GA
+
+- Stable workflow includes the exact 1.5.9 RC source tag and available 1.5.7/1.5.8 tags as additional bases; signed distribution verification and exact-base rehearsal remain mandatory.
+- Persist the supervisor's uncertain `installing` phase before the worker starts; an interrupted committed candidate is rolled back rather than implicitly accepted.
+- Operator `release ga-check` and `release ga-sign-off` verify the signed distribution, exact installed runtime, actual published GitHub assets (live only), trust, update configuration, monitoring and additional GitHub/systemd evidence.
+- Independent root supervisor `preflight` checks live services, timer, startup guards, trust and loopback readiness without installing anything.
+- Schema 14 and runtime dependencies unchanged. Official keys, publication, real systemd/FPM and production evidence remain operator prerequisites.
+
 ## 1.5.9 — Automatic Updates Release Candidate
 
 - Preserve the update recovery journal until an aborted transaction receipt is cleared.

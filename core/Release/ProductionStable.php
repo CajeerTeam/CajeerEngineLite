@@ -151,10 +151,17 @@ final class ProductionStable
         $reviewer=$approval['reviewer']??null;
         if (!is_string($reviewer)||!preg_match('/^[\p{L}\p{N} ._@-]{2,100}$/uD',$reviewer)||($approval['decision']??null)!=='approve'||($approval['version']??null)!==Lite::VERSION||
             ($approval['receipt_sha256']??null)!==$report['artifact']['receipt_sha256']||($approval['origin_sha256']??null)!==$report['origin_sha256']||($approval['site_sha256']??null)!==$report['site_sha256']) throw new \RuntimeException('Approval does not match this release and deployment');
+        $required=self::EVIDENCE;
+        if(isset($report['updates_ga'])) {
+            $ga=$report['updates_ga'];$publication=$ga['publication']['publication_sha256']??null;
+            if(!is_string($publication)||($approval['publication_sha256']??null)!==$publication||
+                ($approval['distribution_index_sha256']??null)!==$ga['distribution_index_sha256'])throw new \RuntimeException('Approval does not match verified GitHub publication');
+            $required=array_merge($required,UpdatesGA::EVIDENCE);
+        }
         $evidence=$approval['evidence']??null;
-        if (!is_array($evidence)||count($evidence)!==count(self::EVIDENCE)||array_diff(self::EVIDENCE,array_keys($evidence))) throw new \RuntimeException('All review evidence is required');
+        if (!is_array($evidence)||count($evidence)!==count($required)||array_diff($required,array_keys($evidence))) throw new \RuntimeException('All review evidence is required');
         $hashes=[];
-        foreach (self::EVIDENCE as $id) {
+        foreach ($required as $id) {
             $hash=self::digest(OperationFiles::path($evidenceDir,$id.'.txt'),16*1048576);
             if (!is_string($evidence[$id])||!hash_equals($hash,$evidence[$id])) throw new \RuntimeException('Review evidence hash mismatch: '.$id);
             $hashes[$id]=$hash;
@@ -169,6 +176,11 @@ final class ProductionStable
         try {
             (new SiteRepository($root))->exclusive(static function(SiteRepository $repository) use($root,$report,$dir,$id,$record): void {
                 if (OperationLock::maintenance($root)||\CajeerEngine\Operations\RecoveryJournal::pending($root)||self::siteDigest($repository->read())!==$report['site_sha256']||hash('sha256',json_encode(self::inventory($root),JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR))!==$report['artifact']['runtime_sha256']||strtotime($report['checked_at'])<time()-300) throw new \RuntimeException('Deployment changed or live report expired');
+                if(isset($report['updates_ga'])) {
+                    $control=(new \CajeerEngine\Update\ControlCenter($root))->status();$key=TrustPolicy::configured();
+                    if($control['revision']!==$report['updates_ga']['control_revision']||$key->report()!==$report['updates_ga']['trust']||
+                        in_array('fail',array_column(UpdatesGA::configuration($control,$key,true),'status'),true))throw new \RuntimeException('Update control or trust changed during sign-off');
+                }
                 OperationFiles::writeNew($dir.'/'.$id.'.json',json_encode($record,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)."\n",0600);
             });
         } finally {OperationLock::release($lease);}

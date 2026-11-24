@@ -191,7 +191,7 @@ load_gate() {
     [[ ${#lines[@]} == $((${#units[@]}+2)) && ${lines[0]} == cajeer-maintenance-v2 ]] || { fail 'Invalid or legacy maintenance journal; operator recovery required'; return 1; }
     local extra
     read -r baseline baseline_id phase extra <<< "${lines[1]}"
-    [[ "$baseline" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && ( "$baseline_id" == - || "$baseline_id" =~ ^[a-f0-9]{24}$ ) && ( "$phase" == check || "$phase" == failed || "$phase" == rollback ) && -z "$extra" ]] || { fail 'Invalid health recovery state'; return 1; }
+    [[ "$baseline" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && ( "$baseline_id" == - || "$baseline_id" =~ ^[a-f0-9]{24}$ ) && ( "$phase" == check || "$phase" == installing || "$phase" == failed || "$phase" == rollback ) && -z "$extra" ]] || { fail 'Invalid health recovery state'; return 1; }
     previous=()
     local i value
     for i in "${!units[@]}"; do
@@ -276,7 +276,7 @@ rollback_and_resume() {
 }
 restore_services() {
     worker 1 maintenance recover && identify_candidate || return 1
-    if [[ "$phase" == rollback || ( "$phase" == failed && "$candidate" == 1 ) ]]; then rollback_and_resume || return $?; return 0; fi
+    if [[ "$phase" == rollback || ( ( "$phase" == failed || "$phase" == installing ) && "$candidate" == 1 ) ]]; then rollback_and_resume || return $?; return 0; fi
     if start_and_probe; then finish_gate; return $?; fi
     if [[ "$candidate" == 1 ]]; then rollback_and_resume || return $?; return 0; fi
     # Baseline itself is unhealthy, or no update was installed. Never roll
@@ -306,16 +306,36 @@ cycle() {
     validate_trust && validate_units && read_status && health_probe "$current_version" || return 1
     baseline=$current_version; baseline_id=$current_id
     prepare_gate && load_gate && stop_units || return 1
+    # Persist the uncertain phase BEFORE the worker can change runtime files.
+    # An interrupted worker/supervisor cannot be mistaken for a successful install.
+    phase=installing; write_gate || return 1
     worker 1 scheduler tick || rc=$?
     # A worker can fail after publishing a valid receipt (e.g. its queue or
     # heartbeat write fails). Do not accept that candidate solely on readiness.
     # Persist this intent before attempting recovery; reboot must not lose it.
-    if [[ "$rc" != 0 ]]; then phase=failed; write_gate || return 1; fi
+    if [[ "$rc" != 0 ]]; then phase=failed; else phase=check; fi
+    write_gate || return 1
     restore_services || return $?
     return "$rc"
 }
+preflight() {
+    [[ ! -e "$state_dir/active" && ! -L "$state_dir/active" && ! -e "$state_dir/hold" && ! -L "$state_dir/hold" ]] || { fail 'Maintenance or rollback hold is active'; return 1; }
+    [[ ${CAJEER_AUTO_UPDATE_ENABLED:-0} == 1 && ${CAJEER_AUTO_UPDATE_INSTALL:-0} == 1 && ${CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL:-0} == 0 ]] || { fail 'Stable automatic installation must be explicitly enabled'; return 1; }
+    validate_trust && validate_units && read_status || return 1
+    [[ $(prop "$fpm" ActiveState) == active && $(prop cajeer-maintenance.timer ActiveState) == active ]] || { fail 'FPM and maintenance timer must be active'; return 1; }
+    [[ $(system is-enabled cajeer-maintenance.timer) == enabled ]] || { fail 'Maintenance timer must be enabled on boot'; return 1; }
+    # Do not execute a CMS-writable file as root. Compare the reviewed installed
+    # supervisor with the release copy; official release signature is checked separately.
+    [[ $(stat -c '%u:%g:%a:%h' /usr/local/sbin/cajeer-maintenance) == 0:0:755:1 && ! -L /usr/local/sbin/cajeer-maintenance ]] || { fail 'Unsafe installed supervisor'; return 1; }
+    local installed_hash source_hash
+    installed_hash=$(/usr/bin/sha256sum /usr/local/sbin/cajeer-maintenance) || return 1
+    source_hash=$(/usr/bin/timeout 5s /usr/sbin/runuser -u "$site_user" -- /usr/bin/sha256sum -- "$site_root/deploy/cajeer-maintenance.sh") || return 1
+    [[ ${installed_hash%% *} == "${source_hash%% *}" ]] || { fail 'Installed supervisor differs from release copy'; return 1; }
+    health_probe "$current_version" && worker 0 monitor check || return 1
+    log "GA preflight passed for $current_version (live systemd, HTTPS and update monitoring)"
+}
 main() {
-    [[ $# == 0 && $EUID == 0 ]] || { fail 'Root supervisor (no arguments) required'; return 1; }
+    [[ $EUID == 0 && ( $# == 0 || ( $# == 1 && $1 == preflight ) ) ]] || { fail 'Root supervisor (no arguments or preflight) required'; return 1; }
     cd /
     configure || return 1
     local directory
@@ -326,8 +346,8 @@ main() {
     done
     [[ ! -L "$state_dir/lock" ]] || return 1
     exec 9>>"$state_dir/lock"
-    /usr/bin/flock -n 9 || { log 'Another supervisor is running'; return 0; }
-    cycle
+    /usr/bin/flock -n 9 || { log 'Another supervisor is running'; if [[ $# == 1 ]]; then return 1; fi; return 0; }
+    if [[ $# == 1 ]]; then preflight; else cycle; fi
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     if [[ $# == 1 && $1 == guard ]]; then guard; exit $?; fi

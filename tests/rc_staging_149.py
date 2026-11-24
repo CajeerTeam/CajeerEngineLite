@@ -33,7 +33,7 @@ def port():
         return s.getsockname()[1]
 
 
-def main(artifacts=None, trust=None):
+def main(artifacts=None, trust=None, ga=False):
     if not shutil.which('nginx'):
         raise RuntimeError('Nginx is required for this staging test')
     with tempfile.TemporaryDirectory(prefix='cajeer-rc149-') as folder:
@@ -173,6 +173,36 @@ proxy_set_header X-Forwarded-Host $http_host; proxy_set_header X-Forwarded-Proto
                     result=json.loads(cli('release','production-check',flag,'--live',expected=1,extra={**consent,'CAJEER_MONITORING':'0'}))
                     assert {'id':'monitor.recent_samples','status':'fail'} in result['checks']
                     print('1.5.0 production gate: exact signed code, real HTTPS, live version, monitoring, explicit test sign-off and tamper rejection OK')
+                    if ga:
+                        # Explicit disposable root-owned managed policy. No real provider or GitHub calls.
+                        if os.geteuid()!=0: raise RuntimeError('GA managed-policy staging fixture requires isolated root runner')
+                        policy=work/'trust.json';policy.write_text(json.dumps({'format':1,'minimum_target':'1.5.9','keys':[Path(trust).read_text()],'revoked':[]}));policy.chmod(0o644)
+                        ga_env={**consent,'CAJEER_UPDATE_TRUST_POLICY_FILE':str(policy),'CAJEER_AUTO_UPDATE_GITHUB_REPO':'Test/Repo','CAJEER_UPDATE_CONTROL_WORKER':'1','CAJEER_AUTO_UPDATE_ENABLED':'1','CAJEER_AUTO_UPDATE_INSTALL':'1','CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL':'0','CAJEER_AUTO_UPDATE_WINDOW_UTC':'02:00-04:00'}
+                        def ga_php(code,*args,expected=0):
+                            p=subprocess.run(['php','-d',f'openssl.cafile={cert}','-r',code,*map(str,args)],cwd=root,env={**env,**ga_env},capture_output=True,text=True,timeout=90)
+                            if p.returncode!=expected: raise AssertionError(f'GA PHP: {p.returncode} {p.stdout[-3000:]} {p.stderr[-1500:]}')
+                            return p.stdout
+                        setup=r'''require "tests/ga_transport_160.php";
+                        $c=new CajeerEngine\Update\ControlCenter(getcwd());$s=$c->status();$c->submit(['revision'=>$s['revision'],'action'=>'settings','channel'=>'stable','checks'=>'1','install'=>'1','interval'=>'6','window'=>'02:00-04:00']);
+                        $r=(new CajeerEngine\Update\Scheduler(getcwd(),new GaHttp160($argv[1])))->tick();if($r['action']!=='checked')throw new RuntimeException('Scheduler failed');'''
+                        ga_php(setup,artifacts)
+                        local=json.loads(cli('release','ga-check',flag,expected=2,extra=ga_env));assert local['automated_ok'] and local['status']=='pending_live' and local['updates_ga']['publication'] is None,local
+                        run=r'''require "tests/ga_transport_160.php";
+                        $s=(new CajeerEngine\Storage\SiteRepository(getcwd()))->read();
+                        $r=CajeerEngine\Release\UpdatesGA::run(getcwd(),$s,$argv[1],CajeerEngine\Update\TrustPolicy::configured(),true,[],false,new GaHttp160($argv[1]));
+                        if(isset($argv[2])){$r=CajeerEngine\Release\ProductionStable::signoff(getcwd(),$r,$argv[2]);}echo json_encode($r,JSON_THROW_ON_ERROR);'''
+                        ga_report=json.loads(ga_php(run,artifacts));assert ga_report['status']=='pending_signoff' and ga_report['automated_ok'],ga_report
+                        for name in ('github_update_e2e','systemd_reboot_recovery','supervisor_preflight'):
+                            content=('SYNTHETIC TEST ONLY - '+name+'\n').encode();(evidence/(name+'.txt')).write_bytes(content);hashes[name]=hashlib.sha256(content).hexdigest()
+                        approval.update(distribution_index_sha256=ga_report['updates_ga']['distribution_index_sha256'],publication_sha256=ga_report['updates_ga']['publication']['publication_sha256'],evidence=hashes)
+                        (evidence/'approval.json').write_text(json.dumps(approval))
+                        good_publication=approval['publication_sha256'];approval['publication_sha256']='0'*64;(evidence/'approval.json').write_text(json.dumps(approval))
+                        ga_php(run,artifacts,evidence,expected=255)
+                        approval['publication_sha256']=good_publication;(evidence/'approval.json').write_text(json.dumps(approval))
+                        ga_record=json.loads(ga_php(run,artifacts,evidence));assert ga_record['production_accepted'] and ga_record['evidence_sha256']==hashes and ga_record['live_report']['updates_ga']['publication']['publication_sha256']==good_publication
+                        # Local evidence is a test fixture, not real GA approval.
+                        print('GA live gate and eleven-file sign-off: real HTTPS, real scheduler, controlled GitHub, publication mismatch rejected (synthetic evidence)')
+
                 print('RC 1.4.9: verified TLS, Nginx, HTTP login/page/media/backup/restore, session revocation, live gate and unconfigured provider refusal OK; no real provider credentials')
             finally:
                 for p in reversed(processes):

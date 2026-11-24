@@ -130,6 +130,14 @@ reset; install_new=1; bad_tick=7; bad_rollback=1; if cycle; then exit 1; fi
 reset; baseline=1.5.5; baseline_id=-; prepare_gate; phase=failed; write_gate
 printf '1.5.6 0123456789abcdef01234567 1.5.5 1.5.6\n' > "$fixture_dir/version"
 rc=0; cycle || rc=$?; [[ $rc == 3 ]]; assert_restored; [[ -f "$state_dir/hold" ]]
+# Death between worker commit and exit-status persistence: do not accept an
+# otherwise healthy candidate from an uncertain install phase.
+reset; baseline=1.5.5; baseline_id=-; prepare_gate; phase=installing; write_gate
+printf '1.5.6 0123456789abcdef01234567 1.5.5 1.5.6\n' > "$fixture_dir/version"
+rc=0; cycle || rc=$?; [[ $rc == 3 ]]; assert_restored; [[ -f "$state_dir/hold" ]]
+# Death before a commit: restore the unchanged baseline, never roll back an old receipt.
+reset; baseline=1.5.5; baseline_id=-; prepare_gate; phase=installing; write_gate
+cycle; assert_restored; [[ ! -e "$state_dir/hold" ]]
 # New release succeeds; no hold is created.
 reset; install_new=1; cycle; assert_restored; [[ ! -e "$state_dir/hold" ]]; grep -q 'health 1.5.6' "$logfile"
 echo 'Maintenance supervisor: gate before drain, no downtime for checks, stop/start order, interrupted recovery, fail-closed guard/journal and failure propagation OK'

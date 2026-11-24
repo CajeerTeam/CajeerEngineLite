@@ -85,6 +85,7 @@ jobs:
       - run: php tests/core_149.php
       - run: python3 tests/release_engineering_148.py
       - run: python3 tests/distribution_release_test_152.py
+      - run: python3 tests/release_ga_160.py
       - run: bash tests/compatibility_http_146.sh
       - run: bash tests/operational_http_147.sh
       - run: python3 tests/operational_load_147.py --seconds 15 --workers 4
@@ -235,3 +236,4 @@ jobs:
       - run: sudo -n env PATH="$PATH" "$(command -v python3)" tests/automatic_health_156.py --queue
       - run: python3 tests/rc_staging_149.py
       - run: python3 tests/production_stable_150.py
+      - run: sudo -n env PATH="$PATH" "$(command -v python3)" tests/release_ga_160.py --staging
