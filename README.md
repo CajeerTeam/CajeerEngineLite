@@ -1,6 +1,6 @@
 <div align="center">
 
-# CajeerEngine Lite
+# CajeerEngine Lite Edition
 
 **Лёгкая CMS для самостоятельного размещения сайтов**
 
