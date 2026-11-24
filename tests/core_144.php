@@ -33,7 +33,7 @@ function fixtures144(string $base,string $candidate):void {
     write144($candidate,'core/NewFeature.php',"<?php class NewFeature144 {}\n");
 }
 
-ok144(Lite::VERSION==='1.4.4','new release version');
+ok144(version_compare(Lite::VERSION,'1.4.4','>='),'update engine available since 1.4.4');
 ok144(!UpdatePackage::permitted('storage/site.json'),'no state updates');
 ok144(!UpdatePackage::permitted('public/backdoor.php'),'no arbitrary public PHP');
 ok144(!UpdatePackage::permitted('core/../../.env'),'no path escape');

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
-use CajeerEngine\Update\{UpdatePackage,UpdateEngine};
+use CajeerEngine\Update\{UpdatePackage,UpdateEngine,AutomaticUpdates};
 use CajeerEngine\Security\SecurityAudit;
 use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics,Acceptance,ProductionAIAcceptance};
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
@@ -20,7 +20,16 @@ try {
         case 'update':
             $engine=new UpdateEngine($app->root);
             $action=$argv[2]??'';
-            if($action==='status' && count($argv)===3) $report=$engine->status();
+            if($action==='auto') {
+                $auto=new AutomaticUpdates($app->root);
+                $sub=$argv[3]??'';
+                if(count($argv)!==4)throw new InvalidArgumentException('Usage: update auto status|check|run');
+                if($sub==='status')$report=$auto->status();
+                elseif($sub==='check')$report=$auto->check();
+                elseif($sub==='run')$report=$auto->run();
+                else throw new InvalidArgumentException('Usage: update auto status|check|run');
+            }
+            elseif($action==='status' && count($argv)===3) $report=$engine->status();
             elseif($action==='verify' && count($argv)===4) $report=$engine->verify($argv[3]);
             elseif($action==='install' && count($argv)===4) $report=$engine->install($argv[3]);
             elseif($action==='recover' && count($argv)===3) $report=$engine->recover();
@@ -29,7 +38,7 @@ try {
                 $signing=getenv('CAJEER_UPDATE_SIGNING_KEY_FILE');
                 if(!is_string($signing)||!str_starts_with($signing,'/')) throw new InvalidArgumentException('Set absolute CAJEER_UPDATE_SIGNING_KEY_FILE');
                 $report=UpdatePackage::build($app->root,$argv[3],$argv[4],$signing);
-            } else throw new InvalidArgumentException('Usage: update status|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
+            } else throw new InvalidArgumentException('Usage: update status|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
             echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
             break;
         case 'security':
@@ -347,7 +356,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\n".
-                 "php bin/cajeer update status|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
+                 "php bin/cajeer update status|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".

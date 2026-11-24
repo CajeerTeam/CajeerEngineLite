@@ -1,4 +1,4 @@
-# CajeerEngine Lite 1.4.4 — Update Engine
+# CajeerEngine Lite 1.4.4+ — Update Engine
 
 The CLI updater **installs and rolls back real application files**, not only a manifest or schema. It is intended for offline deployments on one local POSIX filesystem. The installed CMS must already have version **1.4.4 or newer** to use `php bin/cajeer update`. The initial **1.4.3 → 1.4.4** upgrade is a conventional manual ZIP overlay; do not attempt to run a CLI command that does not exist in 1.4.3.
 
@@ -84,4 +84,4 @@ Rollback refuses to overwrite files that no longer match their old or newly inst
 
 Every `update` subcommand returns `0` on success and `1` on error. Reports are JSON. CI includes `php tests/core_144.php` and `bash tests/update_engine_cli_144.sh` with real signed builds, version transitions, content replacement/removal, failure rollback, interrupted-operation recovery, wrong keys, tampering, conflicts, and maintenance blocking.
 
-The update engine does not download packages, poll GitHub, auto-apply updates, provide a browser-side install UI, or sign releases with an embedded vendor private key. Automatic checks/installation and release distribution are scheduled for version 1.4.5, after staging and production acceptance of this offline engine. Production sign-off requires deployment-specific tests and operator approval.
+The base offline engine does not itself fetch packages or sign releases with an embedded vendor key. **Version 1.4.5 adds a separate, strictly opt-in GitHub Releases CLI orchestrator** (`update auto status|check|run`) described in [`AUTOMATIC_UPDATES.md`](AUTOMATIC_UPDATES.md). It uses this verified installer; it does not add a browser-side install UI or remotely provision signing keys. Automatic installation still requires operator-managed traffic/worker quiescence, staging acceptance and private key provisioning. Production sign-off requires deployment-specific tests and operator approval.

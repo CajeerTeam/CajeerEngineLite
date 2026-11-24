@@ -1,11 +1,19 @@
-# CajeerEngine Lite Edition 1.4.4
+# CajeerEngine Lite Edition 1.4.5
 
+
+### 1.4.5 — Automatic Updates (GitHub Releases, opt-in, signed package installation)
+
+Added working `php bin/cajeer update auto status|check|run`: HTTPS GitHub release discovery, SemVer selection, bounded private download, optional GitHub asset digest validation, mandatory RSA-SHA256 package verification against an independently configured trusted key, schema/version/file preflight, and real installation through the 1.4.4 updater with automatic rollback on failure. Auto runs are serialized by a private flock, restricted to an explicit UTC maintenance window, and can recover interrupted updates when separately permitted. No unsigned archives are executed and no unattended installation occurs by default.
+
+**Important:** automatic code replacement requires an operator-orchestrated quiet period with PHP-FPM and background workers quiesced, secure key provisioning, and a scheduler (cron/systemd). `CAJEER_AUTO_UPDATE_WORKERS_QUIESCED=1` is a *declaration by the operator*, not a worker-stopping mechanism. See [`AUTOMATIC_UPDATES.md`](AUTOMATIC_UPDATES.md). Schema remains 14. Commands run through CLI only; there is no HTTP installer.
+
+Tests: `php tests/core_145.php` and `bash tests/automatic_updates_cli_145.sh`. For update-engine regression, run `php tests/core_144.php` and `bash tests/update_engine_cli_144.sh`.
 
 ### 1.4.4 — Update Engine (verified offline release installation)
 
 Implemented CLI commands `update status|verify|install|recover|rollback|package` with RSA-SHA256 signature verification against a separately pinned public key, SHA-256 verification of each code file and existing base files, exact version/schema compatibility, a shared operations lock, PHP syntax preflight, private pre-update code and site snapshots, durable interruption journal, real file installation/deletion, and actual automatic/manual rollback. Update packages are custom signed `.cjrupdate` streams, **not** unsigned ZIP or generic TAR archives. HTTP workers return 503 during an active update journal; running PHP-FPM/jobs must still be stopped before installation.
 
-**Bootstrap:** the first upgrade **1.4.3 → 1.4.4 is a manual ZIP patch** because older versions do not have the new `update` CLI. After installing 1.4.4, sign future versioned updates on a trusted build machine and provision the authorized public key separately on each server. No key is bundled or automatically trusted. No automatic download/installation exists yet. Only code-only updates compatible with JSON schema 14 are supported. Full procedures and recovery instructions: [`UPDATE_ENGINE.md`](UPDATE_ENGINE.md).
+**Bootstrap:** the first upgrade **1.4.3 → 1.4.4 is a manual ZIP patch** because older versions do not have the new `update` CLI. After installing 1.4.4, sign future versioned updates on a trusted build machine and provision the authorized public key separately on each server. No key is bundled or automatically trusted. The version 1.4.5 auto-update runner provides opt-in GitHub downloading and installation. Only code-only updates compatible with JSON schema 14 are supported. Full procedures and recovery instructions: [`UPDATE_ENGINE.md`](UPDATE_ENGINE.md).
 
 New test suites: `php tests/core_144.php` and `bash tests/update_engine_cli_144.sh`.
 
