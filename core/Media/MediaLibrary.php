@@ -16,6 +16,7 @@ final class MediaLibrary
         'image/gif'=>'gif', 'application/pdf'=>'pdf',
     ];
 
+    private int $lockDepth = 0;
     public function __construct(private readonly string $root) {}
 
     private function location(string $relative): string
@@ -39,12 +40,20 @@ final class MediaLibrary
 
     private function locked(callable $fn): mixed
     {
+        // Page/SEO editors and the archive builder already hold this instance's
+        // media lock; do not acquire a second descriptor and deadlock ourselves.
+        if ($this->lockDepth > 0) return $fn();
         $this->ensureDirectory();
         $lock = OperationLock::openLockFile($this->location('.lock'), 0600);
         try {
             if (!flock($lock, LOCK_EX)) throw new \RuntimeException('Media lock unavailable');
+            $this->lockDepth = 1;
             return $fn();
-        } finally { flock($lock, LOCK_UN); fclose($lock); }
+        } finally {
+            $this->lockDepth = 0;
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     /** Serialize content writes and deletion so a saved page never refers to a deleted file. */
@@ -55,6 +64,11 @@ final class MediaLibrary
 
     /** Index lookup also checks the actual private file, without reading all its bytes. */
     public function metadata(string $id): ?array
+    {
+        return $this->locked(fn()=> $this->metadataLocked($id));
+    }
+
+    private function metadataLocked(string $id): ?array
     {
         $id=self::id($id);
         $item=$this->index()[$id]??null;
@@ -87,13 +101,19 @@ final class MediaLibrary
     /** @return array<string,array<string,mixed>> */
     private function index(): array
     {
+        if (!OperationLock::exclusiveHeld($this->root) && \CajeerEngine\Operations\RecoveryJournal::pending($this->root)) {
+            throw new \RuntimeException('CMS import recovery pending; run operations recover');
+        }
         $path=$this->location('index.json');
         if (!file_exists($path) && !is_link($path)) return [];
         $entry=@lstat($path);
         if (!is_array($entry) || ($entry['mode'] & 0170000) !== 0100000 || $entry['nlink'] !== 1 || ($entry['mode'] & 0077)!==0 || $entry['size'] > 220000) {
             throw new \RuntimeException('Unsafe media index');
         }
-        $data=OperationFiles::read($path);
+        $raw=$this->indexBytes();
+        if ($raw===null) return [];
+        $data=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+        if (!is_array($data)) throw new \RuntimeException('Invalid media index JSON');
         if (($data['version']??null)!==1 || !is_array($data['files']??null) || count($data['files'])>self::MAX_FILES) {
             throw new \RuntimeException('Invalid media index');
         }
@@ -114,6 +134,69 @@ final class MediaLibrary
     private function writeIndex(array $entries): void
     {
         OperationFiles::json($this->location('index.json'), ['version'=>1,'files'=>$entries], 0600);
+    }
+
+    /** Preserve the exact old index, including its absence, across failed publication. */
+    private function indexBytes(): ?string
+    {
+        $path = $this->location('index.json');
+        if (!file_exists($path) && !is_link($path)) return null;
+        $entry = @lstat($path);
+        if (!is_array($entry) || ($entry['mode'] & 0170000) !== 0100000 ||
+            $entry['nlink'] !== 1 || ($entry['mode'] & 0077) !== 0 || $entry['size'] > 220000) {
+            throw new \RuntimeException('Unsafe media index');
+        }
+        $handle = @fopen($path, 'rb');
+        if (!is_resource($handle)) throw new \RuntimeException('Cannot read media index');
+        try {
+            $opened = fstat($handle);
+            clearstatcache(true, $path);
+            $current = @lstat($path);
+            if (!is_array($opened) || !is_array($current) ||
+                $opened['ino'] !== $current['ino'] || $opened['dev'] !== $current['dev'] ||
+                $opened['nlink'] !== 1 || ($opened['mode'] & 0170000) !== 0100000 ||
+                ($current['mode'] & 0077) !== 0) {
+                throw new \RuntimeException('Media index changed during read');
+            }
+            $raw = stream_get_contents($handle, 220001);
+            if (!is_string($raw) || strlen($raw) !== $opened['size'] || strlen($raw) > 220000) {
+                throw new \RuntimeException('Incomplete media index');
+            }
+            return $raw;
+        } finally { fclose($handle); }
+    }
+
+    private function restoreIndex(?string $bytes): void
+    {
+        $path = $this->location('index.json');
+        if ($bytes === null) OperationFiles::remove($path);
+        else OperationFiles::write($path, $bytes, 0600);
+    }
+
+    /** Used only while holding the media writer lock and CMS operation lease. */
+    public function restoreIndexFromRecovery(?string $bytes): void
+    {
+        if ($this->lockDepth===0 || !OperationLock::exclusiveHeld($this->root)) {
+            throw new \LogicException('Media recovery requires both writer locks');
+        }
+        $this->restoreIndex($bytes);
+    }
+
+    /** Roll back even if a write reported failure after its atomic rename. */
+    private function indexChange(array $entries, callable $after): mixed
+    {
+        $before = $this->indexBytes();
+        try {
+            $this->writeIndex($entries);
+            return $after();
+        } catch (\Throwable $failure) {
+            try {
+                if ($this->indexBytes() !== $before) $this->restoreIndex($before);
+            } catch (\Throwable $rollback) {
+                throw new \RuntimeException('Media index rollback failed; recover from a full CMS backup', 0, $rollback);
+            }
+            throw $failure;
+        }
     }
 
     /** @return list<array<string,mixed>> */
@@ -158,8 +241,13 @@ final class MediaLibrary
         if (!is_resource($input)) throw new \InvalidArgumentException('Cannot read uploaded file');
         try {
             $stat=fstat($input);
-            if (!is_array($stat) || ($stat['mode'] & 0170000)!==0100000 || $stat['nlink']!==1 ||
-                $stat['size']<1 || $stat['size']>self::MAX_FILE_BYTES) throw new \InvalidArgumentException('File exceeds 8 MB or is unsafe');
+            $entry=@lstat($source);
+            if (!is_array($stat) || !is_array($entry) ||
+                ($stat['mode'] & 0170000)!==0100000 || ($entry['mode'] & 0170000)!==0100000 ||
+                $stat['ino']!==$entry['ino'] || $stat['dev']!==$entry['dev'] ||
+                $stat['nlink']!==1 || $stat['size']<1 || $stat['size']>self::MAX_FILE_BYTES) {
+                throw new \InvalidArgumentException('File exceeds 8 MB or is unsafe');
+            }
             $raw=stream_get_contents($input,self::MAX_FILE_BYTES+1);
             if (!is_string($raw) || strlen($raw)!==$stat['size']) throw new \InvalidArgumentException('File read error');
         } finally { fclose($input); }
@@ -203,9 +291,18 @@ final class MediaLibrary
             $path=$this->location('files/'.$id.'.'.$extension);
             $entry=['id'=>$id,'name'=>$filename,'mime'=>$mime,'extension'=>$extension,
                 'size'=>strlen($raw),'width'=>$width,'height'=>$height,'sha256'=>hash('sha256',$raw),'created'=>time()];
-            OperationFiles::write($path,$raw,0600);
-            try { $entries[$id]=$entry; $this->writeIndex($entries); }
-            catch (\Throwable $exception) { OperationFiles::remove($path); throw $exception; }
+            // A new ID must never replace a stale, unindexed file or symlink.
+            OperationFiles::writeNew($path,$raw,0600);
+            try {
+                $entries[$id]=$entry;
+                $this->indexChange($entries,static fn()=>null);
+            } catch (\Throwable $failure) {
+                try { OperationFiles::remove($path); }
+                catch (\Throwable $rollback) {
+                    throw new \RuntimeException('Media upload rollback failed; check storage integrity',0,$rollback);
+                }
+                throw $failure;
+            }
             return $entry;
         });
         return $meta;
@@ -222,7 +319,7 @@ final class MediaLibrary
             $expected=$mime==='image/jpeg'?['jpg','jpeg']:[self::TYPES[$mime]];
             if (!in_array($ext,$expected,true)) throw new \InvalidArgumentException('Filename extension must match media type');
             $entries[$id]['name']=$name;
-            $this->writeIndex($entries);
+            $this->indexChange($entries,static fn()=>null);
         });
     }
 
@@ -243,9 +340,23 @@ final class MediaLibrary
             $path=$this->location('files/'.$id.'.'.$entries[$id]['extension']);
             if (is_link($path) || !is_file($path)) throw new \RuntimeException('Unsafe or missing media file');
             unset($entries[$id]);
-            $this->writeIndex($entries);
-            // Once the index is committed the file is unreachable through the HTTP route.
-            OperationFiles::remove($path);
+            $before=$this->indexBytes();
+            $this->indexChange($entries,static fn()=>null);
+            try {
+                // A crash here leaves an unindexed orphan, never a dangling index.
+                // The audited maintenance command can remove such orphans safely.
+                OperationFiles::remove($path);
+            } catch (\Throwable $failure) {
+                // A failure before unlink is reversible. A failure during directory
+                // fsync may be reported *after* unlink; never resurrect a dangling ID.
+                if (is_file($path) && !is_link($path)) {
+                    try { $this->restoreIndex($before); }
+                    catch (\Throwable $rollback) {
+                        throw new \RuntimeException('Media deletion rollback failed',0,$rollback);
+                    }
+                }
+                throw $failure;
+            }
         });
     }
 
@@ -308,9 +419,9 @@ final class MediaLibrary
      * @param array<string,array<string,mixed>> $incoming
      * @param array<string,string> $paths
      */
-    public function importPreservingIds(array $incoming, array $paths, callable $commit): mixed
+    public function importPreservingIds(array $incoming, array $paths, callable $commit, ?callable $beforeChange = null): mixed
     {
-        return $this->locked(function () use ($incoming,$paths,$commit): mixed {
+        return $this->locked(function () use ($incoming,$paths,$commit,$beforeChange): mixed {
             self::validateArchive($incoming,$paths);
             $existing=$this->index();
             $combined=$existing;
@@ -360,6 +471,24 @@ final class MediaLibrary
             if (count($combined)>self::MAX_FILES || array_sum(array_column($combined,'size'))>self::MAX_TOTAL_BYTES) {
                 throw new \RuntimeException('Imported media exceeds storage quota');
             }
+            // Reject pre-existing unindexed paths before recording them as
+            // import-created assets in the durable undo journal. Otherwise a
+            // failed import could erase unrelated pre-existing orphan bytes.
+            foreach ($incoming as $id=>$meta) {
+                if (isset($existing[$id])) continue;
+                $candidate=$this->location('files/'.$id.'.'.$meta['extension']);
+                if (file_exists($candidate) || is_link($candidate)) {
+                    throw new \RuntimeException('Unindexed media path already exists');
+                }
+            }
+            // Called with the media lock held, before any file/index mutation.
+            if ($beforeChange!==null) {
+                $new=[];
+                foreach ($incoming as $id=>$item) if (!isset($existing[$id])) {
+                    $new[$id]=['extension'=>$item['extension'],'sha256'=>$item['sha256']];
+                }
+                $beforeChange($this->indexBytes(),$new);
+            }
             try {
                 foreach ($incoming as $id=>$meta) {
                     if (isset($existing[$id])) continue;
@@ -368,18 +497,77 @@ final class MediaLibrary
                     OperationFiles::copy($paths[$id],$path,0600);
                     $added[]=$path;
                 }
-                $this->writeIndex($combined);
-                return $commit();
+                // Keep exact index bytes (or no index at all) if site commit fails.
+                return $this->indexChange($combined,$commit);
             } catch (\Throwable $failure) {
-                try { $this->writeIndex($existing); }
-                finally { foreach ($added as $path) OperationFiles::remove($path); }
+                try {
+                    foreach (array_reverse($added) as $path) OperationFiles::remove($path);
+                } catch (\Throwable $rollback) {
+                    throw new \RuntimeException('Imported media rollback failed; recover from a full CMS backup',0,$rollback);
+                }
                 throw $failure;
             }
         });
     }
 
+    /**
+     * Full offline storage audit. Repair removes only well-formed, unindexed
+     * private regular files; missing/corrupted indexed files are never invented
+     * or deleted and must be recovered from a verified CMS backup.
+     */
+    public function audit(bool $pruneOrphans = false): array
+    {
+        return $this->locked(function () use ($pruneOrphans): array {
+            $entries=$this->index();
+            $expected=[]; $bytes=0;
+            foreach ($entries as $id=>$meta) {
+                $name=$id.'.'.$meta['extension'];
+                $expected[$name]=true;
+                $asset=$this->readLocked($id);
+                if ($asset===null) throw new \RuntimeException('Indexed media asset is missing');
+                $bytes += strlen($asset['bytes']);
+            }
+            $orphans=[];
+            foreach (new \DirectoryIterator($this->location('files')) as $entry) {
+                if ($entry->isDot()) continue;
+                $name=$entry->getFilename();
+                $stat=@lstat($entry->getPathname());
+                if (!is_array($stat) || ($stat['mode'] & 0170000)!==0100000 ||
+                    $stat['nlink']!==1 || ($stat['mode'] & 0077)!==0 ||
+                    (!preg_match('/^[a-f0-9]{32}\.(?:jpg|png|webp|gif|pdf)$/D',$name) &&
+                     !preg_match('/^\.(?:new|tmp)-[a-f0-9]{24}$/D',$name))) {
+                    throw new \RuntimeException('Unsafe or unexpected media directory entry');
+                }
+                if (!isset($expected[$name])) $orphans[]=$entry->getPathname();
+            }
+            // A killed process can also leave a temporary index file beside
+            // index.json. Only the application's strictly named private staging
+            // files are eligible for cleanup; unknown content fails closed.
+            foreach (new \DirectoryIterator($this->location('')) as $entry) {
+                if ($entry->isDot() || in_array($entry->getFilename(),['files','index.json','.lock'],true)) continue;
+                $stat=@lstat($entry->getPathname());
+                if (!preg_match('/^\.(?:new|tmp)-[a-f0-9]{24}$/D',$entry->getFilename()) ||
+                    !is_array($stat) || ($stat['mode'] & 0170000)!==0100000 ||
+                    $stat['nlink']!==1 || ($stat['mode'] & 0077)!==0) {
+                    throw new \RuntimeException('Unsafe or unexpected media staging entry');
+                }
+                $orphans[]=$entry->getPathname();
+            }
+            $found=count($orphans);
+            if ($pruneOrphans) foreach ($orphans as $path) OperationFiles::remove($path);
+            return ['indexed_files'=>count($entries),'verified_bytes'=>$bytes,
+                'orphan_files'=>$found,'orphan_files_removed'=>$pruneOrphans?$found:0];
+        });
+    }
+
     /** Read verified, registered bytes; never redirect clients to a storage path. */
     public function read(string $id): ?array
+    {
+        // Hold one consistent index/file view across deletion and import.
+        return $this->locked(fn()=> $this->readLocked($id));
+    }
+
+    private function readLocked(string $id): ?array
     {
         $id=self::id($id);
         $entries=$this->index();

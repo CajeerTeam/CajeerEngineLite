@@ -92,6 +92,16 @@ final class StableCMSAcceptance
 
         $ops=new CmsOperations($root);
         try {
+            $audit=$ops->auditStorage();
+            $clean=($audit['orphan_files']===0);
+            $add('storage.media_integrity',$clean?'pass':'fail',
+                $clean ? 'Verified media index, all image/PDF bytes and absence of orphan files' :
+                    'Unindexed media files detected; run operations audit and repair-orphans after checking backups');
+        } catch (\Throwable) {
+            $add('storage.media_integrity','fail',
+                'Media integrity audit failed; restore missing/corrupted assets from a verified CMS backup');
+        }
+        try {
             $names=$ops->names();
             if ($names===[]) $add('recovery.offline_backup','fail','No CMS backup exists; create and verify one before release');
             else {

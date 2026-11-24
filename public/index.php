@@ -79,6 +79,17 @@ try {
     $method=$_SERVER['REQUEST_METHOD']??'GET';
     if (!in_array($method,['GET','HEAD','POST'],true)) { header('Allow: GET, HEAD, POST'); stop(405,'Method not allowed'); }
     if ($path==='/health/live') { if($method==='POST') stop(405,'Method not allowed'); header('Content-Type: application/json'); echo '{"status":"ok"}'; exit; }
+    // A worker interrupted during a full CMS import leaves a private undo
+    // journal. Recover before serving pages, assets or administrative writes;
+    // competing workers return 503 rather than exposing a half-imported site.
+    if (\CajeerEngine\Operations\RecoveryJournal::pending($app->root)) {
+        try { (new CmsOperations($app->root))->recoverPending(); }
+        catch (\Throwable $failure) {
+            error_log('CMS storage recovery failed: '.get_class($failure));
+            header('Retry-After: 5');
+            stop(503,'CMS storage recovery in progress or requires operator intervention');
+        }
+    }
     // Liveness means the PHP worker is responding. Readiness is a separate,
     // read-only probe of actual CMS state and the public rendering path.
     if ($path==='/health/ready') {
@@ -311,8 +322,8 @@ try {
                         $config=SEOControl::globalFromPost($_POST);
                         $revision=$_POST['revision']??null;
                         if (!is_string($revision) || !preg_match('/^[a-f0-9]{64}$/D',$revision)) throw new InvalidArgumentException('Invalid SEO global revision');
-                        $library->guard(static function()use($app,$config,$revision):void {
-                            SEOControl::verifyImage(new MediaLibrary($app->root),$config['default_image']);
+                        $library->guard(static function()use($app,$config,$revision,$library):void {
+                            SEOControl::verifyImage($library,$config['default_image']);
                             $app->change(static function(array $state)use($config,$revision):array {
                                 if (!hash_equals(SEOControl::revision($state),$revision)) {
                                     throw new InvalidArgumentException('Site SEO changed; reload settings');
@@ -1540,4 +1551,14 @@ try {
     if ($csp['webvisor_frames']) header_remove('X-Frame-Options');
     header('Content-Security-Policy: '.$csp['policy']);
     echo $app->render($d,$d['pages'][$path]);
-} catch(Throwable $ex) { try { DeveloperEvents::record($app->root,'runtime.unhandled','error'); } catch(Throwable) {} error_log('CajeerEngine Lite: '.$ex->getMessage()); stop(500,'Internal server error'); }
+} catch(Throwable $ex) {
+    // The marker may have appeared after the initial request preflight.
+    // Fail closed with a retryable status instead of treating an in-flight
+    // storage recovery as a generic application crash.
+    try { $pending=\CajeerEngine\Operations\RecoveryJournal::pending($app->root); }
+    catch (Throwable) { $pending=true; }
+    if ($pending) { header('Retry-After: 5'); stop(503,'CMS storage recovery pending'); }
+    try { DeveloperEvents::record($app->root,'runtime.unhandled','error'); } catch(Throwable) {}
+    error_log('CajeerEngine Lite: '.$ex->getMessage());
+    stop(500,'Internal server error');
+}

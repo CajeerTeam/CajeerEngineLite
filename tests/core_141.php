@@ -18,7 +18,7 @@ function clean141(string $dir):void {
     foreach ($it as $f) {if ($f->isDir()&&!$f->isLink()) rmdir($f->getPathname()); else unlink($f->getPathname());}
     rmdir($dir);
 }
-ok141(Lite::VERSION==='1.4.1' && SiteState::SCHEMA===14,'version and schema');
+ok141(version_compare(Lite::VERSION,'1.4.1','>=') && SiteState::SCHEMA===14,'version and schema');
 $root=sys_get_temp_dir().'/cms141-'.bin2hex(random_bytes(8)); mkdir($root,0700);
 try {
     $app=new Lite($root); $app->install('ValidPasswordFor141!','https://example.test','Original');

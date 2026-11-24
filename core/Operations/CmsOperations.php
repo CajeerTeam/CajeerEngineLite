@@ -53,7 +53,11 @@ final class CmsOperations
     }
     private function backupName(): string
     {
-        return 'cms-'.gmdate('Ymd\THis\Z').'-'.bin2hex(random_bytes(8)).'.tar';
+        // Orderable within the same second: 6 hex digits of microseconds +
+        // 5 random bytes. The existing 16-hex filename format is unchanged.
+        $now=microtime(true);
+        return 'cms-'.gmdate('Ymd\THis\Z',(int)$now).'-'.
+            sprintf('%06x',(int)(($now-floor($now))*1000000)).bin2hex(random_bytes(5)).'.tar';
     }
     private function backupFile(string $name): string
     {
@@ -74,6 +78,7 @@ final class CmsOperations
         if (!in_array($kind,['backup','export'],true)) throw new \InvalidArgumentException('Invalid archive kind');
         $operation=OperationLock::acquire($this->root,true);
         try {
+            (new RecoveryJournal($this->root))->recover($this->repo,$this->media);
             $stage=$this->stage();
             $target=$kind==='backup' ? $this->backupFile($this->backupName()) : $stage.'/portable.tar';
         } catch (\Throwable $failure) {
@@ -81,9 +86,11 @@ final class CmsOperations
             throw $failure;
         }
         $created=false;
+        // Never expose an in-progress TAR under its final backup name.
+        $stagedArchive=$stage.'/complete.tar';
         try {
-            $this->media->guard(function () use ($kind,$stage,$target): void {
-                $this->repo->exclusive(function () use ($kind,$stage,$target): void {
+            $this->media->guard(function () use ($kind,$stage,$stagedArchive): void {
+                $this->repo->exclusive(function () use ($kind,$stage,$stagedArchive): void {
                     $state=$this->repo->read();
                     if ($state===null) throw new \RuntimeException('Site not installed');
                     SiteState::validate($state);
@@ -119,16 +126,21 @@ final class CmsOperations
                     foreach ($files as $name=>$file) $checks[$name]=['size'=>filesize($file),'sha256'=>OperationFiles::hash($file)];
                     $manifest=$stage.'/manifest.json';
                     OperationFiles::write($manifest,self::json(['format'=>1,'kind'=>$kind,'created_at'=>gmdate('Y-m-d\TH:i:s\Z'),'files'=>$checks]));
-                    TarPackage::create($target,['manifest.json'=>$manifest]+$files);
+                    TarPackage::create($stagedArchive,['manifest.json'=>$manifest]+$files);
                 });
             });
+            // Verify the complete TAR on disk, including all checksums and
+            // image metadata, before declaring a backup ready for restoration.
+            $this->verifyFile($stagedArchive);
+            // Reuse the same no-clobber, durable file publication as media imports.
+            OperationFiles::copy($stagedArchive,$target,0600);
             $created=true;
             if ($kind==='backup') return basename($target);
             return $target;
         } finally {
             try {
                 if (!$created || $kind==='backup') {
-                    if (!$created && is_file($target)) unlink($target);
+                    // A failed publication must not delete a file another process created.
                     self::cleanup($stage);
                 }
             } finally { OperationLock::release($operation); }
@@ -172,7 +184,8 @@ final class CmsOperations
     {
         $file=$this->backupFile($name);
         self::safeFile($file);
-        if ((fileperms($file)&0077)!==0) throw new \RuntimeException('CMS backup must be private');
+        $entry=@lstat($file);
+        if (!is_array($entry) || ($entry['mode']&0077)!==0) throw new \RuntimeException('CMS backup must be private');
         return $file;
     }
     /** @return array{state:array,media:array,paths:array,summary:array} */
@@ -224,12 +237,14 @@ final class CmsOperations
     {
         self::safeFile($source);
         $operation=OperationLock::acquire($this->root,true);
-        try { $stage=$this->stage(); }
+        $journal=new RecoveryJournal($this->root);
+        try { $journal->recover($this->repo,$this->media); $stage=$this->stage(); }
         catch (\Throwable $failure) { OperationLock::release($operation); throw $failure; }
         try {
             $decoded=$this->inspect($source,$stage);
             $imported=SiteState::migrate($decoded['state']);
-            $this->media->importPreservingIds($decoded['media'],$decoded['paths'],function () use ($imported): void {
+            try {
+                $this->media->importPreservingIds($decoded['media'],$decoded['paths'],function () use ($imported): void {
                 $this->repo->exclusive(function () use ($imported): void {
                     $live=$this->repo->read();
                     if ($live===null) throw new \RuntimeException('Site not installed');
@@ -261,7 +276,25 @@ final class CmsOperations
                         throw $failure;
                     }
                 });
-            });
+                },function (?string $beforeIndex,array $added) use ($journal): void {
+                    // Capture both pre-import files while holding media -> site
+                    // locks. The durable marker precedes all media/index writes.
+                    $this->repo->exclusive(function () use ($journal,$beforeIndex,$added): void {
+                        $old=$this->repo->raw();
+                        if ($old===null) throw new \RuntimeException('Site not installed');
+                        $journal->begin($old,$beforeIndex,$added);
+                    });
+                });
+                $journal->complete();
+            } catch (\Throwable $failure) {
+                // This also recovers an exception thrown after rename/fsync.
+                // If recovery itself fails the marker remains for the next boot.
+                try { $journal->recover($this->repo,$this->media); }
+                catch (\Throwable $recoveryFailure) {
+                    throw new \RuntimeException('CMS import recovery failed; keep the site offline and run operations recover',0,$recoveryFailure);
+                }
+                throw $failure;
+            }
             return 'imported';
         } finally {
             try { self::cleanup($stage); }
@@ -269,6 +302,24 @@ final class CmsOperations
         }
     }
     public function restoreBackup(string $name): string { return $this->importFile($this->backupPath($name)); }
+
+    /** Replay the durable undo journal after an interrupted import. */
+    public function recoverPending(): bool
+    {
+        if (!RecoveryJournal::pending($this->root)) return false;
+        $operation=OperationLock::acquire($this->root,true);
+        try { return (new RecoveryJournal($this->root))->recover($this->repo,$this->media); }
+        finally { OperationLock::release($operation); }
+    }
+
+    /** Full audited media check or explicit orphan cleanup (no content mutation). */
+    public function auditStorage(bool $pruneOrphans = false): array
+    {
+        $this->recoverPending();
+        $guard=OperationLock::acquire($this->root,$pruneOrphans);
+        try { return $this->media->audit($pruneOrphans); }
+        finally { OperationLock::release($guard); }
+    }
 
     public function health(): array
     {
@@ -310,6 +361,10 @@ final class CmsOperations
         $guard=OperationLock::acquire($this->root,true);
         try {
             $names=$this->names();$remove=array_slice($names,$keep);
+            // Refuse destructive retention if the retained recovery points are
+            // damaged: otherwise a corrupt newest archive can displace the last
+            // known-good backup.
+            if ($remove!==[]) foreach (array_slice($names,0,$keep) as $name) $this->verifyBackup($name);
             foreach ($remove as $name) OperationFiles::remove($this->backupFile($name));
             return count($remove);
         } finally { OperationLock::release($guard); }

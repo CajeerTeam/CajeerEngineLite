@@ -65,6 +65,7 @@ jobs:
       - run: php tests/core_140.php
       - run: php tests/core_141.php
       - run: php tests/site_concurrency_141.php
+      - run: php tests/core_142.php
       - run: php tests/media_concurrency_134.php
       - run: bash tests/admin_experience_http.sh
       - run: bash tests/pages_management_http.sh
@@ -76,6 +77,7 @@ jobs:
       - run: bash tests/cms_operations_http.sh
       - run: bash tests/experience_hardening_http.sh
       - run: bash tests/cms_stable_http.sh
+      - run: bash tests/storage_recovery_http_142.sh
       - run: php tests/ai_concurrency_121.php
       - run: php tests/ai_cost_concurrency_128.php
       - run: php tests/auth_concurrency_119.php

@@ -18,7 +18,9 @@ try {
         case 'operations':
             $ops=new CmsOperations($app->root);
             $action=$argv[2]??'';
-            if ($action==='check' && count($argv)===3) {
+            if ($action==='recover' && count($argv)===3) {
+                echo $ops->recoverPending() ? "Interrupted CMS import rolled back.\n" : "No pending recovery.\n";
+            } elseif ($action==='check' && count($argv)===3) {
                 echo json_encode($ops->health(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)."\n";
             } elseif ($action==='backup' && count($argv)>=4) {
                 $sub=$argv[3];
@@ -34,12 +36,21 @@ try {
             } elseif ($action==='import' && count($argv)===4) {
                 if (getenv('CAJEER_OPERATIONS_CONFIRM')!=='IMPORT') throw new InvalidArgumentException('Set CAJEER_OPERATIONS_CONFIRM=IMPORT');
                 $ops->importFile($argv[3]);echo "Content and media imported; sessions revoked.\n";
+            } elseif ($action==='audit' && count($argv)===3) {
+                $report=$ops->auditStorage();
+                echo json_encode($report,JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";
+                if ($report['orphan_files']!==0) exit(1);
+            } elseif ($action==='repair-orphans' && count($argv)===3) {
+                if (getenv('CAJEER_OPERATIONS_CONFIRM')!=='REPAIR_ORPHANS') {
+                    throw new InvalidArgumentException('Set CAJEER_OPERATIONS_CONFIRM=REPAIR_ORPHANS');
+                }
+                echo json_encode($ops->auditStorage(true),JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";
             } elseif ($action==='cache' && ($argv[3]??'')==='clear' && count($argv)===4) {
                 echo 'Analytics cache files removed: '.$ops->clearAnalyticsCache()."\n";
             } elseif ($action==='prune' && count($argv)===4 && preg_match('/^(?:[1-9]|[1-9][0-9]|100)$/D',$argv[3])) {
                 if (getenv('CAJEER_OPERATIONS_CONFIRM')!=='PRUNE') throw new InvalidArgumentException('Set CAJEER_OPERATIONS_CONFIRM=PRUNE');
                 echo 'Backups removed: '.$ops->pruneBackups((int)$argv[3])."\n";
-            } else throw new InvalidArgumentException('Usage: operations check|backup create|backup list|backup verify <name>|backup restore <name>|export <absolute-file>|import <file>|cache clear|prune <keep>');
+            } else throw new InvalidArgumentException('Usage: operations check|recover|audit|repair-orphans|backup create|backup list|backup verify <name>|backup restore <name>|export <absolute-file>|import <file>|cache clear|prune <keep>');
             break;
         case 'developer':
             if (($argv[2]??'')!=='check' || count($argv)>4 ||
@@ -306,7 +317,7 @@ try {
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".
-                 "php bin/cajeer operations check | backup create|list|verify|restore | export <absolute-file> | import <file> | cache clear | prune <keep>\n".
+                 "php bin/cajeer operations check | recover | audit | repair-orphans | backup create|list|verify|restore | export <absolute-file> | import <file> | cache clear | prune <keep>\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
                  "php bin/cajeer release check [--json] | release stable-check [--json] [--live]\nphp bin/cajeer auth check [--json]\n".

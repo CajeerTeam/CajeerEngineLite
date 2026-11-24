@@ -15,6 +15,10 @@ final class SiteRepository
 
     public function raw(): ?string
     {
+        if (!OperationLock::exclusiveHeld($this->root) &&
+            \CajeerEngine\Operations\RecoveryJournal::pending($this->root)) {
+            throw new \RuntimeException('CMS import recovery pending; run operations recover');
+        }
         $path = $this->file();
         if (!file_exists($path)) return null;
         // Check the descriptor as well as the directory entry to reject links/swaps.
