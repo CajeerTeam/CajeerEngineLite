@@ -166,7 +166,14 @@ jobs:
           if gh release view "$TARGET_TAG" >/dev/null 2>&1; then
             echo 'Release already exists; inspect it manually.' >&2; exit 1
           fi
-          gh release create "$TARGET_TAG" --verify-tag --draft --title "CajeerEngine Lite $version" \
+          release_flags=()
+          if [[ "$version" == 1.4.9 ]]; then release_flags+=(--prerelease --latest=false); fi
+          gh release create "$TARGET_TAG" --verify-tag --draft "${release_flags[@]}" --title "CajeerEngine Lite $version" \
             --notes "Signed incremental update from $base, full clean-install ZIP, SHA-256 signature and automated rehearsal report. Production sign-off is separate." \
             "CajeerEngineLite-$version.cjrupdate" "CajeerEngineLite-$version.zip" SHA256SUMS SHA256SUMS.sig release-report.json
-          gh release edit "$TARGET_TAG" --draft=false
+          if [[ "$version" == 1.4.9 ]]; then
+            # Release candidate stays out of the stable automatic-update channel.
+            gh release edit "$TARGET_TAG" --prerelease --latest=false --draft=false
+          else
+            gh release edit "$TARGET_TAG" --draft=false
+          fi

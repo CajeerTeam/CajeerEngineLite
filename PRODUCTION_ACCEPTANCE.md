@@ -39,3 +39,7 @@ Sign-off requires a human to record staging environment, date, test evidence, ex
 ## 1.4.8 artifact acceptance
 
 Verify the signed SHA256SUMS with the independently pinned public key. Run `python3 tests/release_engineering_148.py` and the exact-tag build rehearsal described in RELEASE.md. Review `release-report.json`; it records actual disposable installation and rollback, never live acceptance. Capture successful CI and staging logs, real TLS/FPM, browser and provider outcomes, off-host restore evidence, date and reviewer before production sign-off.
+
+## 1.4.9 release candidate
+
+Follow [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). `release rc-check` combines existing executable checks and requires a current verified CMS backup. On staging, explicitly opt into live HTTPS and selected provider probes. Exit 2 still means pending manual acceptance; `not_run` is not a successful provider check. The release workflow must mark 1.4.9 as a prerelease. No live account, production deployment or human sign-off is inferred from local TLS or synthetic test fixtures.

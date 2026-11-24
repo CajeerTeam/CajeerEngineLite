@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.9 — Production Release Candidate
+
+- Freeze features and schema 14. Reject unsupported direct OIDC login before checking optional provider configuration, preventing false live readiness failure.
+- Operator-only RC acceptance gate with backup freshness, verified TLS and opt-in selected live provider probes; no automatic production sign-off.
+- Signed exact upgrade/rollback rehearsal on populated data with media hashes and verified backups; TLS/Nginx staging and real browser form regression.
+- Publish RC as prerelease, never in the stable auto-update channel.
+
 ## 1.4.8 — Documentation & Release Engineering
 
 - Executable signed release build, independent source/manifest comparison, reproducible full ZIP, signed SHA-256 list, actual clean install, upgrade and rollback rehearsal, tampering rejection.

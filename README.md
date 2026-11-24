@@ -1,5 +1,11 @@
-# CajeerEngine Lite Edition 1.4.8
+# CajeerEngine Lite Edition 1.4.9
 
+
+### 1.4.9 — Production Release Candidate
+
+Feature freeze: no schema or feature changes. The operator-only `php bin/cajeer release rc-check` combines security, compatibility, update recovery, CMS and operational checks. `--live` requires `CAJEER_RC_STAGING_CONFIRM=STAGING`; `--provider=...` opts into selected real provider probes. Paid AI requires separate explicit approval. The gate reports failures, untested providers and pending manual acceptance rather than certifying production.
+
+The release rehearsal now verifies actual page/media data, sitemap, private routes and backup integrity before and after signed upgrade and rollback. CI adds real TLS-terminating Nginx staging and extends browser form E2E. Release 1.4.9 is published as a GitHub prerelease (not latest), so stable auto-update clients skip it. See [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md).
 
 ### 1.4.8 — Documentation & Release Engineering
 

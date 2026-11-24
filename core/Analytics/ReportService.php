@@ -64,6 +64,17 @@ final class ReportService
         $output['providers']['gtm']=['status'=>'not_applicable','message'=>'GTM управляет тегами, отчёты по событиям доступны через GA4'];
         return $output;
     }
+    /** One real read-only provider probe, without refreshing unrelated providers or the report cache. */
+    public function probe(array $site,string $provider): array
+    {
+        if (!in_array($provider,['ga4','metrica','matomo','clarity','gsc','yandex_webmaster'],true)) {
+            throw new \InvalidArgumentException('Unknown reporting provider');
+        }
+        ReportConfig::validate($site['reporting']);
+        $end=new \DateTimeImmutable('yesterday',new \DateTimeZone('UTC'));
+        return $this->fetch($provider,$site,$site['reporting'],$end->modify('-6 days')->format('Y-m-d'),$end->format('Y-m-d'),7);
+    }
+
     private function fetch(string $name, array $site, array $c, string $from, string $to, int $days): array
     {
         return match($name) {

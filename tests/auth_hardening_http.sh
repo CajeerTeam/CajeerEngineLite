@@ -19,7 +19,7 @@ csrf=$(sed -n 's/.*name="csrf" value="\([a-f0-9]*\)".*/\1/p' "$tmp/login" | head
 [[ $(status -b "$tmp/cookie" -d "action=oidc_login&csrf=$csrf" "$base/admin") == 403 ]]
 [[ $(status -b "$tmp/cookie" -d 'action=oidc_cancel&csrf=invalid' "$base/admin") == 403 ]]
 [[ $(status -b "$tmp/cookie" -d "action=oidc_cancel&csrf=$csrf" "$base/admin") == 303 ]]
-[[ $(status "$base/admin/oidc/login") == 503 ]]
+[[ $(status "$base/admin/oidc/login") == 405 ]]
 [[ $(status "$base/admin/recovery") == 404 ]]
 [[ $(status -b "$tmp/cookie" -c "$tmp/cookie" -d "action=login&csrf=$csrf&password=SafePasswordForHardening118" "$base/admin") == 303 ]]
 # Switch canonical origin to HTTPS. Even with spoofed X-Forwarded-Proto,

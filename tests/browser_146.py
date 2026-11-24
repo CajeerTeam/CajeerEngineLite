@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Actual network navigation in Chromium, Firefox and WebKit (no set_content)."""
 import argparse
+import base64
+import json
 import os
 import shutil
 import socket
@@ -72,13 +74,47 @@ with tempfile.TemporaryDirectory(prefix='cajeer-browser-146-') as folder:
                     for width in (1280,768,390):
                         page.set_viewport_size({'width':width,'height':900})
                         assert page.locator('body').evaluate('el=>el.scrollWidth <= innerWidth + 4'),(args.browser,route,width)
+                # Actual browser form submissions across CMS, not HTML-only fixtures.
+                page.set_viewport_size({'width':1280,'height':900})
+                def form(action):
+                    return page.locator('form').filter(has=page.locator(f'input[name="action"][value="{action}"]')).first
+                def create(path,title):
+                    assert page.goto(url+'/admin?view=pages&new=1').status==200
+                    editor=form('save')
+                    editor.locator('input[name="path"]').fill(path)
+                    editor.locator('input[name="title"]').fill(title)
+                    editor.locator('textarea[name="body"]').fill('Browser RC persisted content')
+                    editor.locator('input[name="published"]').check()
+                    editor.locator('button').click()
+                    assert page.goto(url+path).status==200
+                    assert 'Browser RC persisted content' in page.locator('body').inner_text()
+                create('/browser-rc','Browser RC')
+                assert page.goto(url+'/admin/media').status==200
+                png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUT9rBwMDAxMDAwMDAAAAOPQE9xgjZwQAAAABJRU5ErkJggg==')
+                page.locator('input[name="media_file"]').set_input_files({'name':'rc.png','mimeType':'image/png','buffer':png})
+                form('upload').locator('button').click()
+                index=json.loads((root/'storage/media/index.json').read_text())
+                media_id=next(iter(index['files']))
+                assert context.request.get(url+'/media/'+media_id).body()==png
+                assert page.goto(url+'/admin/operations').status==200
+                form('create').locator('button').click()
+                assert form('restore').count()==1
+                create('/browser-rc-later','Browser RC later')
+                assert page.goto(url+'/admin/operations').status==200
+                restore=form('restore')
+                restore.locator('input[name="confirm"]').fill('RESTORE')
+                restore.locator('button').click()
+                assert page.goto(url+'/browser-rc').status==200
+                assert page.goto(url+'/browser-rc-later').status==404
+                assert context.request.get(url+'/media/'+media_id).body()==png
+                assert page.goto(url+'/admin/media').status==403,'Restore must revoke old session'
                 # Live public route is accessible to an anonymous browser context.
                 public=context.browser.new_context()
                 anonymous=public.new_page()
                 assert anonymous.goto(url+'/',wait_until='load').status==200
                 assert anonymous.goto(url+'/admin/media',wait_until='load').status==403
                 public.close()
-                print(f'Compatibility Browser 1.4.6: {args.browser}, real login + HTTP navigation, 6 routes, 3 widths, unauthenticated restrictions OK')
+                print(f'Compatibility Browser 1.4.6: {args.browser}, real login + HTTP navigation, 6 routes, 3 widths, page/media/backup/restore, unauthenticated restrictions OK')
             finally:browser.close()
     finally:
         server.terminate()

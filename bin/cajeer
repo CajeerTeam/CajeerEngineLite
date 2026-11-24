@@ -238,6 +238,21 @@ try {
             if (!$report['ok']) exit(1);
             break;
         case 'release':
+            if (($argv[2]??'')==='rc-check') {
+                $live=false;$paid=false;$providers=[];$seen=[];
+                foreach (array_slice($argv,3) as $flag) {
+                    if (isset($seen[$flag])) throw new InvalidArgumentException('Duplicate RC option');
+                    $seen[$flag]=true;
+                    if ($flag==='--live') $live=true;
+                    elseif ($flag==='--paid') $paid=true;
+                    elseif ($flag==='--json') continue;
+                    elseif (str_starts_with($flag,'--provider=')) $providers[]=substr($flag,11);
+                    else throw new InvalidArgumentException('Invalid RC option');
+                }
+                $report=\CajeerEngine\Release\ReleaseCandidate::run($app->root,$app->load(),$live,$providers,$paid);
+                echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+                exit($report['automated_ok']?2:1);
+            }
             if (($argv[2]??null)==='stable-check') {
                 $flags=array_slice($argv,3);
                 if (count($flags)>2 || count($flags)!==count(array_unique($flags)) ||
@@ -394,7 +409,7 @@ try {
                  "php bin/cajeer operations check | recover | audit | repair-orphans | backup create|list|verify|restore | export <absolute-file> | import <file> | cache clear | prune <keep>\n".
                  "php bin/cajeer recovery issue|status|cancel|complete <token-file> <password-file>\n".
                  "php bin/cajeer integrations check [--json]\n".
-                 "php bin/cajeer release check [--json] | release stable-check [--json] [--live]\nphp bin/cajeer auth check [--json]\n".
+                 "php bin/cajeer release check [--json] | release stable-check [--json] [--live]\nphp bin/cajeer release rc-check [--live] [--provider=oidc|openai|ga4|metrica|matomo|clarity|gsc|yandex_webmaster] [--paid]\nphp bin/cajeer auth check [--json]\n".
                  "php bin/cajeer auth release-check [--json] [--live]\n".
                  "php bin/cajeer analytics refresh|status [--days=7]\n";
     }

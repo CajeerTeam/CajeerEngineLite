@@ -811,13 +811,12 @@ try {
         }
         if (str_starts_with($path, '/admin/oidc/')) {
             if ($method !== 'GET') { header('Allow: GET'); stop(405, 'Method not allowed'); }
+            // Direct login initiation is never supported, even with OIDC disabled.
+            // Reject before config checks so a disabled optional provider cannot fail HTTPS readiness.
+            if ($path==='/admin/oidc/login') stop(405, 'Use the sign-in form');
             if (!OidcClient::enabled($d['settings']['url'])) stop(503, 'SkiF4er ID is not configured for HTTPS');
             try {
                 $client=OidcClient::fromEnvironment($d['settings']['url']);
-                if ($path==='/admin/oidc/login') {
-                    // OIDC login initiation is POST/CSRF-only via /admin.
-                    stop(405, 'Use the sign-in form');
-                }
                 if ($path==='/admin/oidc/callback') {
                     $hadLocalAuth=$auth && !isset($_SESSION['oidc_identity']);
                     $result=OidcFlow::finish($_SESSION, $client, $_GET);

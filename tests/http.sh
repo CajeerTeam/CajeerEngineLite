@@ -203,7 +203,7 @@ php bin/cajeer analytics status --days=7 | php -r '$d=json_decode(stream_get_con
 [[ $(status "$base/analytics") == 404 ]]
 curl -fsSI "$base/admin?analytics=1" | grep_all -i "script-src 'none'"
 # OIDC must be disabled unless HTTPS and client credentials are configured.
-[[ $(status "$base/admin/oidc/login") == 503 ]]
+[[ $(status "$base/admin/oidc/login") == 405 ]]
 [[ $(status "$base/admin/oidc/callback?code=invalid&state=invalid") == 503 ]]
 [[ $(status -X POST "$base/admin/oidc/login") == 405 ]]
 [[ $(status "$base/auth/skif4er/login") == 404 ]]

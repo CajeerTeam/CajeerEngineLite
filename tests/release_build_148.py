@@ -3,6 +3,7 @@
 No network calls; never run against a live installation. Python standard library only.
 """
 import argparse
+import base64
 import hashlib
 import http.client
 import json
@@ -137,7 +138,7 @@ def fresh_install(root, expected_version):
     return digest(root/'storage/site.json')
 
 
-def health(root, expected_version):
+def health(root, expected_version, fixture=None):
     if version(root) != expected_version:
         raise ValueError('Wrong installed version')
     cli(root, 'doctor')
@@ -174,12 +175,46 @@ def health(root, expected_version):
                 status, body = get(path)
                 if status != 200 or not body:
                     raise ValueError('HTTP smoke failed: '+path)
+            if fixture:
+                status, body = get('/release-rehearsal')
+                if status != 200 or b'RC rehearsal content' not in body:
+                    raise ValueError('Published content lost during release')
+                status, body = get('/media/'+fixture['id'])
+                if status != 200 or hashlib.sha256(body).hexdigest() != fixture['sha256']:
+                    raise ValueError('Media lost during release')
+                status, body = get('/sitemap.xml')
+                if b'/release-rehearsal' not in body:
+                    raise ValueError('Sitemap lost published content')
+                if get('/storage/site.json')[0] != 404 or get('/admin/media')[0] != 403:
+                    raise ValueError('Private resources exposed during release')
         finally:
             server.terminate()
             try:
                 server.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 server.kill(); server.wait()
+
+
+def seed_rehearsal(root, work):
+    # A real nonempty site exercising the production repository and media service.
+    png = work/'rehearsal.png'
+    png.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUT9rBwMDAxMDAwMDAAAAOPQE9xgjZwQAAAABJRU5ErkJggg=='))
+    fixture = json.loads(run(['php', '-r', r'''require "bootstrap.php";
+        $a=new \CajeerEngine\Lite(getcwd());
+        $a->change(static function(array $s):array {
+            $s["pages"]["/release-rehearsal"]=\CajeerEngine\Lite::page([
+                "path"=>"/release-rehearsal","title"=>"Release rehearsal","body"=>"RC rehearsal content",
+                "published"=>"1","menu"=>"1"]);return $s;});
+        echo json_encode((new \CajeerEngine\Media\MediaLibrary(getcwd()))->ingest($argv[1],"rehearsal.png"),JSON_THROW_ON_ERROR);''', str(png)], root))
+    backup = cli(root, 'operations','backup','create').strip()
+    cli(root, 'operations','backup','verify',backup)
+    return fixture, backup
+
+
+def persistent_hashes(root):
+    paths = [root/'storage/site.json', root/'storage/media/index.json']
+    paths += sorted((root/'storage/media/files').iterdir())
+    return {p.relative_to(root).as_posix(): digest(p) for p in paths if p.is_file()}
 
 
 def build(base, candidate, output, private, public, base_commit=None, target_commit=None):
@@ -230,15 +265,20 @@ def build(base, candidate, output, private, public, base_commit=None, target_com
         zip_source(candidate, new, full)
         clean = work/'clean'; extract_verified(full, new, clean)
         fresh_install(clean, after)
-        original = fresh_install(live, before)
+        fresh_install(live, before)
+        fixture, backup = seed_rehearsal(live, work)
+        health(live, before, fixture)
+        original = persistent_hashes(live)
         cli(live, 'update', 'verify', str(package), env=trust)
         installed = json.loads(cli(live, 'update', 'install', str(package), env=dict(trust, CAJEER_UPDATE_CONFIRM='INSTALL')))
-        assert_code(live, new); health(live, after)
-        if digest(live/'storage/site.json') != original:
+        assert_code(live, new); health(live, after, fixture)
+        cli(live, 'operations', 'backup', 'verify', backup)
+        if persistent_hashes(live) != original:
             raise ValueError('Code update changed site data')
         cli(live, 'update', 'rollback', installed['id'], env=dict(trust, CAJEER_UPDATE_CONFIRM='ROLLBACK'))
-        assert_code(live, old); health(live, before)
-        if digest(live/'storage/site.json') != original:
+        assert_code(live, old); health(live, before, fixture)
+        cli(live, 'operations', 'backup', 'verify', backup)
+        if persistent_hashes(live) != original:
             raise ValueError('Rollback changed site data')
         # Independently check that a modified package is rejected by the actual installed verifier.
         damaged = work/'damaged.cjrupdate'; shutil.copyfile(package, damaged)
@@ -256,7 +296,7 @@ def build(base, candidate, output, private, public, base_commit=None, target_com
                    'base_tree_sha256': hashlib.sha256(json.dumps(old, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
                    'target_tree_sha256': hashlib.sha256(json.dumps(new, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
                    'source_only_changes': sorted(k for k in SOURCE_ONLY if old.get(k) != new.get(k)),
-                   'checks': ['zip_inventory', 'fresh_install', 'loopback_http', 'signature', 'exact_upgrade', 'site_preserved', 'rollback', 'tamper_rejected'],
+                   'checks': ['zip_inventory', 'fresh_install', 'loopback_http', 'signature', 'exact_upgrade', 'site_preserved', 'populated_site_media_preserved', 'backup_verified_before_after_rollback', 'rollback', 'tamper_rejected'],
                    'production_accepted': False}
         (dist/'release-report.json').write_text(json.dumps(receipt, indent=2, sort_keys=True)+'\n')
         sums = dist/'SHA256SUMS'

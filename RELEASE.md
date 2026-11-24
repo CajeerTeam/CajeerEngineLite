@@ -43,3 +43,7 @@ After reviewing source and staging results, merge the release workflow into the 
 ## Release gates
 
 Run `python3 tests/release_engineering_148.py` (disposable keys, install/remove/rollback, deterministic artifacts, dirty tree and wrong-key failures), existing CI, and [PRODUCTION_ACCEPTANCE.md](PRODUCTION_ACCEPTANCE.md). Staging must test the real target infrastructure, external providers, browser navigation, rollback from independent backup and monitoring. Do not publish as production-accepted without recording reviewer, time, environment, evidence and unresolved issues. Keep release notes, old packages and public trust history; no overwriting tagged artifacts.
+
+### Production release candidate (1.4.9)
+
+The exact-tag rehearsal uses a populated site and checks page delivery, media hashes and verified TAR backup before/after upgrade and rollback. CI also runs `tests/rc_staging_149.py` with Nginx and actual certificate validation. Official 1.4.9 publication must be a GitHub prerelease (not latest). Auto-update discovery skips prereleases; install manually on staging with a pinned trusted key. Do not mark 1.4.9 stable to bypass the 1.5 acceptance gate. See RELEASE_CANDIDATE.md.
