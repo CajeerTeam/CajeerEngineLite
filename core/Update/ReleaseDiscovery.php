@@ -96,6 +96,7 @@ final class ReleaseDiscovery
 
     public function fetch(string $repo,string $installed,string $channel): array
     {
+        $policy=TrustPolicy::managedConfigured()?TrustPolicy::configured():null;
         $cached=$this->cache($repo); $oldPages=($cached['format']??null)===3?($cached['pages']??[]):[];
         $blocked=$cached['blocked_until']??0;
         if (is_int($blocked) && $blocked>time()) throw new \RuntimeException('GitHub discovery throttled until '.gmdate('c',$blocked));
@@ -126,14 +127,14 @@ final class ReleaseDiscovery
                     $seen[$release['id']]=true;
                 }
                 $tag=$release['tag_name']??null;
-                if (($release['draft']??null)===false && is_bool($release['prerelease']??null) && ($channel!=='stable'||!$release['prerelease']) && is_string($tag) && preg_match('/^v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/D',$tag,$m) && version_compare($m[1],$installed,'>') && is_array($release['assets']??null)) {
+                if (($release['draft']??null)===false && is_bool($release['prerelease']??null) && ($channel!=='stable'||!$release['prerelease']) && is_string($tag) && preg_match('/^v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/D',$tag,$m) && version_compare($m[1],$installed,'>') && ($policy===null||$policy->permitsTarget($m[1])) && is_array($release['assets']??null)) {
                     foreach ($release['assets'] as $asset) if (($asset['name']??null)===DistributionIndex::NAME) {
                         if(isset($indexed[$m[1]]))throw new \RuntimeException('Ambiguous indexed release');
                         $indexed[$m[1]]=$release;break;
                     }
                 }
                 $option=self::candidate($release,$repo,$installed,$channel);
-                if ($option===null) continue;
+                if ($option===null||($policy!==null&&!$policy->permitsTarget($option['version']))) continue;
                 $version=$option['version'];
                 if (isset($options[$version])) throw new \RuntimeException('Ambiguous GitHub release: '.$version);
                 $options[$version]=$option;

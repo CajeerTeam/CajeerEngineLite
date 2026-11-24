@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
+// Legacy single-key fixture; production automatic installation uses managed policy.
+putenv('CAJEER_UPDATE_ALLOW_LEGACY_AUTO=1');
 use CajeerEngine\Update\{ControlCenter,ControlCenterView,ReleaseHttp,UpdatePackage,UpdateEngine,OperationFiles,OperationLock};
 function ok153(bool $ok,string $why):void{if(!$ok)throw new RuntimeException($why);}
 function reject153(callable $f,string $why):void{try{$f();}catch(Throwable){return;}throw new RuntimeException('Expected rejection: '.$why);}

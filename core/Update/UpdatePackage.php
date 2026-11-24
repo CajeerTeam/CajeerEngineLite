@@ -27,13 +27,13 @@ final class UpdatePackage
     {
         $file=OperationFiles::path($root,'VERSION');
         $value=trim(self::readRegular($file,128));
-        if (!preg_match('/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/D',$value)) throw new \RuntimeException('Invalid installed VERSION');
+        if (!DistributionIndex::version($value)) throw new \RuntimeException('Invalid installed VERSION');
         return $value;
     }
 
     public static function readRegular(string $path,int $max): string
     {
-        $entry=@lstat($path);
+        clearstatcache(true,$path);$entry=@lstat($path);
         if (!is_array($entry) || ($entry['mode'] & 0170000)!==0100000 || $entry['nlink']!==1 || $entry['size']>$max) throw new \RuntimeException('Unsafe release input file');
         $h=@fopen($path,'rb');
         if (!is_resource($h)) throw new \RuntimeException('Cannot open release file');
@@ -43,8 +43,8 @@ final class UpdatePackage
                 $now['ino']!==$entry['ino']||$now['dev']!==$entry['dev']||$stat['size']!==$entry['size']) throw new \RuntimeException('Release file changed');
             $raw=stream_get_contents($h,$max+1);
             if (!is_string($raw)||strlen($raw)!==$entry['size']||strlen($raw)>$max) throw new \RuntimeException('Release file read failed');
-            $after=fstat($h);
-            if (!is_array($after)||$after['mtime']!==$stat['mtime']||$after['ctime']!==$stat['ctime']||$after['size']!==$stat['size']) throw new \RuntimeException('Release file modified while reading');
+            $after=fstat($h);clearstatcache(true,$path);$last=@lstat($path);
+            if (!is_array($last)||$last['ino']!==$stat['ino']||$last['dev']!==$stat['dev']||$last['nlink']!==1||!is_array($after)||$after['mtime']!==$stat['mtime']||$after['ctime']!==$stat['ctime']||$after['size']!==$stat['size']) throw new \RuntimeException('Release file modified while reading');
             return $raw;
         } finally {fclose($h);}
     }
@@ -153,14 +153,11 @@ final class UpdatePackage
     private static function validHash(mixed $value): bool {return is_string($value)&&preg_match('/^[a-f0-9]{64}$/D',$value)===1;}
 
     /** Validate signature and all bytes before returning any data for installation. */
-    public static function verify(string $package,string $publicKeyPath,?string $stage=null): array
+    public static function verify(string $package,string|TrustPolicy $publicKeyPath,?string $stage=null): array
     {
-        $st=@lstat($package);
+        clearstatcache(true,$package);$st=@lstat($package);
         if(!is_array($st)||($st['mode']&0170000)!==0100000||$st['nlink']!==1||$st['size']>self::MAX_BYTES||$st['size']<60) throw new \RuntimeException('Unsafe update package');
-        $public=self::readRegular($publicKeyPath,16384);
-        $key=openssl_pkey_get_public($public);
-        $details=$key instanceof \OpenSSLAsymmetricKey ? openssl_pkey_get_details($key) : false;
-        if (!is_array($details)||$details['type']!==OPENSSL_KEYTYPE_RSA||$details['bits']<2048) throw new \RuntimeException('Trusted RSA public key (2048 bits+) required');
+        $policy=$publicKeyPath instanceof TrustPolicy?$publicKeyPath:TrustPolicy::single($publicKeyPath);
         $h=@fopen($package,'rb');
         if(!is_resource($h)) throw new \RuntimeException('Cannot read update package');
         try {
@@ -175,10 +172,13 @@ final class UpdatePackage
             $json=self::exact($h,$length,$packageDigest);
             $sigLength=self::exact($h,5,$packageDigest);
             if(!preg_match('/^[0-9a-f]{4}\n$/D',$sigLength)) throw new \RuntimeException('Invalid signature framing');
-            $signature=self::exact($h,hexdec(substr($sigLength,0,4)),$packageDigest);
-            if(openssl_verify($json,$signature,$key,OPENSSL_ALGO_SHA256)!==1) throw new \RuntimeException('Untrusted or invalid release signature');
+            $signatureBytes=hexdec(substr($sigLength,0,4));
+            if($signatureBytes<256||$signatureBytes>1024)throw new \RuntimeException('Invalid RSA signature size');
+            $signature=self::exact($h,$signatureBytes,$packageDigest);
+            $fingerprint=$policy->verify($json,$signature);
             $manifest=json_decode($json,true,32,JSON_THROW_ON_ERROR);
             self::validate($manifest);
+            $policy->assertTarget($manifest['to']);
             $total=ftell($h);
             foreach($manifest['files'] as $member) {
                 if($member['action']!=='write') continue;
@@ -207,15 +207,15 @@ final class UpdatePackage
             if(fread($h,1)!=='') throw new \RuntimeException('Unexpected trailing update data');
             $ended=fstat($h);
             if (!is_array($ended)||$ended['size']!==$opened['size']||$ended['mtime']!==$opened['mtime']||$ended['ctime']!==$opened['ctime']) throw new \RuntimeException('Package mutated during verification');
-            return ['manifest'=>$manifest,'key_sha256'=>hash('sha256',$details['key']),'package_sha256'=>hash_final($packageDigest)];
+            return ['manifest'=>$manifest,'key_sha256'=>$fingerprint,'package_sha256'=>hash_final($packageDigest)];
         } finally {fclose($h);}
     }
     private static function validate(mixed $data): void
     {
         if(!is_array($data)||array_keys($data)!==['format','product','from','to','php_min','schema_min','schema_max','files']||
             $data['format']!==1||$data['product']!=='CajeerEngineLite'||!is_array($data['files'])||
-            !preg_match('/^\d+\.\d+\.\d+$/D',(string)$data['from'])||
-            !preg_match('/^\d+\.\d+\.\d+$/D',(string)$data['to'])||version_compare($data['from'],$data['to'],'>=')||
+            !DistributionIndex::version($data['from'])||
+            !DistributionIndex::version($data['to'])||version_compare($data['from'],$data['to'],'>=')||
             $data['php_min']!=='8.4.1'||$data['schema_min']!==14||$data['schema_max']!==14||
             count($data['files'])<2||count($data['files'])>self::MAX_FILES||!array_is_list($data['files'])) throw new \RuntimeException('Unsupported update manifest');
         $prior='';$contains=[];

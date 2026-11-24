@@ -17,9 +17,10 @@ reset() {
     printf 'inactive\n' > "$fixture_dir/units/job.service"
     printf 'active\n' > "$fixture_dir/units/$fpm"
     : > "$logfile"
-    mock_decision=install; bad_stop=; bad_start=; bad_tick=0; bad_verify=0; bad_guard=0; bad_mount=0; bad_health=; install_new=0; bad_rollback=0
+    mock_decision=install; bad_stop=; bad_start=; bad_tick=0; bad_verify=0; bad_guard=0; bad_mount=0; bad_trust=0; bad_history=0; bad_health=; install_new=0; bad_rollback=0
     printf '1.5.5 - - -\n' > "$fixture_dir/version"
 }
+validate_trust() { [[ $bad_trust == 0 ]]; }
 health_probe() {
     printf 'health %s\n' "$1" >> "$logfile"
     [[ $(prop "$fpm" ActiveState) == active && "$1" != "$bad_health" ]]
@@ -29,7 +30,7 @@ prop() {
         LoadState) echo loaded;;
         KillMode) echo control-group;;
         SendSIGKILL|NoNewPrivileges) echo yes;;
-        ReadOnlyPaths) echo "$site_root";;
+        ReadOnlyPaths) [[ $bad_history == 0 ]] && echo "$site_root $site_root/storage/app/updates" || echo "$site_root";;
         ReadWritePaths) [[ ${bad_mount:-0} == 0 ]] && echo "$site_root/storage" || echo "$site_root";;
         ExecCondition) [[ $bad_guard == 0 ]] && echo '{ path=/usr/local/sbin/cajeer-maintenance ; argv[]=/usr/local/sbin/cajeer-maintenance guard ; ignore_errors=no ; }' || echo '';;
         Triggers) echo job.service;;
@@ -88,6 +89,8 @@ assert_restored() {
 }
 reset; mock_decision=tick; cycle; [[ $(cat "$logfile") == $'0 maintenance plan\n0 scheduler tick' ]]; assert_restored
 reset; mock_decision=blocked; if cycle; then exit 1; fi; assert_restored
+reset; bad_trust=1; if cycle; then exit 1; fi; assert_restored
+reset; bad_history=1; if cycle; then exit 1; fi; assert_restored
 reset; bad_mount=1; if cycle; then exit 1; fi; assert_restored
 reset; bad_guard=1; if cycle; then exit 1; fi; assert_restored
 reset; cycle; assert_restored

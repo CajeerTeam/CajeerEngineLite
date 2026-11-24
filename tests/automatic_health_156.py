@@ -98,7 +98,9 @@ trap stop_backend EXIT
 start_backend() { (cd "$site_root" && exec php -S "127.0.0.1:$TEST_BACKEND" -t public router.php) >> "$TEST_WORK/php.log" 2>&1 & pid=$!; running=active; /bin/sleep .15; }
 public_code() { /usr/bin/curl --disable --noproxy '*' -s --max-time 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$TEST_PUBLIC/health/ready"; }
 # Only the OS lifecycle is mocked. Start/stop the actual disposable PHP server.
+# The systemd/root configuration boundary is simulated here.
 validate_units() { :; }
+validate_trust() { :; }
 prop() { case "$2" in ActiveState) echo "$running";; MainPID|ControlPID) [[ $running == inactive ]] && echo 0 || echo "$pid";; *) return 1;; esac; }
 system() {
     [[ -f "$state_dir/active" && $(public_code) == 503 ]] || return 1

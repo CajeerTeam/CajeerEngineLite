@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
+// Legacy single-key fixture; production automatic installation uses managed policy.
+putenv('CAJEER_UPDATE_ALLOW_LEGACY_AUTO=1');
 use CajeerEngine\Update\{AutomaticUpdates,ReleaseHttp,UpdatePackage,UpdateEngine,OperationFiles,OperationLock};
 function yes145(bool $condition,string $label): void {if(!$condition)throw new RuntimeException('1.4.5: '.$label);}
 function reject145(callable $callback,string $label): void {

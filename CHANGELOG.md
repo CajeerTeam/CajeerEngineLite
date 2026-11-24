@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.7 — Update Security Hardening
+
+- External root-owned trust policy with overlapping RSA key rotation, explicit fingerprint revocation, minimum permitted target and no fallback when invalid. Applied to signed packages, distribution indexes and production acceptance.
+- Mandatory managed trust for supervised automatic installations; legacy direct automatic CLI requires explicit compatibility opt-in. Emergency recovery does not require the now-revoked signing key.
+- Read-only transaction storage mount for managed HTTP/background services, strict recovery metadata validation, bounded reads, CLI linting, GitHub CDN redirect and asset-length validation, structured security events in operator logs.
+- Privileged supervisor and guard must be redeployed manually. Schema 14 unchanged.
+
 ## 1.5.6 — Automatic Health & Rollback
 
 - Mandatory baseline and post-install TLS readiness/version validation via loopback-only vhost; public HTTP maintenance gate remains active until the original service set is healthy.

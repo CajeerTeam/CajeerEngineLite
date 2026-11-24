@@ -15,39 +15,48 @@ final class UpdateEngine
     public function __construct(private readonly string $root) {}
 
     private function location(string $path): string { return OperationFiles::path($this->root,$path); }
-    private function trusted(): string
-    {
-        $key=getenv('CAJEER_UPDATE_TRUSTED_KEY_FILE');
-        if (!is_string($key)||$key===''||!str_starts_with($key,'/')) throw new \RuntimeException('Configure absolute CAJEER_UPDATE_TRUSTED_KEY_FILE before verification');
-        return $key;
-    }
+    private function trusted(): TrustPolicy { return TrustPolicy::configured(); }
     private static function id(string $id): string
     {
         if(!preg_match('/^[a-f0-9]{24}$/D',$id)) throw new \InvalidArgumentException('Invalid update ID');
         return $id;
     }
+    private function readPrivate(string $path,int $max=262144): array
+    {
+        clearstatcache(true,$path);$st=@lstat($path);
+        if(!is_array($st)||($st['mode']&0077)!==0)throw new \RuntimeException('Unsafe update transaction permissions');
+        $data=json_decode(UpdatePackage::readRegular($path,$max),true,32,JSON_THROW_ON_ERROR);
+        if(!is_array($data))throw new \RuntimeException('Invalid update transaction data');
+        return $data;
+    }
     private function journal(): ?array
     {
         $file=$this->location(self::ACTIVE);
         if(!file_exists($file))return null;
-        $data=OperationFiles::read($file);
+        $data=$this->readPrivate($file,4096);
         if(array_keys($data)!==['id','mode'] || !in_array($data['mode'],['install','rollback'],true)||!is_string($data['id'])) throw new \RuntimeException('Invalid update recovery journal');
         self::id($data['id']);
         return $data;
     }
     private function plan(string $id): array
     {
-        $data=OperationFiles::read($this->location(self::HISTORY.'/'.self::id($id).'/plan.json'));
+        $data=$this->readPrivate($this->location(self::HISTORY.'/'.self::id($id).'/plan.json'));
         if(array_keys($data)!==['id','from','to','created_at','files','site_sha256'] || $data['id']!==$id ||
-            !is_string($data['from'])||!is_string($data['to'])||!is_array($data['files'])||
-            !is_string($data['created_at'])||($data['site_sha256']!==null&&!is_string($data['site_sha256']))) throw new \RuntimeException('Invalid update recovery plan');
+            !DistributionIndex::version($data['from'])||!DistributionIndex::version($data['to'])||version_compare($data['from'],$data['to'],'>=')||!is_array($data['files'])||!array_is_list($data['files'])||count($data['files'])<2||count($data['files'])>UpdatePackage::MAX_FILES||
+            !is_string($data['created_at'])||($data['site_sha256']!==null&&(!is_string($data['site_sha256'])||!preg_match('/^[a-f0-9]{64}$/D',$data['site_sha256'])))) throw new \RuntimeException('Invalid update recovery plan');
+        $prior='';$versions=[];
         foreach($data['files'] as $entry) {
             if(!is_array($entry)||array_keys($entry)!==['path','before','after','before_mode','mode']||
-                !is_string($entry['path'])||!UpdatePackage::permitted($entry['path'])||
-                ($entry['before']!==null&&!preg_match('/^[a-f0-9]{64}$/D',$entry['before']))||
-                ($entry['after']!==null&&!preg_match('/^[a-f0-9]{64}$/D',$entry['after']))||
-                !in_array($entry['before_mode'],[0,0644,0755],true)||!in_array($entry['mode'],[0,0644,0755],true)) throw new \RuntimeException('Invalid update plan entry');
+                !is_string($entry['path'])||!UpdatePackage::permitted($entry['path'])||strcmp($prior,$entry['path'])>=0||
+                ($entry['before']!==null&&(!is_string($entry['before'])||!preg_match('/^[a-f0-9]{64}$/D',$entry['before'])))||
+                ($entry['after']!==null&&(!is_string($entry['after'])||!preg_match('/^[a-f0-9]{64}$/D',$entry['after'])))||
+                !in_array($entry['before_mode'],[0,0644,0755],true)||!in_array($entry['mode'],[0,0644,0755],true)||
+                ($entry['before']===null)!==($entry['before_mode']===0)||($entry['after']===null)!==($entry['mode']===0)||
+                ($entry['before']===null&&$entry['after']===null)) throw new \RuntimeException('Invalid update plan entry');
+            $prior=$entry['path'];
+            if(in_array($prior,['VERSION','core/Lite.php'],true)&&$entry['before']!==null&&$entry['after']!==null)$versions[]=$prior;
         }
+        if(count($versions)!==2)throw new \RuntimeException('Missing recovery version entries');
         return $data;
     }
     private function fresh(string $path): void
@@ -79,10 +88,16 @@ final class UpdateEngine
     }
     public function verify(string $package): array
     {
-        $result=UpdatePackage::verify($package,$this->trusted());
-        $this->preflight($result['manifest']);
-        return $this->report($result);
+        try {
+            $result=UpdatePackage::verify($package,$this->trusted());
+            $this->preflight($result['manifest']);
+            $report=$this->report($result);
+            TrustPolicy::audit('verified',$report+['key_sha256'=>$result['key_sha256']]);
+            return $report;
+        } catch(\Throwable $e) {TrustPolicy::audit('verification_rejected');throw $e;}
     }
+    private static function runtimeHash(string $path): string
+    {return hash('sha256',UpdatePackage::readRegular($path,UpdatePackage::MAX_FILE));}
     private function preflight(array $manifest): void
     {
         if(version_compare(PHP_VERSION,$manifest['php_min'],'<')) throw new \RuntimeException('PHP runtime is incompatible with this release');
@@ -104,7 +119,7 @@ final class UpdateEngine
                 if($existing!==false) throw new \RuntimeException('Unexpected existing file: '.$entry['path']);
             } else {
                 if(!is_array($existing)||($existing['mode']&0170000)!==0100000||$existing['nlink']!==1||
-                    !hash_equals($entry['before'],OperationFiles::hash($path))) throw new \RuntimeException('Modified base file: '.$entry['path']);
+                    !hash_equals($entry['before'],self::runtimeHash($path))) throw new \RuntimeException('Modified base file: '.$entry['path']);
             }
         }
     }
@@ -128,6 +143,10 @@ final class UpdateEngine
             $class=$this->fromStaged($stage,'core/Lite.php');
             if(!preg_match("/public const VERSION\\s*=\\s*'".preg_quote($manifest['to'],'/')."'\\s*;/",$class)) throw new \RuntimeException('Payload application version mismatch');
             $this->lint($manifest,$stage);
+            // Refresh policy before the first persistent change, including revocation.
+            $fresh=$this->trusted();
+            $fresh->assertTarget($manifest['to']);
+            if(!in_array($validated['key_sha256'],$fresh->report()['active_fingerprints'],true))throw new \RuntimeException('Signing key no longer trusted');
             $this->fresh($history);
             $plan=['id'=>$id,'from'=>$manifest['from'],'to'=>$manifest['to'],'created_at'=>gmdate('c'),'files'=>[],'site_sha256'=>null];
             $site=$this->location('storage/site.json');
@@ -141,7 +160,7 @@ final class UpdateEngine
                 if($entry['before']!==null) {
                     $backup=OperationFiles::path($history,'original/'.$entry['path']);
                     OperationFiles::copy($current,$backup,0600);
-                    if(!hash_equals($entry['before'],OperationFiles::hash($backup))) throw new \RuntimeException('Pre-update snapshot failed integrity check');
+                    if(!hash_equals($entry['before'],self::runtimeHash($backup))) throw new \RuntimeException('Pre-update snapshot failed integrity check');
                 }
                 $plan['files'][]=['path'=>$entry['path'],'before'=>$entry['before'],'after'=>$entry['after'],
                     'before_mode'=>$oldMode,'mode'=>$entry['mode']];
@@ -156,9 +175,11 @@ final class UpdateEngine
             // A successful install preserves its private recovery snapshot for CLI rollback.
             OperationFiles::json($this->location(self::LAST),['id'=>$id,'from'=>$plan['from'],'to'=>$plan['to']]);
             OperationFiles::remove($this->location(self::ACTIVE)); $activated=false;
+            TrustPolicy::audit('installed',['id'=>$id,'from'=>$plan['from'],'to'=>$plan['to'],'key_sha256'=>$validated['key_sha256'],'package_sha256'=>$validated['package_sha256']]);
             return ['id'=>$id,'from'=>$plan['from'],'to'=>$plan['to'],'changed'=>count($plan['files']),
                 'rollback'=>'php bin/cajeer update rollback '.$id];
         } catch(\Throwable $error) {
+            TrustPolicy::audit('installation_failed',['id'=>$id]);
             if($activated) {
                 try {$this->restore($this->plan($id));OperationFiles::remove($this->location(self::ACTIVE));}
                 catch(\Throwable $rollback) { throw new \RuntimeException('Update failed and automatic rollback failed; run update recover: '.$rollback->getMessage(),0,$error); }
@@ -175,7 +196,7 @@ final class UpdateEngine
     {
         $file=OperationFiles::path($stage,'files/'.$name);
         if(!is_file($file)||is_link($file)||filesize($file)>UpdatePackage::MAX_FILE) throw new \RuntimeException('Missing staged release file');
-        $contents=file_get_contents($file);
+        $contents=UpdatePackage::readRegular($file,UpdatePackage::MAX_FILE);
         if(!is_string($contents))throw new \RuntimeException('Cannot read staged file');
         return $contents;
     }
@@ -184,7 +205,7 @@ final class UpdateEngine
     {
         if(!function_exists('proc_open')||!is_file(PHP_BINARY)) throw new \RuntimeException('CLI PHP linter is unavailable');
         foreach($manifest['files'] as $file) {
-            if($file['action']!=='write'||!str_ends_with($file['path'],'.php')) continue;
+            if($file['action']!=='write'||(!str_ends_with($file['path'],'.php')&&$file['path']!=='bin/cajeer')) continue;
             $path=OperationFiles::path($stage,'files/'.$file['path']);
             $process=@proc_open([PHP_BINARY,'-n','-l',$path],
                 [['pipe','r'],['pipe','w'],['pipe','w']],$pipes,null,null,['bypass_shell'=>true]);
@@ -199,13 +220,18 @@ final class UpdateEngine
     private function apply(array $entry,string $stage): void
     {
         $path=$this->location($entry['path']);
+        // Check the signed preimage again immediately before publication.
+        clearstatcache(true,$path);
+        if($entry['before']===null) {if(@lstat($path)!==false)throw new \RuntimeException('Unexpected new-file destination');}
+        elseif(!hash_equals($entry['before'],self::runtimeHash($path)))throw new \RuntimeException('Base changed before publication');
         if($entry['action']==='remove') {OperationFiles::remove($path);return;}
         $data=$this->fromStaged($stage,$entry['path']);
         if(!hash_equals($entry['after'],hash('sha256',$data))) throw new \RuntimeException('Staged release data changed');
         // Directories created by the updater must be readable by PHP-FPM/web workers.
         OperationFiles::dir(dirname($path),0755);
-        OperationFiles::write($path,$data,$entry['mode']);
-        if(!hash_equals($entry['after'],OperationFiles::hash($path))) throw new \RuntimeException('Installed release file checksum failed');
+        if($entry['before']===null)OperationFiles::writeNew($path,$data,$entry['mode']);
+        else OperationFiles::write($path,$data,$entry['mode']);
+        if(!hash_equals($entry['after'],self::runtimeHash($path))) throw new \RuntimeException('Installed release file checksum failed');
     }
     private function validateInstalled(array $plan,bool $installed): void
     {
@@ -213,7 +239,7 @@ final class UpdateEngine
             $actual=$installed?$entry['after']:$entry['before'];
             $path=$this->location($entry['path']);
             if($actual===null) {if(file_exists($path)||is_link($path))throw new \RuntimeException('Unexpected release file: '.$entry['path']);}
-            elseif(!hash_equals($actual,OperationFiles::hash($path))) throw new \RuntimeException('Release integrity mismatch: '.$entry['path']);
+            elseif(!hash_equals($actual,self::runtimeHash($path))) throw new \RuntimeException('Release integrity mismatch: '.$entry['path']);
         }
         if(UpdatePackage::version($this->root)!==($installed?$plan['to']:$plan['from'])) throw new \RuntimeException('Release version validation failed');
     }
@@ -224,7 +250,7 @@ final class UpdateEngine
         foreach($plan['files'] as $entry) {
             $file=$this->location($entry['path']);
             if(file_exists($file)||is_link($file)) {
-                $hash=OperationFiles::hash($file);
+                $hash=self::runtimeHash($file);
                 if(!in_array($hash,array_filter([$entry['before'],$entry['after']]),true)) throw new \RuntimeException('Cannot rollback modified file: '.$entry['path']);
             } elseif($entry['before']!==null&&$entry['after']!==null) {
                 // A missing file is not a valid state for an overwrite operation.
@@ -232,7 +258,7 @@ final class UpdateEngine
             }
             if($entry['before']!==null) {
                 $backup=$this->location(self::HISTORY.'/'.$plan['id'].'/original/'.$entry['path']);
-                if(!hash_equals($entry['before'],OperationFiles::hash($backup))) throw new \RuntimeException('Recovery snapshot checksum mismatch');
+                if(!hash_equals($entry['before'],self::runtimeHash($backup))) throw new \RuntimeException('Recovery snapshot checksum mismatch');
             }
         }
         // Restore VERSION last, for the same reason it is installed last.
@@ -250,7 +276,7 @@ final class UpdateEngine
         $target=$this->location($entry['path']);
         if($entry['before']===null) {OperationFiles::remove($target);return;}
         $source=$this->location(self::HISTORY.'/'.$id.'/original/'.$entry['path']);
-        $data=file_get_contents($source);
+        $data=UpdatePackage::readRegular($source,UpdatePackage::MAX_FILE);
         if(!is_string($data)||hash('sha256',$data)!==$entry['before'])throw new \RuntimeException('Invalid backup content');
         OperationFiles::dir(dirname($target),0755);
         OperationFiles::write($target,$data,$entry['before_mode']);
@@ -262,12 +288,15 @@ final class UpdateEngine
             $active=$this->journal();
             if($active===null)return ['status'=>'clean'];
             $plan=$this->plan($active['id']);
+            // Load audit code before rollback can remove this version's class file.
+            TrustPolicy::audit('recovery_started',['id'=>$active['id']]);
             $this->restore($plan);
             OperationFiles::remove($this->location(self::ACTIVE));
             try {self::cleanup($this->location(self::STAGE.'/'.$active['id']));}
             catch(\Throwable $failure) {error_log('Update staging cleanup: '.get_class($failure));}
             $last=$this->location(self::LAST);
-            if(is_file($last)&& (OperationFiles::read($last)['id']??null)===$active['id'])OperationFiles::remove($last);
+            if(is_file($last)&& ($this->readPrivate($last,4096)['id']??null)===$active['id'])OperationFiles::remove($last);
+            TrustPolicy::audit('recovered',['id'=>$active['id'],'from'=>$plan['to'],'to'=>$plan['from']]);
             return ['status'=>'recovered','id'=>$active['id'],'version'=>$plan['from']];
         } finally {OperationLock::release($lock);}
     }
@@ -278,14 +307,16 @@ final class UpdateEngine
         $lock=OperationLock::acquire($this->root,true);
         try {
             if($this->journal()!==null)throw new \RuntimeException('Incomplete update; recover first');
-            $last=OperationFiles::read($this->location(self::LAST));
+            $last=$this->readPrivate($this->location(self::LAST),4096);
             if(($last['id']??null)!==$id)throw new \RuntimeException('Only the latest installed update can be rolled back');
             $plan=$this->plan($id);
             if(UpdatePackage::version($this->root)!==$plan['to'])throw new \RuntimeException('Cannot rollback unexpected installed version');
+            TrustPolicy::audit('rollback_started',['id'=>$id,'from'=>$plan['to'],'to'=>$plan['from']]);
             OperationFiles::json($this->location(self::ACTIVE),['id'=>$id,'mode'=>'rollback']);
             $this->restore($plan);
             OperationFiles::remove($this->location(self::LAST));
             OperationFiles::remove($this->location(self::ACTIVE));
+            TrustPolicy::audit('rolled_back',['id'=>$id,'from'=>$plan['to'],'to'=>$plan['from']]);
             return ['status'=>'rolled_back','id'=>$id,'version'=>$plan['from']];
         } finally {OperationLock::release($lock);}
     }
@@ -313,6 +344,6 @@ final class UpdateEngine
     {
         $last=$this->location(self::LAST);
         return ['installed_version'=>UpdatePackage::version($this->root),'pending'=>$this->journal(),
-            'last'=>is_file($last)?OperationFiles::read($last):null];
+            'last'=>is_file($last)?$this->readPrivate($last,4096):null];
     }
 }

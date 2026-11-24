@@ -32,7 +32,7 @@ php "$WORK/live/bin/cajeer" update status > "$WORK/status.json"
 php -r '$r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);if($r["installed_version"]!==$argv[2])exit(1);' "$WORK/status.json" "$NEXT_VERSION"
 # A left-behind active journal must make real HTTP PHP requests unavailable.
 ID="$(php -r '$r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);echo $r["id"];' "$WORK/installed.json" "$NEXT_VERSION")"
-php -r 'file_put_contents($argv[1],json_encode(["id"=>$argv[2],"mode"=>"install"]));' "$WORK/live/storage/app/updates/active.json" "$ID"
+php -r 'file_put_contents($argv[1],json_encode(["id"=>$argv[2],"mode"=>"install"]));chmod($argv[1],0600);' "$WORK/live/storage/app/updates/active.json" "$ID"
 HTTP_BODY="$(php -r '$_SERVER["REQUEST_URI"]="/health/ready";$_SERVER["REQUEST_METHOD"]="GET";include $argv[1];' "$WORK/live/public/index.php")"
 [[ "$HTTP_BODY" == *'CMS update in progress'* ]] || { echo 'HTTP maintenance guard failed' >&2; exit 1; }
 php "$WORK/live/bin/cajeer" update recover > "$WORK/recovered.json"

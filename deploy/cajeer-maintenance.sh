@@ -27,6 +27,7 @@ worker() {
         CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL="${CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL:-0}" \
         CAJEER_AUTO_UPDATE_GITHUB_REPO="${CAJEER_AUTO_UPDATE_GITHUB_REPO:-}" \
         CAJEER_UPDATE_TRUSTED_KEY_FILE="${CAJEER_UPDATE_TRUSTED_KEY_FILE:-}" \
+        CAJEER_UPDATE_TRUST_POLICY_FILE="${CAJEER_UPDATE_TRUST_POLICY_FILE:-}" \
         CAJEER_AUTO_UPDATE_WINDOW_UTC="${CAJEER_AUTO_UPDATE_WINDOW_UTC:-}" \
         CAJEER_AUTO_UPDATE_WORKERS_QUIESCED="$quiesced" \
         CAJEER_UPDATE_CONFIRM="${rollback_confirmation:-}" \
@@ -72,12 +73,13 @@ validate_units() {
             [[ "$mode" == control-group || "$mode" == mixed ]] || { fail "Unsafe KillMode: $unit"; return 1; }
             [[ $(prop "$unit" SendSIGKILL) == yes ]] || { fail "SendSIGKILL must be enabled: $unit"; return 1; }
             read_only=$(prop "$unit" ReadOnlyPaths) || return 1
-            [[ " $read_only " == *" $site_root "* && $(prop "$unit" NoNewPrivileges) == yes ]] || { fail "Missing code read-only mount or NoNewPrivileges: $unit"; return 1; }
+            [[ " $read_only " == *" $site_root "* && " $read_only " == *" $site_root/storage/app/updates "* && $(prop "$unit" NoNewPrivileges) == yes ]] || { fail "Missing code read-only mount or NoNewPrivileges: $unit"; return 1; }
             writable=$(prop "$unit" ReadWritePaths) || return 1
             read -r -a rw_paths <<< "$writable"
             for path in "${rw_paths[@]}"; do
                 path=${path#-}; path=${path#+}
                 case "$path" in
+                    "$site_root/storage/app/updates"|"$site_root/storage/app/updates/"*) fail "Writable update transaction storage in $unit"; return 1;;
                     "$site_root/storage"|"$site_root/storage/"*) continue;;
                     "$site_root"|"$site_root/"*) fail "Writable application code in $unit"; return 1;;
                 esac
@@ -94,6 +96,17 @@ validate_units() {
             [[ "$found" == 1 ]] || { fail "Timer must trigger exactly one managed service: $unit"; return 1; }
         fi
     done
+}
+# Require a managed external policy before any new unattended installation.
+# Recovery remains possible after key revocation and even after reverting to
+# pre-policy code. The old version remains held for operator review.
+validate_trust() {
+    [[ -n ${CAJEER_UPDATE_TRUST_POLICY_FILE:-} ]] || { fail 'Managed update trust policy required'; return 1; }
+    worker 0 trust status | /usr/bin/head -c 16384 | /usr/bin/python3 -I -c '
+import json,sys
+s=json.load(sys.stdin)
+assert s["mode"]=="managed" and len(s["active_fingerprints"])>0
+' || { fail 'Invalid or unavailable managed update trust policy'; return 1; }
 }
 # Read only bounded, validated values from the unprivileged CLI. No returned
 # path, command, environment or shell code is ever consumed by root.
@@ -290,7 +303,7 @@ cycle() {
         install) ;;
         *) fail 'Invalid maintenance decision'; return 1;;
     esac
-    validate_units && read_status && health_probe "$current_version" || return 1
+    validate_trust && validate_units && read_status && health_probe "$current_version" || return 1
     baseline=$current_version; baseline_id=$current_id
     prepare_gate && load_gate && stop_units || return 1
     worker 1 scheduler tick || rc=$?

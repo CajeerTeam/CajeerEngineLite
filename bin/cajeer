@@ -51,7 +51,9 @@ try {
         case 'update':
             $engine=new UpdateEngine($app->root);
             $action=$argv[2]??'';
-            if($action==='control' && count($argv)===4) {
+            if($action==='trust' && count($argv)===4 && $argv[3]==='status') {
+                $report=\CajeerEngine\Update\TrustPolicy::configured()->report();
+            } elseif($action==='control' && count($argv)===4) {
                 $control=new ControlCenter($app->root);
                 if($argv[3]==='status')$report=$control->status();
                 elseif($argv[3]==='work')$report=$control->work();
@@ -88,7 +90,7 @@ try {
                 $signing=getenv('CAJEER_UPDATE_SIGNING_KEY_FILE');
                 if(!is_string($signing)||!str_starts_with($signing,'/')) throw new InvalidArgumentException('Set absolute CAJEER_UPDATE_SIGNING_KEY_FILE');
                 $report=UpdatePackage::build($app->root,$argv[3],$argv[4],$signing);
-            } else throw new InvalidArgumentException('Usage: update status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
+            } else throw new InvalidArgumentException('Usage: update trust status|status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>');
             echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
             break;
         case 'security':
@@ -270,8 +272,8 @@ try {
                     elseif (str_starts_with($flag,'--evidence=')&&$evidence===null) $evidence=substr($flag,11);
                     else throw new InvalidArgumentException('Invalid production option');
                 }
-                $key=getenv('CAJEER_UPDATE_TRUSTED_KEY_FILE');
-                if (!$dir||!$key||($action==='sign-off'&&(!$live||!$evidence||getenv('CAJEER_PRODUCTION_SIGNOFF_CONFIRM')!=='I_REVIEWED_PRODUCTION_EVIDENCE'))||($action==='production-check'&&$evidence!==null)) throw new InvalidArgumentException('Production gate needs --artifacts=DIR, pinned key; sign-off also needs --live, --evidence=DIR and confirmation');
+                $key=\CajeerEngine\Update\TrustPolicy::configured();
+                if (!$dir||($action==='sign-off'&&(!$live||!$evidence||getenv('CAJEER_PRODUCTION_SIGNOFF_CONFIRM')!=='I_REVIEWED_PRODUCTION_EVIDENCE'))||($action==='production-check'&&$evidence!==null)) throw new InvalidArgumentException('Production gate needs --artifacts=DIR, pinned key; sign-off also needs --live, --evidence=DIR and confirmation');
                 $site=(new \CajeerEngine\Storage\SiteRepository($app->root))->read();
                 if ($site===null||$site['schema']!==\CajeerEngine\Storage\SiteState::SCHEMA) throw new RuntimeException('Install or explicitly migrate the site before production acceptance');
                 $report=\CajeerEngine\Release\ProductionStable::run($app->root,$site,$dir,$key,$live,$providers,$paid);
@@ -446,7 +448,7 @@ try {
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
                  "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer monitor check|status [--minutes=60] [--verify-backup]\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\nphp bin/cajeer compatibility check [--json] | compatibility migration preview|apply\n".
-                 "php bin/cajeer update status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
+                 "php bin/cajeer update trust status|status|control status|control work|scheduler status|scheduler tick|maintenance plan|maintenance recover|maintenance verify|auto status|auto check|auto run|verify <package>|install <package>|recover|rollback <id>|package <candidate-dir> <output>\n".
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".

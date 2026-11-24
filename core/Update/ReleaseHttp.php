@@ -19,7 +19,7 @@ class ReleaseHttp
     /** @return array{status:int,headers:array<string,string>,stream:resource} */
     protected function open(string $url, string $accept, ?string $etag = null): array
     {
-        $headers=['User-Agent: CajeerEngineLite-Update/1.5.6','Accept: '.$accept,'Connection: close'];
+        $headers=['User-Agent: CajeerEngineLite-Update/1.5.7','Accept: '.$accept,'Connection: close'];
         if ($etag !== null) {
             if (!self::validEtag($etag)) throw new \RuntimeException('Invalid release ETag');
             $headers[] = 'If-None-Match: '.$etag;
@@ -49,7 +49,7 @@ class ReleaseHttp
         }
         return ['status'=>(int)$m[1],'headers'=>$map,'stream'=>$stream];
     }
-    /** @return resource */
+    /** @return array{status:int,headers:array<string,string>,stream:resource} */
     private function follow(string $url,string $accept): mixed
     {
         for($i=0;$i<5;$i++) {
@@ -61,6 +61,8 @@ class ReleaseHttp
                 $target=$reply['headers']['location']??null;
                 if(!is_string($target)||!str_starts_with($target,'https://')) throw new \RuntimeException('Invalid GitHub redirect');
                 self::assertSafeUrl($target);
+                $host=strtolower((string)parse_url($target,PHP_URL_HOST));
+                if(!in_array($host,['release-assets.githubusercontent.com','objects.githubusercontent.com','github-releases.githubusercontent.com'],true))throw new \RuntimeException('Untrusted release asset redirect');
                 $url=$target;
                 continue;
             }
@@ -68,7 +70,7 @@ class ReleaseHttp
             if(($reply['headers']['content-encoding']??'identity')!=='identity') {
                 fclose($reply['stream']);throw new \RuntimeException('Compressed releases are not supported');
             }
-            return $reply['stream'];
+            return $reply;
         }
         throw new \RuntimeException('Too many GitHub redirects');
     }
@@ -122,7 +124,9 @@ class ReleaseHttp
         $stream=null;$success=false;
         try {
             if(!chmod($destination,0600)) throw new \RuntimeException('Cannot secure update download');
-            $stream=$this->follow($url,'application/octet-stream');
+            $reply=$this->follow($url,'application/octet-stream');$stream=$reply['stream'];
+            $length=$reply['headers']['content-length']??null;
+            if($length!==null&&(!ctype_digit($length)||(float)$length!== (float)$expectedSize))throw new \RuntimeException('Release asset Content-Length mismatch');
             $hash=hash_init('sha256');$total=0;$deadline=hrtime(true)+120_000_000_000;
             while(!feof($stream)) {
                 $data=fread($stream,65536);

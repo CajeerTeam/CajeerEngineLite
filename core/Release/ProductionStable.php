@@ -4,7 +4,7 @@ namespace CajeerEngine\Release;
 
 use CajeerEngine\Lite;
 use CajeerEngine\Monitoring\OperationalHealth;
-use CajeerEngine\Update\{OperationFiles,OperationLock,UpdatePackage,DistributionIndex};
+use CajeerEngine\Update\{OperationFiles,OperationLock,UpdatePackage,DistributionIndex,TrustPolicy};
 use CajeerEngine\Storage\SiteRepository;
 
 /** Operator-only acceptance. Signed build evidence and human attestation are distinct. */
@@ -54,13 +54,13 @@ final class ProductionStable
         return $result;
     }
     /** Verify the complete artifact set and exact installed executable/template inventory. */
-    public static function artifacts(string $root,string $dir,string $keyPath): array {
+    public static function artifacts(string $root,string $dir,string|TrustPolicy $keyPath): array {
         if (!is_dir($dir)||is_link($dir)) throw new \RuntimeException('Invalid release directory');
         $sums=self::read(OperationFiles::path($dir,'SHA256SUMS'),4096);
         $signature=self::read(OperationFiles::path($dir,'SHA256SUMS.sig'),16384);
-        $key=openssl_pkey_get_public(self::read($keyPath,16384));
-        $details=$key instanceof \OpenSSLAsymmetricKey?openssl_pkey_get_details($key):false;
-        if (!is_array($details)||$details['type']!==OPENSSL_KEYTYPE_RSA||$details['bits']<2048||openssl_verify($sums,$signature,$key,OPENSSL_ALGO_SHA256)!==1) throw new \RuntimeException('Release checksum signature invalid');
+        $policy=$keyPath instanceof TrustPolicy?$keyPath:TrustPolicy::single($keyPath);
+        $fingerprint=$policy->verify($sums,$signature);
+        $policy->assertTarget(Lite::VERSION);
         $version=Lite::VERSION;$package="CajeerEngineLite-$version.cjrupdate";$zip="CajeerEngineLite-$version.zip";
         $expected=[$package,$zip,'release-report.json'];$hashes=[];
         foreach (explode("\n",rtrim($sums,"\n")) as $line) {
@@ -75,7 +75,7 @@ final class ProductionStable
         $verified=UpdatePackage::verify(OperationFiles::path($dir,$package),$keyPath);
         $required=['zip_inventory','fresh_install','loopback_http','signature','exact_upgrade','site_preserved','populated_site_media_preserved','backup_verified_before_after_rollback','rollback','tamper_rejected'];
         if (($receipt['to']??null)!==$version||($receipt['schema']??null)!==14||($receipt['production_accepted']??null)!==false||
-            ($receipt['key_sha256']??null)!==hash('sha256',$details['key'])||$verified['key_sha256']!==$receipt['key_sha256']||
+            ($receipt['key_sha256']??null)!==$fingerprint||$verified['key_sha256']!==$receipt['key_sha256']||
             $verified['manifest']['to']!==$version||$verified['manifest']['from']!==($receipt['from']??null)||$verified['package_sha256']!==$hashes[$package]||
             !is_array($receipt['checks']??null)||array_diff($required,$receipt['checks'])||!is_array($receipt['runtime_files']??null)) throw new \RuntimeException('Invalid signed rehearsal receipt');
         $inventory=self::inventory($root);$signed=$receipt['runtime_files'];ksort($signed,SORT_STRING);
@@ -119,7 +119,7 @@ final class ProductionStable
         $versions=[];foreach ($headers as $line) if (preg_match('/^X-Cajeer-Release:\s*(\S+)\s*$/i',$line,$m)) $versions[]=$m[1];
         return $versions===[Lite::VERSION]&&preg_match('~^HTTP/\S+ 200(?: |$)~',$headers[0]??'')===1&&$body==='{"status":"ready"}';
     }
-    public static function run(string $root,array $site,string $dir,string $key,bool $live,array $providers,bool $paid): array {
+    public static function run(string $root,array $site,string $dir,string|TrustPolicy $key,bool $live,array $providers,bool $paid): array {
         if ($live&&getenv('CAJEER_PRODUCTION_LIVE_CONFIRM')!=='LIVE') throw new \InvalidArgumentException('Live checks require CAJEER_PRODUCTION_LIVE_CONFIRM=LIVE');
         $artifact=self::artifacts($root,$dir,$key);
         $required=self::requiredProviders($site);

@@ -10,15 +10,18 @@ final class DistributionIndex
     public static function version(mixed $v): bool {
         return is_string($v)&&strlen($v)<=32&&preg_match('/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/D',$v)===1;
     }
-    public static function verify(string $raw,string $target,string $keyPath): array {
+    public static function verify(string $raw,string $target,string|TrustPolicy $keyPath): array {
         if(strlen($raw)>self::MAX_BYTES)throw new \RuntimeException('Distribution index exceeds limit');
         $envelope=json_decode($raw,true,16,JSON_THROW_ON_ERROR);
         if(!is_array($envelope)||count($envelope)!==2||!is_string($envelope['payload']??null)||!is_string($envelope['signature']??null))throw new \RuntimeException('Invalid distribution envelope');
         $payload=base64_decode($envelope['payload'],true);$sig=base64_decode($envelope['signature'],true);
         if($payload===false||$sig===false||strlen($sig)>16384)throw new \RuntimeException('Invalid distribution encoding');
-        $pem=UpdatePackage::readRegular($keyPath,16384);
-        $key=openssl_pkey_get_public($pem);$details=$key instanceof \OpenSSLAsymmetricKey?openssl_pkey_get_details($key):false;
-        if(!is_array($details)||$details['type']!==OPENSSL_KEYTYPE_RSA||$details['bits']<2048||openssl_verify($payload,$sig,$key,OPENSSL_ALGO_SHA256)!==1)throw new \RuntimeException('Invalid distribution index signature');
+        $policy=$keyPath instanceof TrustPolicy?$keyPath:TrustPolicy::single($keyPath);
+        try {
+            $fingerprint=$policy->verify($payload,$sig);
+            $policy->assertTarget($target);
+            TrustPolicy::audit('distribution_verified',['to'=>$target,'key_sha256'=>$fingerprint]);
+        } catch(\Throwable $e) {TrustPolicy::audit('distribution_rejected');throw $e;}
         $data=json_decode($payload,true,16,JSON_THROW_ON_ERROR);
         if(!is_array($data)||($data['format']??null)!==1||($data['product']??null)!=='CajeerEngineLite'||($data['to']??null)!==$target||!self::version($target)||!is_array($data['packages']??null)||!array_is_list($data['packages'])||count($data['packages'])<1||count($data['packages'])>16)throw new \RuntimeException('Invalid signed distribution index');
         $seen=[];$names=[];
@@ -44,8 +47,7 @@ final class DistributionIndex
     }
     public function __construct(private readonly string $root,private readonly ReleaseHttp $http){}
     public function edges(array $release,string $repo): array {
-        $key=getenv('CAJEER_UPDATE_TRUSTED_KEY_FILE');
-        if(!is_string($key)||!str_starts_with($key,'/'))throw new \RuntimeException('Configure absolute CAJEER_UPDATE_TRUSTED_KEY_FILE for signed distribution');
+        $key=TrustPolicy::configured();
         $tag=$release['tag_name'];$version=ltrim($tag,'v');
         $index=self::asset($release,$repo,self::NAME,self::MAX_BYTES);
         $dir=OperationFiles::path($this->root,'storage/app/updates/auto/downloads');OperationFiles::dir($dir,0700);

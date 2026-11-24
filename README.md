@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.6
+# CajeerEngine Lite Edition 1.5.7
 
+
+### 1.5.7 — Update Security Hardening
+
+Operator-provisioned, root-owned trust policy with up to eight RSA public keys, overlapping rotation, explicit revocation and a minimum permitted target version. Package, distribution index and production artifact checks use the same policy; invalid configured policies never fall back to legacy trust. Automatic installation requires managed trust (legacy direct CLI only with explicit compatibility opt-in). The separately deployed supervisor requires read-only update transaction storage in managed services and managed trust for new installs. See [UPDATE_SECURITY_HARDENING.md](UPDATE_SECURITY_HARDENING.md) for the mandatory manual supervisor/guard upgrade. Schema 14 unchanged.
 
 ### 1.5.6 — Automatic Health & Rollback
 

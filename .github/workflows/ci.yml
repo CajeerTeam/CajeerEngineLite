@@ -74,6 +74,7 @@ jobs:
       - run: php tests/core_152.php
       - run: php tests/core_153.php
       - run: php tests/core_154.php
+      - run: sudo -n "$(command -v php)" tests/core_157.php
       - run: bash tests/update_scheduler_cli_154.sh
       - run: bash tests/maintenance_orchestration_155.sh
       - run: bash tests/maintenance_cli_155.sh
@@ -198,6 +199,7 @@ jobs:
       - run: php tests/core_152.php
       - run: php tests/core_153.php
       - run: php tests/core_154.php
+      - run: sudo -n "$(command -v php)" tests/core_157.php
       - run: bash tests/update_scheduler_cli_154.sh
       - run: bash tests/maintenance_orchestration_155.sh
       - run: bash tests/maintenance_cli_155.sh

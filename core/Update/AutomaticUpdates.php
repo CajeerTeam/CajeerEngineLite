@@ -126,6 +126,9 @@ final class AutomaticUpdates
                 catch(\Throwable $logError) {error_log('Auto update status write failed after recovery');}
                 return ['action'=>'recovered','result'=>$result];
             }
+            if(!TrustPolicy::managedConfigured()&&!self::flag('CAJEER_UPDATE_ALLOW_LEGACY_AUTO'))
+                throw new \RuntimeException('Managed update trust policy required for automatic installation');
+            if(!TrustPolicy::managedConfigured())TrustPolicy::audit('legacy_auto_opt_in');
             // Re-evaluate the window after locking; cron may start near its end.
             if(!$this->within($window))return ['action'=>'outside_window','version'=>UpdatePackage::version($this->root)];
             $result=$this->fetch($channel);
