@@ -1,4 +1,4 @@
-# CajeerEngine Lite 1.4.6 — Compatibility Assurance
+# CajeerEngine Lite 1.4.8 — Compatibility Assurance
 
 ## Supported configurations
 
@@ -43,3 +43,7 @@ python tests/browser_146.py --browser webkit
 ```
 
 Run the native Nginx/Apache configuration lint with deployed certificate/socket paths, then test real TLS and real reverse proxy behavior in staging. The sample config files are not automatically installed and must be adapted to your environment. Unverified matrix entries must not be reported as production certified.
+
+## Release artifact compatibility
+
+The 1.4.8 builder rehearses the exact signed transition using the base updater and rejects omitted runtime paths. See RELEASE.md and UPGRADE.md. Python 3.11+ and OpenSSL CLI are build tools; no Python runtime is needed to run the CMS. A passing release rehearsal is not proof of all PHP/browser/FPM matrix combinations.

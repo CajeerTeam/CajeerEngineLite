@@ -1,0 +1,172 @@
+name: Signed Lite release
+# Manual dispatch on a protected version tag, never on an untrusted PR.
+on:
+  workflow_dispatch:
+    inputs:
+      base_tag:
+        description: 'Exact previous release tag (e.g. v1.4.7)'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: cajeer-official-release
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      base_sha: ${{ steps.versions.outputs.base_sha }}
+      target_sha: ${{ steps.versions.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate exact version and ancestry
+        id: versions
+        env:
+          BASE_TAG: ${{ inputs.base_tag }}
+          TARGET_TAG: ${{ github.ref_name }}
+          TARGET_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          pattern='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          [[ "$TARGET_REF" == refs/tags/* && "$TARGET_TAG" =~ $pattern && "$BASE_TAG" =~ $pattern ]]
+          [[ "$(cat VERSION)" == "${TARGET_TAG#v}" ]]
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse "refs/tags/$TARGET_TAG^{commit}")" ]]
+          [[ "$(git show "refs/tags/$BASE_TAG:VERSION")" == "${BASE_TAG#v}" ]]
+          git merge-base --is-ancestor "refs/tags/$BASE_TAG" HEAD
+          [[ "$(git rev-parse "refs/tags/$BASE_TAG^{commit}")" != "$(git rev-parse HEAD)" ]]
+          echo "base_sha=$(git rev-parse "refs/tags/$BASE_TAG^{commit}")" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  ci:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+  rehearsal:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and install exact tag pair with disposable key
+        env:
+          BASE_SHA: ${{ needs.validate.outputs.base_sha }}
+          TARGET_SHA: ${{ needs.validate.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          mkdir "$work/base" "$work/next"
+          [[ "$(git rev-parse HEAD)" == "$TARGET_SHA" ]]
+          git archive "$BASE_SHA" | tar -x -C "$work/base"
+          git archive "$TARGET_SHA" | tar -x -C "$work/next"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$work/test.pem"
+          openssl pkey -in "$work/test.pem" -pubout -out "$work/trust.pem"
+          python3 tests/release_build_148.py --base "$work/base" --candidate "$work/next" \
+            --output "$work/result" --signing-key "$work/test.pem" --trusted-key "$work/trust.pem" \
+            --base-commit "$BASE_SHA" --target-commit "$TARGET_SHA"
+  sign:
+    needs: [validate, ci, rehearsal]
+    runs-on: ubuntu-latest
+    # Configure required reviewers and protected tag deployment rules before use.
+    environment: release-signing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Sign and verify final artifacts
+        env:
+          BASE_SHA: ${{ needs.validate.outputs.base_sha }}
+          TARGET_SHA: ${{ needs.validate.outputs.target_sha }}
+          SIGNING_KEY: ${{ secrets.CAJEER_RELEASE_PRIVATE_KEY }}
+          TRUSTED_KEY: ${{ vars.CAJEER_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          [[ -n "$SIGNING_KEY" && -n "$TRUSTED_KEY" ]]
+          printf '%s\n' "$SIGNING_KEY" > "$work/private.pem"
+          printf '%s\n' "$TRUSTED_KEY" > "$work/trust.pem"
+          unset SIGNING_KEY TRUSTED_KEY
+          mkdir "$work/base" "$work/next"
+          [[ "$(git rev-parse HEAD)" == "$TARGET_SHA" ]]
+          git archive "$BASE_SHA" | tar -x -C "$work/base"
+          git archive "$TARGET_SHA" | tar -x -C "$work/next"
+          python3 tests/release_build_148.py --base "$work/base" --candidate "$work/next" \
+            --output "$RUNNER_TEMP/cajeer-release" --signing-key "$work/private.pem" --trusted-key "$work/trust.pem" \
+            --base-commit "$BASE_SHA" --target-commit "$TARGET_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/cajeer-release/*
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: [validate, sign]
+    runs-on: ubuntu-latest
+    environment: release-publish
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-release-${{ github.run_id }}
+          path: release
+      - name: Verify signature and publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_TAG: ${{ github.ref_name }}
+          BASE_TAG: ${{ inputs.base_tag }}
+          TARGET_SHA: ${{ needs.validate.outputs.target_sha }}
+          BASE_SHA: ${{ needs.validate.outputs.base_sha }}
+          TRUSTED_KEY: ${{ vars.CAJEER_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          [[ -n "$TRUSTED_KEY" ]]
+          printf '%s\n' "$TRUSTED_KEY" > "$work/trust.pem"
+          unset TRUSTED_KEY
+          cd release
+          version=${TARGET_TAG#v}
+          base=${BASE_TAG#v}
+          [[ $(find . -maxdepth 1 -type f | wc -l) == 5 ]]
+          openssl dgst -sha256 -verify "$work/trust.pem" -signature SHA256SUMS.sig SHA256SUMS
+          diff -u <(printf '%s\n' "CajeerEngineLite-$version.cjrupdate" "CajeerEngineLite-$version.zip" release-report.json | sort) <(awk '{print $2}' SHA256SUMS | sort)
+          sha256sum --strict -c SHA256SUMS
+          jq -e --arg to "$version" --arg from "$base" --arg target_sha "$TARGET_SHA" --arg base_sha "$BASE_SHA" \
+            '.to == $to and .from == $from and .target_commit == $target_sha and .base_commit == $base_sha and .production_accepted == false' release-report.json >/dev/null
+          [[ -s "CajeerEngineLite-$version.cjrupdate" && -s "CajeerEngineLite-$version.zip" ]]
+          # Resolve the immutable tag to its commit; annotated and lightweight tags work.
+          [[ "$(gh api "repos/$GH_REPO/commits/$TARGET_TAG" --jq .sha)" == "$TARGET_SHA" ]]
+          [[ "$(gh api "repos/$GH_REPO/commits/$BASE_TAG" --jq .sha)" == "$BASE_SHA" ]]
+          # Fail if any release for this tag exists; never overwrite an official asset.
+          if gh release view "$TARGET_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; inspect it manually.' >&2; exit 1
+          fi
+          gh release create "$TARGET_TAG" --verify-tag --draft --title "CajeerEngine Lite $version" \
+            --notes "Signed incremental update from $base, full clean-install ZIP, SHA-256 signature and automated rehearsal report. Production sign-off is separate." \
+            "CajeerEngineLite-$version.cjrupdate" "CajeerEngineLite-$version.zip" SHA256SUMS SHA256SUMS.sig release-report.json
+          gh release edit "$TARGET_TAG" --draft=false

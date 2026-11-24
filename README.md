@@ -1,5 +1,13 @@
-# CajeerEngine Lite Edition 1.4.7
+# CajeerEngine Lite Edition 1.4.8
 
+
+### 1.4.8 — Documentation & Release Engineering
+
+The release builder `tests/release_build_148.py` creates the official signed incremental `.cjrupdate`, deterministic full installation ZIP, rehearsal report and signed checksums from two clean source exports. It verifies the complete managed diff against the old updater, installs both the clean ZIP and exact upgrade on disposable sites, checks real loopback HTTP, rolls back and rejects tampered packages. A protected GitHub Actions workflow runs full CI and exact-tag rehearsal before signing and draft publication. No key is included; schema stays 14. Local checks do not certify production.
+
+**Current operator documentation:** [INSTALL](INSTALL.md) · [UPGRADE](UPGRADE.md) · [BACKUP_RECOVERY](BACKUP_RECOVERY.md) · [SECURITY](SECURITY.md) · [COMPATIBILITY](COMPATIBILITY.md) · [OPERATIONS](OPERATIONS.md) · [RELEASE](RELEASE.md) · [CHANGELOG](CHANGELOG.md) · [PRODUCTION_ACCEPTANCE](PRODUCTION_ACCEPTANCE.md). For fresh deployments and upgrades, use these runbooks rather than historical release-specific instructions below.
+
+Test: `python3 tests/release_engineering_148.py`. See RELEASE.md for key provisioning, artifact checks and protected workflow setup.
 
 ### 1.4.7 — Operational Reliability (monitoring, diagnostics, load regression)
 
