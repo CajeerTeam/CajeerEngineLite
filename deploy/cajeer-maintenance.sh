@@ -29,6 +29,7 @@ worker() {
         CAJEER_UPDATE_TRUSTED_KEY_FILE="${CAJEER_UPDATE_TRUSTED_KEY_FILE:-}" \
         CAJEER_AUTO_UPDATE_WINDOW_UTC="${CAJEER_AUTO_UPDATE_WINDOW_UTC:-}" \
         CAJEER_AUTO_UPDATE_WORKERS_QUIESCED="$quiesced" \
+        CAJEER_UPDATE_CONFIRM="${rollback_confirmation:-}" \
         /usr/bin/php "$site_root/bin/cajeer" update "$@" 9>&-
 }
 
@@ -51,6 +52,14 @@ configure() {
         if [[ "$unit" == *.timer ]]; then timers+=("$unit"); else services+=("$unit"); fi
     done
     units=("${timers[@]}" "${services[@]}")
+    health_host=${CAJEER_MAINTENANCE_HEALTH_HOST:-}
+    health_port=${CAJEER_MAINTENANCE_HEALTH_PORT:-8443}
+    health_ca=${CAJEER_MAINTENANCE_HEALTH_CA_FILE:-}
+    # Configuration is root-owned. Never derive an address or CA from CMS data.
+    [[ "$health_host" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ && ${#health_host} -le 253 && "$health_host" != *..* && "$health_port" =~ ^[1-9][0-9]{0,4}$ && "$health_port" -le 65535 ]] || { fail 'Configure a canonical HTTPS health host and loopback port'; return 1; }
+    if [[ -n "$health_ca" ]]; then
+        [[ "$health_ca" == /* && -f "$health_ca" && ! -L "$health_ca" && $(stat -c '%u' "$health_ca") == 0 && $(stat -c '%a' "$health_ca") =~ ^[46][04][04]$ ]] || { fail 'Health CA must be a root-owned non-writable-by-others regular file'; return 1; }
+    fi
 }
 validate_units() {
     local unit mode condition load trigger candidate found path read_only writable
@@ -86,30 +95,94 @@ validate_units() {
         fi
     done
 }
+# Read only bounded, validated values from the unprivileged CLI. No returned
+# path, command, environment or shell code is ever consumed by root.
+read_status() {
+    local line
+    line=$(worker 0 status | /usr/bin/head -c 16384 | /usr/bin/python3 -I -c '
+import json,re,sys
+s=json.load(sys.stdin)
+v=s["installed_version"]; last=s["last"]
+version=lambda x: isinstance(x,str) and re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)",x) and len(x)<=64
+assert version(v) and s["pending"] is None
+if last is None: print(v,"- - -")
+else:
+    assert isinstance(last["id"],str) and re.fullmatch(r"[0-9a-f]{24}",last["id"]) and version(last["from"]) and version(last["to"])
+    print(v,last["id"],last["from"],last["to"])
+') || return 1
+    read -r current_version current_id current_from current_to <<< "$line"
+    [[ -n "$current_version" && -n "$current_id" ]] || return 1
+}
+health_probe() {
+    local version=$1 tmp code headers attempt
+    local -a ca=()
+    [[ -z "$health_ca" ]] || ca=(--cacert "$health_ca")
+    tmp=$(/usr/bin/mktemp -d "$runtime_dir/.health.XXXXXXXX") || return 1
+    for attempt in 1 2 3 4 5; do
+        # Fixed loopback destination, canonical TLS SNI/Host, no redirect,
+        # no proxy or curlrc, bounded response. Never send credentials.
+        if code=$(/usr/bin/curl --disable --noproxy '*' --proto '=https' \
+            --connect-to "$health_host:443:127.0.0.1:$health_port" \
+            --connect-timeout 2 --max-time 5 --max-filesize 4096 \
+            --silent --show-error "${ca[@]}" --header 'Cache-Control: no-cache' \
+            --dump-header "$tmp/headers" --output "$tmp/body" --write-out '%{http_code}' \
+            "https://$health_host/health/ready" 2>/dev/null) && [[ "$code" == 200 ]] && \
+            /usr/bin/python3 -I - "$tmp/headers" "$tmp/body" "$version" 2>/dev/null <<'PYHEALTH'
+import json,sys
+from pathlib import Path
+h,b,v=sys.argv[1:]
+headers=Path(h).read_text(encoding='iso-8859-1').splitlines()
+assert len(headers)>0 and headers[0].split()[1]=='200'
+def values(name):
+    return [x.split(':',1)[1].strip() for x in headers if x.lower().startswith(name+':')]
+assert values('x-cajeer-release')==[v]
+assert len(values('content-type'))==1 and values('content-type')[0].split(';')[0].strip().lower()=='application/json'
+assert any('no-store' in [i.strip().lower() for i in x.split(',')] for x in values('cache-control'))
+assert json.loads(Path(b).read_bytes())=={'status':'ready'}
+PYHEALTH
+        then
+            rm -rf -- "$tmp"; log "HTTPS readiness passed for $version"; return 0
+        fi
+        [[ $attempt == 5 ]] || sleep 2
+    done
+    rm -rf -- "$tmp"; fail "HTTPS readiness failed for $version"
+}
+# The gate itself contains the baseline and rollback intent. Atomic replacement
+# keeps the public gate continuously present across phase changes and crashes.
+write_gate() {
+    local tmp i
+    tmp=$(/usr/bin/mktemp "$state_dir/.active.XXXXXXXX") || return 1
+    if ! { printf '%s\n' 'cajeer-maintenance-v2' "$baseline $baseline_id $phase" > "$tmp" && \
+        for i in "${!units[@]}"; do printf '%s %s\n' "${previous[i]}" "${units[i]}"; done >> "$tmp" && \
+        chmod 0644 "$tmp" && /usr/bin/sync -f "$tmp" && mv -T "$tmp" "$state_dir/active" && /usr/bin/sync -f "$state_dir"; }; then
+        rm -f -- "$tmp"; return 1
+    fi
+}
 prepare_gate() {
-    local unit status tmp
-    local -a entries=()
+    local unit status
+    previous=()
     for unit in "${units[@]}"; do
         status=$(prop "$unit" ActiveState) || return 1
         [[ "$status" == active || "$status" == inactive ]] || { fail "Unit not in a stable state: $unit"; return 1; }
         [[ "$unit" != "$fpm" || "$status" == active ]] || { fail 'FPM must be active before a new update'; return 1; }
-        entries+=("$status $unit")
+        previous+=("$status")
     done
-    tmp=$(/usr/bin/mktemp "$state_dir/.active.XXXXXXXX") || return 1
-    if ! { printf '%s\n' 'cajeer-maintenance-v1' "${entries[@]}" > "$tmp" && chmod 0644 "$tmp" && /usr/bin/sync -f "$tmp" && mv -T "$tmp" "$state_dir/active" && /usr/bin/sync -f "$state_dir"; }; then
-        rm -f -- "$tmp"; return 1
-    fi
+    phase=check
+    write_gate || return 1
     log 'Persistent HTTP maintenance gate published'
 }
 load_gate() {
     local -a lines=()
     [[ ! -L "$state_dir/active" && -f "$state_dir/active" && $(stat -c '%u:%a:%h' "$state_dir/active") == "$EUID:644:1" ]] || { fail 'Unsafe maintenance journal'; return 1; }
     mapfile -t lines < "$state_dir/active"
-    [[ ${#lines[@]} == $((${#units[@]}+1)) && ${lines[0]} == cajeer-maintenance-v1 ]] || { fail 'Invalid maintenance journal'; return 1; }
+    [[ ${#lines[@]} == $((${#units[@]}+2)) && ${lines[0]} == cajeer-maintenance-v2 ]] || { fail 'Invalid or legacy maintenance journal; operator recovery required'; return 1; }
+    local extra
+    read -r baseline baseline_id phase extra <<< "${lines[1]}"
+    [[ "$baseline" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && ( "$baseline_id" == - || "$baseline_id" =~ ^[a-f0-9]{24}$ ) && ( "$phase" == check || "$phase" == rollback ) && -z "$extra" ]] || { fail 'Invalid health recovery state'; return 1; }
     previous=()
     local i value
     for i in "${!units[@]}"; do
-        value=${lines[i+1]}
+        value=${lines[i+2]}
         case "$value" in
             "active ${units[i]}") previous+=(active);;
             "inactive ${units[i]}") previous+=(inactive);;
@@ -132,37 +205,84 @@ stop_units() {
     done
     log 'All managed services stopped'
 }
-restore_services() {
-    # Recover first, then use a new PHP process to verify the actual runtime.
-    worker 1 maintenance recover || return 1
+# Keep background jobs stopped until the new FPM serves verified readiness.
+start_and_probe() {
     worker 1 maintenance verify || return 1
     : > "$runtime_dir/start-permitted" || return 1
     chmod 0644 "$runtime_dir/start-permitted" || return 1
+    system start -- "$fpm" && [[ $(prop "$fpm" ActiveState) == active ]] && health_probe "$current_version" || { rm -f -- "$runtime_dir/start-permitted"; return 1; }
     local i unit
-    for ((i=${#units[@]}-1;i>=0;i--)); do
+    for ((i=${#units[@]}-2;i>=0;i--)); do
         unit=${units[i]}
         if [[ ${previous[i]} == active ]]; then
-            system start -- "$unit" || { rm -f -- "$runtime_dir/start-permitted"; return 1; }
-            [[ $(prop "$unit" ActiveState) == active ]] || { rm -f -- "$runtime_dir/start-permitted"; fail "Service did not restart: $unit"; return 1; }
+            system start -- "$unit" && [[ $(prop "$unit" ActiveState) == active ]] || { rm -f -- "$runtime_dir/start-permitted"; return 1; }
         fi
     done
-    # FPM must still be active after background service dependencies start.
-    [[ $(prop "$fpm" ActiveState) == active ]] || { rm -f -- "$runtime_dir/start-permitted"; fail 'FPM not active after restart'; return 1; }
-    # Remove durable gate only after services have actually started. If power
-    # fails before this point, the next invocation follows the recovery branch.
+    [[ $(prop "$fpm" ActiveState) == active ]] && health_probe "$current_version" || { rm -f -- "$runtime_dir/start-permitted"; return 1; }
+}
+finish_gate() {
     rm -f -- "$state_dir/active" || return 1
     /usr/bin/sync -f "$state_dir" || return 1
     rm -f -- "$runtime_dir/start-permitted" || return 1
-    log 'Services restored; HTTP maintenance gate removed'
+    log 'Services restored and healthy; HTTP maintenance gate removed'
+}
+# Only roll back the exact new engine transaction from this lifecycle. Never
+# guess an ID or roll back an earlier unrelated install. Recovery is idempotent
+# even if the process died during rollback or before the old FPM restarted.
+identify_candidate() {
+    read_status || return 1
+    if [[ "$current_version" == "$baseline" ]]; then
+        # Same version: previous transaction or a completed recovery/rollback.
+        [[ "$current_id" == "$baseline_id" || "$current_id" == - ]] || { fail 'Unexpected same-version update transaction'; return 1; }
+        candidate=0
+    else
+        [[ "$current_id" != - && "$current_id" != "$baseline_id" && "$current_from" == "$baseline" && "$current_to" == "$current_version" ]] || { fail 'Cannot identify exact update transaction'; return 1; }
+        candidate=1
+    fi
+}
+rollback_and_resume() {
+    phase=rollback
+    write_gate || return 1
+    # Persistent hold survives rollback to older PHP code and host reboot.
+    # Require explicit operator acknowledgement before retrying any update.
+    local tmp
+    tmp=$(/usr/bin/mktemp "$state_dir/.hold.XXXXXXXX") || return 1
+    if ! { printf 'Automatic health rollback; baseline %s\n' "$baseline" > "$tmp" && /usr/bin/sync -f "$tmp" && mv -T "$tmp" "$state_dir/hold" && /usr/bin/sync -f "$state_dir"; }; then
+        rm -f -- "$tmp"; return 1
+    fi
+    stop_units && worker 1 maintenance recover && identify_candidate || return 1
+    if [[ "$candidate" == 1 ]]; then
+        log "Rolling back transaction $current_id ($current_version -> $baseline)"
+        rollback_confirmation=ROLLBACK worker 1 rollback "$current_id" || return 1
+    fi
+    identify_candidate && [[ "$candidate" == 0 ]] || return 1
+    if ! start_and_probe; then stop_units || return 1; fail 'Rollback version failed readiness; gate retained'; return 1; fi
+    finish_gate || return 1
+    log 'Previous version healthy; automatic updates held pending operator review'
+    return 3
+}
+restore_services() {
+    worker 1 maintenance recover && identify_candidate || return 1
+    if [[ "$phase" == rollback ]]; then rollback_and_resume || return $?; return 0; fi
+    if start_and_probe; then finish_gate; return $?; fi
+    if [[ "$candidate" == 1 ]]; then rollback_and_resume || return $?; return 0; fi
+    # Baseline itself is unhealthy, or no update was installed. Never roll
+    # back a pre-existing transaction. Keep the gate for operator/retry.
+    stop_units || return 1
+    fail 'Baseline failed verification; maintenance gate retained'
 }
 cycle() {
     local decision rc=0
     if [[ -e "$state_dir/active" || -L "$state_dir/active" ]]; then
         log 'Recovering interrupted maintenance before scheduling any new job'
-        validate_units && load_gate && stop_units && restore_services || return 1
+        validate_units && load_gate && stop_units || return 1
+        restore_services || return $?
         return 0
     fi
     rm -f -- "$runtime_dir/start-permitted" || return 1
+    if [[ -e "$state_dir/hold" || -L "$state_dir/hold" ]]; then
+        fail 'Automatic updates held after rollback; operator review required'; return 1
+    fi
     decision=$(worker 0 maintenance plan | /usr/bin/head -c 32) || return 1
     case "$decision" in
         tick) worker 0 scheduler tick; return $?;;
@@ -170,12 +290,11 @@ cycle() {
         install) ;;
         *) fail 'Invalid maintenance decision'; return 1;;
     esac
-    validate_units && prepare_gate && load_gate && stop_units || return 1
+    validate_units && read_status && health_probe "$current_version" || return 1
+    baseline=$current_version; baseline_id=$current_id
+    prepare_gate && load_gate && stop_units || return 1
     worker 1 scheduler tick || rc=$?
-    # Do not replay the install even if the child failed. Recover only an
-    # outstanding engine transaction, restart the original service set, and
-    # propagate the failure for journald/monitoring.
-    restore_services || return 1
+    restore_services || return $?
     return "$rc"
 }
 main() {

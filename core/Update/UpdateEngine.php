@@ -289,6 +289,26 @@ final class UpdateEngine
             return ['status'=>'rolled_back','id'=>$id,'version'=>$plan['from']];
         } finally {OperationLock::release($lock);}
     }
+    /** Called during offline maintenance with the exclusive operations lease held. */
+    public function verifyCurrentSnapshot(): bool
+    {
+        if(!OperationLock::exclusiveHeld($this->root))throw new \RuntimeException('Exclusive operations lease required for verification');
+        $status=$this->status();
+        if($status['pending']!==null)throw new \RuntimeException('Incomplete update');
+        $last=$status['last'];
+        if($last===null)return false; // Manual installations have no engine snapshot.
+        if(!is_string($last['id']??null)||!is_string($last['to']??null))throw new \RuntimeException('Invalid installed update receipt');
+        $plan=$this->plan($last['id']);
+        if($plan['from']!==($last['from']??null)||$plan['to']!==$last['to'])throw new \RuntimeException('Installed update plan mismatch');
+        if($plan['to']!==$status['installed_version']) {
+            // A manually overlaid newer release can retain an older receipt.
+            // Never claim that receipt covers the new runtime.
+            if(version_compare($plan['to'],$status['installed_version'],'<'))return false;
+            throw new \RuntimeException('Installed update receipt mismatch');
+        }
+        $this->validateInstalled($plan,true);
+        return true;
+    }
     public function status(): array
     {
         $last=$this->location(self::LAST);

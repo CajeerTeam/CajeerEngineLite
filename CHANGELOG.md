@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.6 — Automatic Health & Rollback
+
+- Mandatory baseline and post-install TLS readiness/version validation via loopback-only vhost; public HTTP maintenance gate remains active until the original service set is healthy.
+- Offline verification of all files covered by the latest installed update plan, under exclusive operations lease.
+- Exact-transaction automatic rollback, durable rollback intent, prior-release re-probe and persistent operator hold; failed recovery retains the gate.
+- Separate privileged bootstrap upgrade, native web-server checks and real TLS/signed rollback integration tests. Schema 14 unchanged.
+
 ## 1.5.5 — Maintenance Orchestration
 
 - Root-owned external systemd supervisor, persistent HTTP 503 gate, startup guard and service state journal. Actual FPM and background service stop/start around the existing non-root signed installer.

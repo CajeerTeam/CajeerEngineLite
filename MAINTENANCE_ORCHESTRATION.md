@@ -1,5 +1,7 @@
 # Maintenance Orchestration (1.5.5)
 
+**For version 1.5.6 and newer:** follow [Automatic Health & Rollback](AUTOMATIC_HEALTH_ROLLBACK.md) in addition to this original deployment guide. The new supervisor requires the loopback TLS health listener, uses journal format v2 and never opens the public gate before readiness passes.
+
 The optional Linux/systemd supervisor replaces the discovery-only scheduler service when automated offline installation is wanted. It is a **real service controller**: it asks the current unprivileged CLI whether installation is eligible, publishes a durable HTTP gate, stops configured timer/services, confirms their stopped state, runs the existing signed update worker, recovers any outstanding engine journal, checks version/schema in a fresh PHP process, starts previously active services and releases the gate. A complete FPM stop/start discards that instance's in-memory OPcache and old loaded code. Disable persistent OPcache file-cache for this deployment (or manage it independently during offline maintenance). No install permission is derived from the web request. Checks run without maintenance downtime.
 
 ## Required deployment boundary
@@ -66,7 +68,7 @@ CAJEER_UPDATE_CONTROL_WORKER=1 CAJEER_AUTO_UPDATE_WORKERS_QUIESCED=1 php bin/caj
 CAJEER_UPDATE_CONTROL_WORKER=1 CAJEER_AUTO_UPDATE_WORKERS_QUIESCED=1 php bin/cajeer update maintenance verify
 ```
 
-`plan` is a hint only (`tick`, `install`, `blocked`); it cannot authorize a package. The worker repeats all existing package/window checks. `recover` serializes against scheduler and worker, then uses the engine's operation lease. `verify` is read-only, checks `VERSION`, installed PHP constant, schema 14, valid site JSON and unresolved maintenance journals in a fresh process. The existing installer retains code snapshots; make an independent backup of code, data and secrets before enabling automation. Version 1.5.5 verifies offline consistency and actual systemd active state, **not** live HTTP health after restart; automatic live health/rollback is the next milestone 1.5.6. Keep external uptime monitoring enabled. The cron-only scheduler remains discovery-only.
+`plan` is a hint only (`tick`, `install`, `blocked`); it cannot authorize a package. The worker repeats all existing package/window checks. `recover` serializes against scheduler and worker, then uses the engine's operation lease. `verify` is read-only, checks `VERSION`, installed PHP constant, schema 14, valid site JSON and unresolved maintenance journals in a fresh process. The existing installer retains code snapshots; make an independent backup of code, data and secrets before enabling automation. Version 1.5.5 verified offline consistency and actual systemd active state only. Version 1.5.6 adds mandatory HTTPS readiness and automatic rollback; see the updated runbook linked above. Keep external uptime monitoring enabled. The cron-only scheduler remains discovery-only.
 
 ## Tests
 

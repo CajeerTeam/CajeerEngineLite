@@ -226,5 +226,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx openssl
+      - run: python3 tests/automatic_health_156.py
       - run: python3 tests/rc_staging_149.py
       - run: python3 tests/production_stable_150.py

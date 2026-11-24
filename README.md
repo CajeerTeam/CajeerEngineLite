@@ -1,5 +1,9 @@
-# CajeerEngine Lite Edition 1.5.5
+# CajeerEngine Lite Edition 1.5.6
 
+
+### 1.5.6 — Automatic Health & Rollback
+
+The independent maintenance supervisor now validates baseline HTTPS readiness before draining services, checks the new runtime and signed-transition file snapshot after install, probes the expected release through a loopback-only TLS listener while the public gate remains closed, and rolls back the exact failed engine transaction. The previous runtime must pass readiness before the gate opens. A durable rollback phase and operator hold survive process/host restart and rollback to older code. See [AUTOMATIC_HEALTH_ROLLBACK.md](AUTOMATIC_HEALTH_ROLLBACK.md). Upgrade the separately installed root supervisor and probe vhost manually; the signed PHP updater cannot change those privileged copies. Schema 14 unchanged.
 
 ### 1.5.5 — Maintenance Orchestration
 

@@ -31,6 +31,11 @@ export CAJEER_UPDATE_SIGNING_KEY_FILE="$tmp/private.pem" CAJEER_UPDATE_TRUSTED_K
 php bin/cajeer update package "$tmp/next" "$tmp/package" >/dev/null
 CAJEER_UPDATE_CONFIRM=INSTALL php bin/cajeer update install "$tmp/package" > "$tmp/installed.json"
 php bin/cajeer update maintenance verify | grep -Fq "$next"
+php bin/cajeer update maintenance verify | grep -q '"snapshot_verified": true'
+cp core/Lite.php "$tmp/clean-lite"
+printf '\n' >> core/Lite.php
+if php bin/cajeer update maintenance verify >/dev/null 2>&1; then exit 1; fi
+cp "$tmp/clean-lite" core/Lite.php
 php -r 'require "bootstrap.php";$r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);CajeerEngine\Update\OperationFiles::json(getcwd()."/storage/app/updates/active.json",["id"=>$r["id"],"mode"=>"install"]);' "$tmp/installed.json"
 [[ $(php bin/cajeer update maintenance plan) == blocked ]]
 php bin/cajeer update maintenance recover | grep -q recovered

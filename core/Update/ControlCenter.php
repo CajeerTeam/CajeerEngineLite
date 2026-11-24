@@ -162,9 +162,10 @@ final class ControlCenter
         try {
             $version=UpdatePackage::version($this->root);
             if(OperationLock::maintenance($this->root)||\CajeerEngine\Operations\RecoveryJournal::pending($this->root)||$version!==\CajeerEngine\Lite::VERSION)throw new \RuntimeException('Unresolved maintenance or version mismatch');
+            $snapshot=(new UpdateEngine($this->root))->verifyCurrentSnapshot();
             $site=(new \CajeerEngine\Storage\SiteRepository($this->root))->read();
             if($site===null||$site['schema']!==\CajeerEngine\Storage\SiteState::SCHEMA)throw new \RuntimeException('CMS site not installed or schema incompatible');
-            return ['status'=>'ready_to_start','version'=>$version];
+            return ['status'=>'ready_to_start','version'=>$version,'snapshot_verified'=>$snapshot];
         } finally {OperationLock::release($lock);}
     }
     /** One job per invocation; no privilege escalation, shell commands or service control. */

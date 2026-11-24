@@ -19,7 +19,7 @@ class ReleaseHttp
     /** @return array{status:int,headers:array<string,string>,stream:resource} */
     protected function open(string $url, string $accept, ?string $etag = null): array
     {
-        $headers=['User-Agent: CajeerEngineLite-Update/1.5.5','Accept: '.$accept,'Connection: close'];
+        $headers=['User-Agent: CajeerEngineLite-Update/1.5.6','Accept: '.$accept,'Connection: close'];
         if ($etag !== null) {
             if (!self::validEtag($etag)) throw new \RuntimeException('Invalid release ETag');
             $headers[] = 'If-None-Match: '.$etag;
