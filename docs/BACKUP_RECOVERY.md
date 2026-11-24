@@ -1,12 +1,12 @@
-# Backup and recovery runbook
+# Резервирование и восстановление
 
-## What to protect
+## Что защищать
 
-CMS Operations TAR includes site JSON and registered media only. An independent full backup must include source code, custom templates, entire `storage/`, updater snapshots and journals, PHP-FPM/web server configuration, secrets and certificate/key material according to the host policy. Encrypt private backups, keep an off-host copy and restrict readers. Record version, schema, archive hash, timestamp, ownership and restoration instructions. Keep at least one verified older copy, not just the newest. Define RPO/RTO for the site and test them; the CMS does not guarantee those objectives.
+CMS TAR включает только JSON сайта и зарегистрированные медиа. Независимая полная копия включает код, пользовательские шаблоны, всё `storage/`, update snapshots/journals, конфигурацию PHP-FPM/web server, секреты, сертификаты и ключи согласно политике сервера. Шифруйте приватные копии, ограничивайте доступ, храните вне сервера хотя бы одну проверенную старую версию. Фиксируйте версию, схему, SHA-256, время, владельца и инструкцию восстановления. RPO/RTO определяются и проверяются оператором, а не гарантируются CMS.
 
-## Routine backup
+## Регулярное резервирование
 
-```sh
+```bash
 php bin/cajeer operations audit
 php bin/cajeer operations backup create
 php bin/cajeer operations backup list
@@ -14,17 +14,30 @@ php bin/cajeer operations backup verify NAME
 php bin/cajeer monitor check --verify-backup
 ```
 
-Replace NAME with the returned filename. Copy the verified TAR to protected off-host storage; store its checksum independently. For a consistent full filesystem snapshot stop writers or use a proven atomic snapshot procedure. Do not copy a running site's independently changing JSON and media and call the result a consistent full backup. Never store archives under `public/`.
+Замените `NAME` действительным именем файла. Скопируйте проверенный TAR в защищённое off-host хранилище, сохраните checksum отдельно. Для согласованного полного снимка остановите процессы записи или используйте проверенный атомарный snapshot. Независимое копирование меняющихся JSON и медиа не гарантирует согласованности. Не размещайте архивы в `public/`.
 
-## Restore content only
+## Восстановление содержимого
 
-Stop writers, preserve the current full snapshot, verify the selected archive, then use `CAJEER_OPERATIONS_CONFIRM=NAME php bin/cajeer operations backup restore NAME` (both NAME values identical). For a portable export from another installation: `CAJEER_OPERATIONS_CONFIRM=IMPORT php bin/cajeer operations import /secure/site.tar`. Import preserves local authorization and revokes sessions; do not expect all server secrets or template files to be restored. Run `operations audit`, `doctor`, readiness and authentication checks before restart.
+Остановите процессы записи, сохраните текущую полную копию, проверьте выбранный TAR:
 
-## Recovery decision tree
+```bash
+CAJEER_OPERATIONS_CONFIRM=NAME php bin/cajeer operations backup restore NAME
+```
 
-- Interrupted CMS import: `php bin/cajeer operations recover`. Keep the private recovery marker and original snapshots until recovery succeeds. Read [STORAGE_RECOVERY.md](STORAGE_RECOVERY.md).
-- Interrupted code update: `php bin/cajeer update recover`. For the last completed code update, see [UPGRADE.md](UPGRADE.md). Do not manually delete `storage/app/updates/active.json`.
-- Corrupted `site.json`, missing media or failed recovery: stop workers, preserve the entire damaged tree and logs for investigation, restore the last known-good **matching code and storage** on an isolated host, validate hashes, account access and content, then restore production under maintenance. Avoid editing JSON to silence an error.
-- Disk exhaustion: stop mutations, preserve valid backups, free space outside active transaction directories; do not prune the last good backup or delete a recovery journal. Run `operations audit`; orphan repair is separate and destructive, requires `CAJEER_OPERATIONS_CONFIRM=REPAIR_ORPHANS` and a verified snapshot.
+Оба `NAME` должны совпадать. Для переносимого экспорта другого сайта: `CAJEER_OPERATIONS_CONFIRM=IMPORT php bin/cajeer operations import /secure/site.tar`. Импорт сохраняет локальную авторизацию и отзывает сессии; он не возвращает серверные секреты и шаблоны. Выполните `operations audit`, `doctor`, readiness и проверку авторизации перед возобновлением доступа.
 
-Record the actual restore time, recovered content date and outcomes of `/health/ready`, login, pages, media, SEO and integrations. Rehearse periodically and before each release. A successful `backup create` is not proof of recoverability.
+## Выбор процедуры recovery
+
+| Ситуация | Действие |
+| :--- | :--- |
+| Прерванный импорт CMS | `php bin/cajeer operations recover`; сохранить маркер и snapshots до успеха |
+| Прерванное обновление кода | `php bin/cajeer update recover` с остановленными writers; не удалять `storage/app/updates/active.json` |
+| Завершённый, но неудачный переход | [Откат точной транзакции](UPGRADE.md); при managed maintenance не обходить supervisor |
+| Повреждённый JSON, отсутствующие медиа, отказ recovery | Остановить запись, сохранить повреждённое дерево и логи, проверить восстановление соответствующих кода и storage на изолированном сервере |
+| Переполненный диск | Остановить записи, освободить место вне активных транзакций, сохранить последний хороший backup и журналы |
+
+Orphan repair — отдельная разрушительная операция; требует проверенной копии и `CAJEER_OPERATIONS_CONFIRM=REPAIR_ORPHANS`. Не используйте её для маскировки ошибок.
+
+Зафиксируйте фактическое время восстановления, дату восстановленных данных и результаты readiness, login, pages, media, SEO и интеграций. Регулярно репетируйте recovery. Успешное создание архива не доказывает возможность его восстановления.
+
+[Storage Recovery](STORAGE_RECOVERY.md) · [Эксплуатация](OPERATIONS.md)

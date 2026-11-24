@@ -1,50 +1,67 @@
-# Upgrades and rollback — 1.4.8+
+# Обновление и откат
 
-## Prepare
+**1.6.0 · Сохранение данных · Exact-base переходы**
 
-Record installed `VERSION`, PHP, site schema, canonical origin and trusted-key fingerprint. Rehearse on staging restored from an off-host backup of code, storage, templates and host secrets. Stop PHP-FPM and all scheduled/long-running jobs before replacing files. A CLI flag is not proof workers are stopped. Back up and verify a CMS TAR in addition to the independent full snapshot. Retain the exact pre-upgrade source tree and original file permissions.
+## Выберите тип перехода
 
-```sh
+| Ситуация | Действие |
+| :--- | :--- |
+| Новый сайт | Полный ZIP и [установка](INSTALL.md) |
+| Установленная 1.5.9 | Подписанный пакет с точной базой 1.5.9 или проверенный ручной переход |
+| Более ранняя Stable | Подписанный достижимый маршрут по индексу; один переход за запуск |
+| Изменённый runtime или старый updater | Отдельно проверенный ручной переход, без обхода проверки хешей |
+| Схема ниже 14 | Явная миграция после резервирования, до подключения signed updater |
+
+## Перед обновлением
+
+Запишите `VERSION`, PHP, схему, canonical origin, отпечаток ключа и исходное дерево. Восстановите независимую копию на staging и отрепетируйте переход. Остановите FPM, таймеры и фоновые задачи перед записью файлов. Флаг CLI не подтверждает реальную остановку процессов.
+
+```bash
 php bin/cajeer compatibility check --json
 php bin/cajeer operations backup create
 php bin/cajeer operations backup list
-# Replace NAME with the actual archive name:
 php bin/cajeer operations backup verify NAME
 php bin/cajeer update status
 ```
 
-## Signed upgrade (base >= 1.4.4, schema 14)
+Подставьте имя созданного архива. CMS TAR дополняет, но не заменяет полную off-host копию кода, данных, шаблонов и секретов.
 
-Use an exact adjacent `.cjrupdate` from the authorized release. Verify the publisher's independently provisioned RSA public key and the signed SHA256SUMS as in INSTALL.md. Do not use ZIP files as signed updates. Example for a deployed 1.4.7 site:
+## Подписанная установка
 
-```sh
-export CAJEER_UPDATE_TRUSTED_KEY_FILE=/etc/cajeer/update-trusted.pem
-php bin/cajeer update verify /secure/CajeerEngineLite-1.4.8.cjrupdate
-CAJEER_UPDATE_CONFIRM=INSTALL php bin/cajeer update install /secure/CajeerEngineLite-1.4.8.cjrupdate
+Проверьте опубликованные SHA256SUMS и подпись, используйте отдельно установленную managed trust policy (см. [доверие](UPDATE_SECURITY_HARDENING.md)). Пример для точной базы 1.5.9; имя соответствует дополнительному пакету распределения:
+
+```bash
+export CAJEER_UPDATE_TRUST_POLICY_FILE=/etc/cajeer/update-trust.json
+php bin/cajeer update trust status
+php bin/cajeer update verify /secure/CajeerEngineLite-1.5.9-to-1.6.0.cjrupdate
+CAJEER_UPDATE_CONFIRM=INSTALL php bin/cajeer update install /secure/CajeerEngineLite-1.5.9-to-1.6.0.cjrupdate
 php bin/cajeer doctor
 php bin/cajeer security audit --json
 php bin/cajeer compatibility check --json
 php bin/cajeer update status
 ```
 
-The updater checks the exact base version and changed-file hashes, not arbitrary version jumps. Locally modified managed files must be reconciled on staging rather than forced. Source-only repository metadata (release workflow, CODEOWNERS, funding) is not deployed by the 1.4.7 signed installer; keep it in the repository. If a release changes an unsupported runtime path the new release builder refuses to produce an incomplete delta. Never bypass this check. Use the separately reviewed manual transition if needed.
+Пример пути применим только к реально выпущенному артефакту. Exact-base, схема, PHP, подпись и исходные хеши обязательны. `docs/` — исходная документация, не управляемая signed updater; обновите отдельно. Не накладывайте полный ZIP поверх рабочей установки: удалённые файлы могут остаться.
 
-## Manual overlay and legacy migration
+## Ручной переход и миграция
 
-For a patch ZIP explicitly prepared against your installed release, verify provenance, stop writers, back up, then overlay relative paths (never overwrite storage or host secrets). A full ZIP is for a clean installation; blindly overlaying it can leave removed files. Check VERSION and `core/Lite.php`, reconcile removals according to the published change list, and preserve custom templates. Older releases without Update Engine require a manual transition. Run `php bin/cajeer compatibility migration preview` for a schema below 14; after backup, run `CAJEER_COMPATIBILITY_CONFIRM=MIGRATE php bin/cajeer compatibility migration apply`. Do not attempt a schema-changing signed update or downgrade. See COMPATIBILITY.md.
+Проверьте происхождение patch ZIP и соответствие версии, остановите процессы записи, сохраните резервную копию и наложите относительные пути. Не перезаписывайте `storage/`, локальные секреты и пользовательские шаблоны. Учтите удалённые файлы по фактическому diff. При схеме ниже 14:
 
-## Restart and validate
+```bash
+php bin/cajeer compatibility migration preview
+CAJEER_COMPATIBILITY_CONFIRM=MIGRATE php bin/cajeer compatibility migration apply
+```
 
-Run `php bin/cajeer release stable-check --json`. Exit 1 is failure; exit 2 is automated pass but manual acceptance pending. Restart FPM (including OPcache) only after code checks succeed. Check actual TLS, `/health/ready`, page/admin flows, integrations, logs and resources. On failure stop writers again, investigate, and use the following procedure.
+Не редактируйте `site.json` вручную и не пытайтесь выполнить downgrade схемы через updater.
 
-## Recover or roll back
+## Проверка и восстановление
 
-For interrupted installation: `php bin/cajeer update recover`. For a completed update, obtain the last update ID from `update status`, then run `CAJEER_UPDATE_CONFIRM=ROLLBACK php bin/cajeer update rollback <id>` while workers remain stopped. Rollback restores code, not edits made to the live site after upgrade. Never remove an active journal manually. If recovery refuses, preserve evidence and use the independent backup; see [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md). After rollback run all health checks before restarting.
+`php bin/cajeer release stable-check --json` — базовая проверка (1 — ошибка, 2 — проверки пройдены, ручная приёмка ожидается). Перезапустите FPM с обновлением OPcache, проверьте TLS, `/health/ready`, страницы, авторизацию, медиа, SEO и мониторинг. Для 1.6.0 выполните [GA gate](GITHUB_AUTOMATIC_UPDATES_GA.md).
 
-## Automatic updates
+При прерванной установке с остановленными процессами записи: `php bin/cajeer update recover`. Для завершённой транзакции получите ID через `update status`, затем `CAJEER_UPDATE_CONFIRM=ROLLBACK php bin/cajeer update rollback ID`. Откат восстанавливает код, а не изменения содержимого после обновления. Не удаляйте активный journal. Если recovery не проходит, сохраните доказательства и используйте независимую копию [BACKUP_RECOVERY](BACKUP_RECOVERY.md).
 
-See [AUTOMATIC_UPDATES.md](AUTOMATIC_UPDATES.md). Enable only after signed releases, trusted key, actual traffic drain, backup/recovery and staging acceptance are in place. The scheduler must quiesce workers externally. Opt-in, UTC window, worker flag and recovery permissions are separate. No automatic update setting is enabled by this release.
+## Автоматический переход
 
-## Stable 1.5.0 transition
+Не включён автоматически. Установите независимо проверенный supervisor и startup guards до возобновления таймеров; старый supervisor не понимает фазу `installing`. Следуйте [GA runbook](GITHUB_AUTOMATIC_UPDATES_GA.md), не запускайте legacy cron параллельно systemd. Preview разрешается отдельно; в Stable оставляйте его выключенным.
 
-The official signed incremental package is from 1.4.8, not 1.4.9. RC installations require a separate signed exact-base package or independently verified manual source overlay, with writers stopped and an independent backup. After deployment follow [PRODUCTION_STABLE.md](PRODUCTION_STABLE.md).
+Исторически 1.5.0 выпускался с базы 1.4.8, не 1.4.9; для RC требовался отдельный пакет. Не применяйте исторические переходы к другим версиям.

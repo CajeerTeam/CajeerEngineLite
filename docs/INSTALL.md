@@ -1,32 +1,45 @@
-# Installation — CajeerEngine Lite 1.4.8+
+# Установка CajeerEngine Lite
 
-## Requirements
+**1.6.0 · Чистое развёртывание**
 
-Linux/POSIX local filesystem with atomic rename, hardlinks, `flock` and `fsync`; PHP 8.4.1+ with json, filter, hash, session, openssl and fileinfo; image validation uses the PHP image facilities. Enable `allow_url_fopen` and CA certificates for HTTPS provider calls and release discovery. Use PHP-FPM behind Nginx or Apache, not the PHP development server. PHP 8.5 and the three browser engines are CI matrix candidates, not a promise of certified compatibility. See [COMPATIBILITY.md](COMPATIBILITY.md). No required database, Composer, Redis or Node runtime. Python 3.11+ and OpenSSL CLI are release-build tools only.
+## 1. Подготовьте среду
 
-## Obtain and verify
+| Компонент | Требование |
+| :--- | :--- |
+| ОС и диск | Linux/POSIX, локальная FS с atomic rename, hardlink, `flock`, `fsync` |
+| PHP | 8.4.1+, `json`, `filter`, `hash`, `session`, `openssl`, `fileinfo`, стандартные средства проверки изображений |
+| Сеть | `allow_url_fopen` и CA-сертификаты для HTTPS провайдеров и discovery |
+| Web | PHP-FPM, Nginx или Apache 2.4, HTTPS |
+| Дополнительно | Python 3.11+ и OpenSSL CLI для сборки; systemd, bash, curl и Python для supervisor |
 
-Download the full `CajeerEngineLite-<version>.zip`, `SHA256SUMS` and `SHA256SUMS.sig` from an authorized official release. Acquire the publisher's RSA public key independently, then verify before extracting. Never obtain your trust key from the same untrusted package.
+SQL, Redis, Composer и Node.js не обязательны для CMS. PHP 8.5 и браузерная матрица требуют подтверждения тестами. Подробнее: [совместимость](COMPATIBILITY.md).
 
-```sh
+## 2. Проверьте официальный дистрибутив
+
+Получите весь комплект файлов авторизованного релиза, включая ZIP, основной пакет, отчёт, подписанные контрольные суммы и дополнительные файлы дистрибуции. Независимо получите доверенный публичный RSA-ключ. Не доверяйте ключу, скачанному вместе с непроверенным пакетом.
+
+```bash
 openssl dgst -sha256 -verify /etc/cajeer/update-trusted.pem -signature SHA256SUMS.sig SHA256SUMS
 sha256sum --strict -c SHA256SUMS
 ```
 
-Download all three named payloads (ZIP, `.cjrupdate`, `release-report.json`) for the complete checksum check. A patch ZIP is not a full clean-install archive. Unpack the full ZIP into an empty directory (e.g. `/var/www/cajeer-lite`), inspect ownership and permissions, and do not overwrite another installation.
+Для подписанного индекса и дополнительных пакетов также используйте процедуру [RELEASE](RELEASE.md). Распакуйте **полный ZIP** в пустой каталог, например `/var/www/cajeer-lite`. Архив изменений и `.cjrupdate` не являются полным установочным ZIP.
 
-## Configure the host
+## 3. Настройте сервер
 
-Use a dedicated Unix account, with immutable application code readable by the FPM account, and private writable `storage/` owned by that account (0700 directories, 0600 private files). Keep TLS keys, OIDC credentials and provider tokens outside the application and document root; never run the CMS as root. An updater operator needs permission to change the deployed code; do not grant that ability to normal HTTP workers. Adapt `deploy/nginx.conf` or `deploy/apache-vhost.conf`: domain, certificate paths, PHP-FPM socket and absolute `public/` path. Configure HTTPS and a redirect from HTTP at the web server. For Apache, enable the needed SSL, proxy_fcgi, rewrite and headers modules; for Nginx, ensure FastCGI configuration passes only the expected front controller. Validate with `nginx -t` or `apachectl configtest`. See [COMPATIBILITY.md](COMPATIBILITY.md) for exact-peer reverse proxy trust. Do not serve the project root, `storage/`, templates, tests, or backups.
+- Выделите отдельного Unix-пользователя. Код доступен PHP-FPM для чтения, но не записи; приватные каталоги `storage/` — 0700, приватные файлы — 0600, владелец имеет необходимые права.
+- Настройте `deploy/nginx.conf` или `deploy/apache-vhost.conf`: домен, TLS-сертификаты, абсолютный путь `public/`, сокет FPM. Document root никогда не должен указывать на корень проекта.
+- Для Apache включите нужные модули SSL, proxy_fcgi, rewrite и headers; в Nginx передавайте в FastCGI только ожидаемый front controller. Проверьте `nginx -t` либо `apachectl configtest`.
+- Настройте перенаправление HTTP → HTTPS. Для reverse proxy соблюдайте [правила доверия](COMPATIBILITY.md). Храните сертификаты, OIDC и API-секреты вне web root и репозитория; не запускайте PHP от root.
 
-## Initialize
+## 4. Инициализируйте сайт
 
-Run from the project root as the storage owner, using a secure terminal. The password prompt is visible; use an environment variable obtained without echoing the password or placing it in shell history. Example Bash:
+Выполните из корня проекта от владельца хранилища. В Bash пароль можно передать без вывода и без записи значения в историю:
 
-```sh
-read -rsp 'Admin password (12–72 bytes): ' CAJEER_ADMIN_PASSWORD; echo
+```bash
+read -rsp 'Пароль администратора (12–72 байта): ' CAJEER_ADMIN_PASSWORD; echo
 export CAJEER_ADMIN_PASSWORD
-php bin/cajeer install https://example.com 'My site'
+php bin/cajeer install https://example.com 'Мой сайт'
 unset CAJEER_ADMIN_PASSWORD
 php bin/cajeer doctor
 php bin/cajeer compatibility check --json
@@ -34,6 +47,17 @@ php bin/cajeer security audit --json
 php bin/cajeer operations backup create
 ```
 
-Do not rerun `install` against an existing `site.json`. For legacy data use [UPGRADE.md](UPGRADE.md). Configure PHP-FPM environment explicitly if enabling OIDC, AI or analytics; CLI environment variables do not automatically propagate to FPM. Keep optional integrations disabled until tested, and ensure consent requirements are satisfied.
+Замените `example.com` своим доменом. Не запускайте install на существующем `site.json`. Для старых данных используйте [обновление и миграцию](UPGRADE.md). Переменные CLI не передаются PHP-FPM автоматически; настройте окружение FPM отдельно. Оставьте необязательные интеграции выключенными до проверки.
 
-Start FPM/web server; check `curl --fail https://example.com/health/live`, `curl --fail https://example.com/health/ready`, home page, `/admin` sign-in, public asset loading, and a private URL such as `/storage/site.json` (must not expose data). Verify cookies, TLS, correct domain and content policy. Create and verify an off-host backup; follow [PRODUCTION_ACCEPTANCE.md](PRODUCTION_ACCEPTANCE.md). For a local disposable test only: `php -S 127.0.0.1:8080 -t public router.php` with a separately installed HTTP test site. Do not expose this server publicly.
+## 5. Проверьте запуск
+
+```bash
+curl --fail https://example.com/health/live
+curl --fail https://example.com/health/ready
+```
+
+Проверьте главную, `/admin`, cookie, TLS, статику, отсутствие доступа к `/storage/site.json`, резервным копиям и служебным файлам. Создайте проверенную off-host копию и пройдите [production-приёмку](PRODUCTION_ACCEPTANCE.md).
+
+Для локальной разработки используйте отдельно установленный тестовый экземпляр: `php -S 127.0.0.1:8080 -t public router.php`. Не выставляйте встроенный сервер в Интернет.
+
+Автоустановку подключайте только по [GA-руководству](GITHUB_AUTOMATIC_UPDATES_GA.md), после проверки реальной инфраструктуры.

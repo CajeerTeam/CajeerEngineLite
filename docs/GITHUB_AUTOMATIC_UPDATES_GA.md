@@ -1,22 +1,24 @@
-# GitHub Automatic Updates GA — 1.6.0
+# GitHub Automatic Updates GA
 
-This release implements Stable unattended updates. Local tests are not production approval. JSON schema 14 and the signed `.cjrupdate` format are unchanged. The root-owned supervisor is independent of application updates.
+**1.6.0 · Руководство оператора**
 
-## Publish
+Релиз реализует автоматические обновления Stable. Схема JSON 14 и формат подписанного `.cjrupdate` не изменились. Supervisor, установленный от root вне дерева CMS, обновляется отдельно. Локальные тесты не заменяют production sign-off.
 
-Follow [RELEASE.md](RELEASE.md), [UPDATE_DISTRIBUTION.md](UPDATE_DISTRIBUTION.md) and [RELEASE_AUTOMATION_MONITORING.md](RELEASE_AUTOMATION_MONITORING.md). Configure protected version tags, signing/publishing environments with required reviewers, official RSA keys and repository permissions. Never commit private keys. Create `v1.6.0` with VERSION 1.6.0. The workflow selects the previous published Stable release, requires the exact 1.5.9 source tag even if Preview/unpublished, and includes 1.5.7/1.5.8 tags if available. All bases must be exact ancestors. Manual dispatch accepts additional reviewed `extra_base_tags`; the RC package is still mandatory. Never falsify tags. Customized source trees may need a reviewed manual upgrade.
+## 1. Публикация
 
-The public release must not be draft or prerelease. It contains primary and additional `.cjrupdate` packages, `update-index.json`, full ZIP, `release-report.json`, `SHA256SUMS` and `SHA256SUMS.sig`. The workflow verifies the downloaded draft before publishing. Keep an independently verified distribution outside the application directory; no extra files in that directory. The manual changed-files ZIP is not an official signed distribution.
+Следуйте [RELEASE](RELEASE.md), [UPDATE_DISTRIBUTION](UPDATE_DISTRIBUTION.md) и [RELEASE_AUTOMATION_MONITORING](RELEASE_AUTOMATION_MONITORING.md). Настройте защищённые теги и окружения подписи/публикации с обязательными reviewer, официальные RSA-ключи и права репозитория. Создайте `v1.6.0` с VERSION 1.6.0. Workflow выбирает предыдущую опубликованную Stable-базу, требует точный исходный тег 1.5.9 даже для неопубликованного Preview и добавляет 1.5.7/1.5.8 при наличии. Все базы должны быть предками целевого коммита. При ручном запуске можно указать дополнительные `extra_base_tags`; RC-пакет всё равно обязателен. Не подделывайте теги.
 
-## Bootstrap
+Публичный релиз не должен быть draft или prerelease. В состав входят основной и дополнительные `.cjrupdate`, `update-index.json`, полный ZIP, `release-report.json`, `SHA256SUMS`, `SHA256SUMS.sig`. Workflow скачивает и проверяет draft до публикации. Храните независимо проверенный комплект в отдельном операторском каталоге без лишних файлов. Архив изменённых исходников не является официальным подписанным дистрибутивом.
 
-1. Follow [docs/INSTALL.md](docs/INSTALL.md). Use PHP 8.4.1+, local storage, dedicated non-root update account, PHP-FPM, systemd, bash, curl and Python 3. Serve only `public/`.
-2. Stop timers, workers and FPM, resolve any active transaction and create independent backups of code, storage, secrets, keys and deployment configuration. Apply the verified release over 1.5.9. Never run a partial overlay while PHP is serving requests.
-3. Follow [MAINTENANCE_ORCHESTRATION.md](MAINTENANCE_ORCHESTRATION.md), [AUTOMATIC_HEALTH_ROLLBACK.md](AUTOMATIC_HEALTH_ROLLBACK.md) and [UPDATE_SECURITY_HARDENING.md](UPDATE_SECURITY_HARDENING.md). Install the independently verified supervisor `deploy/cajeer-maintenance.sh` as `/usr/local/sbin/cajeer-maintenance`, root:root 0755. Configure service, timer, startup guards, private loopback HTTPS listener and public HTTP 503 gate. Do not replace the supervisor during active maintenance; older supervisors cannot read the new `installing` journal phase.
-4. Install root-owned 0600 `/etc/cajeer/maintenance.env` with canonical site root, dedicated FPM unit, site user, background units, official repository, managed trust policy, health host/port and optional trusted CA. Keep application code and transaction storage read-only to HTTP workers. Disable legacy cron/scheduler services. Set `CAJEER_AUTO_UPDATE_ENABLED=0`, `CAJEER_AUTO_UPDATE_INSTALL=0`, `CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL=0` initially. Configure matching valid UTC windows in system environment and `/admin/updates`. Enable Stable checks and verify a candidate before opting in.
-5. After staging approval set both system opt-in flags to `1` and enable automatic installation in `/admin/updates` (Stable). Leave Preview permission off. The system supervisor, not HTTP, controls services. Never acknowledge `WORKERS_QUIESCED=1` while workers are running.
+## 2. Первичная настройка supervisor
 
-```sh
+1. Выполните [установку](INSTALL.md): PHP 8.4.1+, локальное хранилище, отдельная непривилегированная учётная запись, PHP-FPM, systemd, bash, curl и Python 3; web root только `public/`.
+2. Остановите таймеры, worker и FPM; разрешите активные транзакции, сделайте независимые копии кода, storage, секретов, ключей и конфигурации. Примените проверенный переход с 1.5.9 (для другой базы — соответствующий exact-base). Не накладывайте файлы при работающем PHP.
+3. По [оркестрации](MAINTENANCE_ORCHESTRATION.md), [health/rollback](AUTOMATIC_HEALTH_ROLLBACK.md) и [trust policy](UPDATE_SECURITY_HARDENING.md) установите проверенный `deploy/cajeer-maintenance.sh` в `/usr/local/sbin/cajeer-maintenance` (root:root 0755), service, timer, guards, приватный loopback HTTPS listener и публичный HTTP 503 gate. Не меняйте supervisor во время обслуживания. Старый supervisor не умеет читать `installing`.
+4. Подготовьте root-owned `/etc/cajeer/maintenance.env` (0600): canonical site root, FPM unit, site user, фоновые units, официальный репозиторий, managed trust, health host/port и при необходимости CA. Код и update transactions должны быть read-only для HTTP workers. Выключите прежние cron/scheduler services.
+5. Сначала задайте `CAJEER_AUTO_UPDATE_ENABLED=0`, `CAJEER_AUTO_UPDATE_INSTALL=0`, `CAJEER_AUTO_UPDATE_ALLOW_PREVIEW_INSTALL=0`. Настройте совпадающие корректные окна UTC в окружении и `/admin/updates`. Включите проверку Stable и проверьте candidate без установки. Только после staging-приёмки включите оба системных opt-in (`=1`) и автоустановку Stable в интерфейсе. Preview оставьте выключенным. HTTP не управляет службами; не подтверждайте `WORKERS_QUIESCED=1` при работающих процессах.
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now cajeer-maintenance.timer
 sudo systemctl start cajeer-maintenance.service
@@ -24,46 +26,60 @@ systemctl list-timers cajeer-maintenance.timer
 journalctl -u cajeer-maintenance.service -n 100
 ```
 
-## Actual deployment verification
+## 3. Preflight реального сервера
 
-Run the root preflight with the same environment as the service. It checks actual systemd units/guards, active FPM and enabled timer, installed supervisor copy, managed trust, loopback TLS and monitoring. It holds the supervisor lock and does not install or stop services. Retry if another supervisor is running.
+Запустите root preflight с окружением службы. Он удерживает блокировку supervisor, проверяет units/guards, активный FPM, включённый timer, установленную копию supervisor, managed trust, loopback TLS и мониторинг. Он не устанавливает пакет и не останавливает службы. Повторите при занятой блокировке.
 
-```sh
+```bash
 sudo systemd-run --wait --pipe --collect \
   --property=EnvironmentFile=/etc/cajeer/maintenance.env \
   /usr/local/sbin/cajeer-maintenance preflight
 ```
 
-Run as the update user with the same operator-provisioned trust/GitHub environment. The local gate verifies signed runtime and index including exact RC package; update configuration deficiencies are warnings until live mode. Live requires all configured providers via `--provider=NAME` and explicit consent (`--paid` for paid AI checks). See [docs/PRODUCTION_STABLE.md](docs/PRODUCTION_STABLE.md).
+## 4. Проверка GA
 
-```sh
+От непривилегированного update user с тем же доверенным окружением GitHub и policy выполните:
+
+```bash
 php bin/cajeer release ga-check --artifacts=/srv/releases/1.6.0 --json
 CAJEER_PRODUCTION_LIVE_CONFIRM=LIVE php bin/cajeer release ga-check \
   --artifacts=/srv/releases/1.6.0 --live --json
 ```
 
-Live GA performs a fresh, uncached exact-tag GitHub request, rejects drafts/Preview, extra/missing assets, wrong URLs and changed digests, streams every published asset and verifies bytes against the independently verified distribution. It checks managed trust, stable opt-in, valid UTC window, recent completed scheduler heartbeat, successful recent Stable check, no pending work/hold and no monitoring warnings/errors. A network failure fails the gate, not permission to install stale data. Downloads are removed and no install or job is triggered. The total download budget is 256 MB. A successful check with no newer release is legitimate but does not prove an upgrade rehearsal. Allow current scheduler work to finish before live acceptance.
+Локальный gate проверяет подписанный runtime, индекс и RC-пакет; проблемы конфигурации обновлений до live-режима могут быть предупреждениями. Для live явно добавьте `--provider=NAME` для каждого настроенного API-провайдера из `required_providers`; для платного AI — `--paid` и `CAJEER_AI_PAID_PROBE_CONFIRM=I_ACCEPT_API_CHARGES`. Не запускайте платные проверки без согласия. См. [Production Stable](PRODUCTION_STABLE.md).
 
-## Recovery and production evidence
+Live GA делает свежий запрос точного тега GitHub без кэша, отклоняет draft/Preview, лишние и отсутствующие assets, неправильные URL и изменённые digests. Все опубликованные файлы скачиваются потоково и сравниваются с независимо проверенным комплектом (общий бюджет 256 МБ). Проверяются managed trust, Stable opt-in, UTC-окно, свежий завершённый scheduler heartbeat, успешная свежая Stable-проверка, отсутствие pending work/hold и предупреждений или ошибок мониторинга. Сбой сети означает отказ gate, а не право установки по старому кэшу. Временные загрузки удаляются; gate не ставит задачи и не устанавливает код. Отсутствие более нового релиза допустимо, но не доказывает репетицию обновления.
 
-On isolated staging, exercise actual GitHub upgrade from previous Stable and 1.5.9 with real systemd/FPM/TLS; record source, target, package hash, HTTP 503 gate, PID change, health, queue, media and backup integrity. Test a staging-only signed bad package, revoked key, corrupted package, network failure, interrupted supervisor and reboot. Never publish a deliberately bad fixture as official. Rehearse off-host restore, full CI/browser matrix, external integrations, production observation and sustained load.
+## 5. Восстановление и доказательства
 
-The `installing` phase is persisted before the worker starts. An interrupted committed candidate is rolled back even if healthy; an unchanged baseline is restored without rolling back an unrelated receipt. If rollback or baseline health fails, retain the public gate. Do not delete active journals. Review and resolve the failure before clearing the rollback hold.
+На изолированном staging выполните реальный GitHub-переход с предыдущей Stable и 1.5.9 через systemd/FPM/TLS. Зафиксируйте base/target, хеш пакета, 503 gate, смену PID, readiness, очередь, медиа и backup integrity. Проверьте повреждённый пакет, отзыв ключа, сетевой сбой, прерывание supervisor, перезагрузку и staging-only подписанный неисправный fixture. Не публикуйте плохой fixture как официальный. Проведите off-host restore, CI/browser matrix, проверки провайдеров, наблюдение и длительную нагрузку.
 
-Use the approval format in [docs/PRODUCTION_STABLE.md](docs/PRODUCTION_STABLE.md). Add `github_update_e2e.txt`, `systemd_reboot_recovery.txt`, `supervisor_preflight.txt` containing actual reviewed evidence; include all eleven evidence hashes in `approval.json`. Also bind `distribution_index_sha256` and `publication_sha256` to the live GA report (`updates_ga.distribution_index_sha256`, `updates_ga.publication.publication_sha256`). Sign-off re-runs live acceptance, rejects changed control revision/trust/site/runtime and writes a private record. Evidence and reviewer are operator-attested, not independently authenticated. CMS-only `production-check`/`sign-off` do not attest updates GA.
+`installing` сохраняется до запуска worker. При неопределённой завершённой транзакции новый runtime откатывается даже при рабочем HTTPS; неизменившаяся база восстанавливается без отката постороннего receipt. Если rollback или readiness прежней версии не проходит, публичный gate остаётся закрытым. Не удаляйте активные журналы и не снимайте hold до устранения причины.
 
-```sh
+### Операторская приёмка
+
+Создайте доказательства по [Production Stable](PRODUCTION_STABLE.md) и дополнительно `github_update_e2e.txt`, `systemd_reboot_recovery.txt`, `supervisor_preflight.txt`. В `approval.json` включите все 11 SHA-256 доказательств (ключи без `.txt`), а также `distribution_index_sha256` и `publication_sha256` из `updates_ga.distribution_index_sha256` и `updates_ga.publication.publication_sha256` свежего live-отчёта. Sign-off повторно выполняет live gate, отклоняет изменившиеся revision, trust, site или runtime и создаёт приватную запись. Доказательства и личность reviewer подтверждаются оператором, а не независимо проверяются программой. CMS-only `production-check`/`sign-off` не подтверждают GA.
+
+```bash
 CAJEER_PRODUCTION_LIVE_CONFIRM=LIVE \
 CAJEER_PRODUCTION_SIGNOFF_CONFIRM=I_REVIEWED_PRODUCTION_EVIDENCE \
 php bin/cajeer release ga-sign-off --artifacts=/srv/releases/1.6.0 \
   --live --evidence=/secure/ga-review --json
 ```
 
-Exit 0: operator attestation recorded in `storage/app/release-signoff/`; 1: failed gate; 2: automated checks passed but live/approval pending. Continue monitoring (`update monitor check`, `monitor check --verify-backup`). Opt out if safety checks fail.
+Передайте те же provider flags, что для live gate, если они требуются.
 
-## Disposable tests
+| Код | Значение |
+| :---: | :--- |
+| 0 | Записан операторский sign-off в `storage/app/release-signoff/` |
+| 1 | Ошибка или отказ gate |
+| 2 | Автоматические проверки пройдены; live/ручное принятие ожидается |
 
-```sh
+Продолжайте `php bin/cajeer update monitor check` и `php bin/cajeer monitor check --verify-backup`; при отказе условий безопасности отключайте автоустановку.
+
+## 6. Изолированные тесты
+
+```bash
 python3 tests/release_ga_160.py
 bash tests/maintenance_orchestration_155.sh
 bash tests/maintenance_units_155.sh
@@ -71,4 +87,4 @@ php tests/core_157.php
 php tests/core_158.php
 ```
 
-Use `release_ga_160.py --base /clean/stable --rc /clean/1.5.9` for exact source rehearsals. Tests generate disposable keys, perform actual install and rollback, and exercise the actual streaming transport with controlled release metadata and asset bytes. Existing CI tests exercise queued updates with real local TLS/Nginx and simulated GitHub/systemd. No test publishes official releases or issues production sign-off.
+`release_ga_160.py --base /clean/stable --rc /clean/1.5.9` использует точные исходные базы. Тесты создают временные ключи, выполняют установку/откат и проверяют streaming transport с контролируемыми metadata и bytes. CI также проверяет очередь с локальным TLS/Nginx и симулированными GitHub/systemd. Ни один тест не публикует официальный релиз и не подтверждает production.

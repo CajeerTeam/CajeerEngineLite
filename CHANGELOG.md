@@ -1,101 +1,96 @@
-# Changelog
+# Журнал изменений
+
+[Главная проекта](README.md) · [Релиз 1.6.0](docs/RELEASE_NOTES.md) · [Архив истории](docs/HISTORY.md)
 
 ## 1.6.0 — GitHub Automatic Updates GA
 
-- Stable workflow includes the exact 1.5.9 RC source tag and available 1.5.7/1.5.8 tags as additional bases; signed distribution verification and exact-base rehearsal remain mandatory.
-- Persist the supervisor's uncertain `installing` phase before the worker starts; an interrupted committed candidate is rolled back rather than implicitly accepted.
-- Operator `release ga-check` and `release ga-sign-off` verify the signed distribution, exact installed runtime, actual published GitHub assets (live only), trust, update configuration, monitoring and additional GitHub/systemd evidence.
-- Independent root supervisor `preflight` checks live services, timer, startup guards, trust and loopback readiness without installing anything.
-- Schema 14 and runtime dependencies unchanged. Official keys, publication, real systemd/FPM and production evidence remain operator prerequisites.
+- **Дистрибуция:** обязательная exact-base сборка с 1.5.9 RC, дополнительные базы 1.5.7/1.5.8 при наличии тегов; подписанный индекс и проверка каждого перехода.
+- **Надёжность:** запись фазы `installing` до запуска worker; неопределённая завершённая установка приводит к откату, а не автоматическому принятию.
+- **Приёмка:** `release ga-check` и `release ga-sign-off` проверяют runtime, дистрибутив, реальные GitHub assets (live), доверие, конфигурацию, мониторинг и доказательства.
+- **Инфраструктура:** независимый supervisor `preflight` проверяет systemd, guards, timer и loopback readiness без установки.
+- **Совместимость:** схема 14 и runtime-зависимости не изменились. Реальная публикация и приёмка остаются обязанностью оператора.
 
 ## 1.5.9 — Automatic Updates Release Candidate
 
-- Preserve the update recovery journal until an aborted transaction receipt is cleared.
-- Persist failed scheduler intent and roll back an already committed but failed worker transaction, even with healthy HTTPS.
-- Allow an exact non-adjacent published stable base for the primary distribution; full upgrade/rollback rehearsal remains mandatory.
-- Read-only runtime package verification through `update auto verify` (private cache and temporary download only).
-- End-to-end scheduled preview update and rollback tests with signed index, injected GitHub outage, managed trust and actual TLS readiness.
-- Publish as prerelease; final real-service and live GitHub acceptance is pending. Schema 14 unchanged.
+- Сохранение recovery journal до очистки receipt прерванной транзакции; durable rollback intent при неудачном завершении worker после commit, даже при рабочем HTTPS.
+- Поддержка точной несмежной опубликованной Stable-базы при обязательной репетиции перехода.
+- `update auto verify`: загрузка и проверка выбранного пакета без установки; временные файлы и приватный кэш.
+- E2E сценарии Preview, сбоя GitHub, managed trust, TLS и rollback. Prerelease; реальная внешняя приёмка отдельно. Схема 14.
 
 ## 1.5.8 — Release Automation & Monitoring
 
-- Protected tag-triggered release workflow with paginated stable-base selection and manual override, separated signing/publishing, and re-download/signature/byte verification of draft assets before publication. 1.5.9 stays in Preview.
-- In-app update alerts, CLI monitor status/check and integration with operational diagnostics.
-- Explicit snapshot retention with verified private inventory, age/count policy, active/latest protection, exclusive lease and audit events. Schema 14 unchanged.
+- Защищённый запуск релиза по тегу, выбор предыдущей Stable-базы с пагинацией, раздельные подпись и публикация; повторная проверка загруженных draft assets.
+- Оповещения в центре обновлений, CLI мониторинга и интеграция с диагностикой.
+- Проверяемая политика хранения rollback snapshots по возрасту и количеству, блокировки и защита активной/последней точки. Схема 14.
 
 ## 1.5.7 — Update Security Hardening
 
-- External root-owned trust policy with overlapping RSA key rotation, explicit fingerprint revocation, minimum permitted target and no fallback when invalid. Applied to signed packages, distribution indexes and production acceptance.
-- Mandatory managed trust for supervised automatic installations; legacy direct automatic CLI requires explicit compatibility opt-in. Emergency recovery does not require the now-revoked signing key.
-- Read-only transaction storage mount for managed HTTP/background services, strict recovery metadata validation, bounded reads, CLI linting, GitHub CDN redirect and asset-length validation, structured security events in operator logs.
-- Privileged supervisor and guard must be redeployed manually. Schema 14 unchanged.
+- Внешняя root-owned политика доверия: ротация RSA, отзыв по отпечатку, минимальная целевая версия; без fallback при ошибке.
+- Managed trust обязательна для supervised установки; read-only mount транзакций, строгая проверка recovery, ограниченные чтения, CLI lint, проверка CDN redirect и размера asset.
+- Привилегированные supervisor и guard обновляются вручную. Схема 14.
 
 ## 1.5.6 — Automatic Health & Rollback
 
-- Mandatory baseline and post-install TLS readiness/version validation via loopback-only vhost; public HTTP maintenance gate remains active until the original service set is healthy.
-- Offline verification of all files covered by the latest installed update plan, under exclusive operations lease.
-- Exact-transaction automatic rollback, durable rollback intent, prior-release re-probe and persistent operator hold; failed recovery retains the gate.
-- Separate privileged bootstrap upgrade, native web-server checks and real TLS/signed rollback integration tests. Schema 14 unchanged.
+- Baseline и post-install HTTPS readiness/version через loopback, публичный 503 gate до восстановления сервиса.
+- Офлайн-проверка файлов обновления под эксклюзивной блокировкой, откат точной транзакции и повторный probe прежнего runtime.
+- Durable rollback intent и operator hold; при сбое восстановления gate остаётся закрытым. Отдельное обновление supervisor. Схема 14.
 
 ## 1.5.5 — Maintenance Orchestration
 
-- Root-owned external systemd supervisor, persistent HTTP 503 gate, startup guard and service state journal. Actual FPM and background service stop/start around the existing non-root signed installer.
-- Fresh-process offline compatibility verification and interrupted maintenance recovery, preserving prior service states. Discovery does not require downtime. New deployment prerequisites are opt-in; schema 14 unchanged.
+- Внешний root-owned systemd supervisor, постоянный HTTP 503 gate, startup guard, журнал состояний служб.
+- Реальная остановка и запуск PHP-FPM и фоновых служб вокруг непривилегированного installer; офлайн-диагностика и recovery после прерывания.
+- Опциональное развёртывание. Схема 14.
 
 ## 1.5.4 — Update Scheduler
 
-- Durable scheduler tick with non-overlapping execution, heartbeat, delayed check retries, expiry and failed-install auto-install pause.
-- systemd timer/service and cron deployment examples; installation remains gated by operator quiescence. Schema 14 unchanged.
+- Durable tick без наложения запусков, heartbeat, отложенные повторные проверки, истечение задач и пауза автоустановки после ошибки.
+- Примеры systemd и cron; обязательная остановка процессов записи. Схема 14.
 
 ## 1.5.3 — Update Control Center
 
-- Authenticated update console with CSRF, revision checks, private queue, channel, maintenance policy and history.
-- Worker verifies downloaded packages and pins the exact digest through staging; release notes are untrusted escaped text.
-- Separate operator opt-in, maintenance windows and worker quiescence still required. No automatic service management. Schema 14 unchanged.
+- Защищённый `/admin/updates`, CSRF, проверка revision, приватная очередь, каналы, политика обслуживания и история.
+- Worker проверяет пакет и фиксирует digest; заметки релиза экранируются. Установка требует opt-in, окна и quiescence. Схема 14.
 
 ## 1.5.2 — Update Package Distribution
 
-- Signed distribution index, multiple exact-base packages, verified update route and one-step installation.
-- Release workflow rehearses each base independently; primary artifact remains backwards compatible.
-- Schema 14 unchanged.
+- Подписанный индекс, несколько exact-base пакетов, проверенный маршрут и один переход за запуск.
+- Отдельная репетиция каждой базы; совместимость основного артефакта сохранена. Схема 14.
 
 ## 1.5.1 — GitHub Release Discovery
 
-- Bounded GitHub pagination, per-page conditional requests with private ETag cache, nearest/latest selection and strict official asset URLs.
-- Transient HTTP/network retries, persistent rate-limit cooldown, no stale or partial installation selection, stable and opt-in preview channels.
-- Regression coverage of HTTP decoding, discovery, signed installation and version-independent release acceptance; no data schema change.
+- Ограниченная пагинация GitHub, ETag-кэш, nearest/latest, проверка официальных URL.
+- Повтор временных сетевых ошибок, rate-limit cooldown, отказ при неполном discovery; Stable и opt-in Preview. Схема 14.
 
 ## 1.5.0 — Production Stable
 
-- Signed runtime inventory and verification of the complete artifact set, installed executable/template bytes, compatibility, live TLS/version and fresh monitoring.
-- Explicit operator sign-off with a fresh live gate, evidence hashes, private atomic audit record and no automatic approval.
-- Official stable update from 1.4.8; exact 1.4.9 upgrade remains supported by separate signed rehearsal. Schema 14 unchanged.
-- Disposable HTTPS acceptance and tamper regression; real deployment acceptance remains operator-specific.
+- Подписанный inventory runtime, проверка полного дистрибутива, совместимости, TLS и свежего мониторинга.
+- Отдельный операторский sign-off с хешами доказательств, приватной атомарной записью и свежей проверкой.
+- Официальная база 1.4.8; отдельный exact-base переход для 1.4.9. Схема 14.
 
 ## 1.4.9 — Production Release Candidate
 
-- Freeze features and schema 14. Reject unsupported direct OIDC login before checking optional provider configuration, preventing false live readiness failure.
-- Operator-only RC acceptance gate with backup freshness, verified TLS and opt-in selected live provider probes; no automatic production sign-off.
-- Signed exact upgrade/rollback rehearsal on populated data with media hashes and verified backups; TLS/Nginx staging and real browser form regression.
-- Publish RC as prerelease, never in the stable auto-update channel.
+- Заморозка функций и схемы 14; корректный отказ неподдерживаемого прямого OIDC login.
+- RC-проверка свежего архива, TLS и явно выбранных провайдеров; без автоматического принятия production.
+- Репетиция подписанного перехода и отката на наполненном сайте, TLS/Nginx staging и browser E2E. Prerelease.
 
 ## 1.4.8 — Documentation & Release Engineering
 
-- Executable signed release build, independent source/manifest comparison, reproducible full ZIP, signed SHA-256 list, actual clean install, upgrade and rollback rehearsal, tampering rejection.
-- Protected GitHub release workflow (full CI, disposable-key rehearsal, protected signing, verified draft publication); no embedded signing keys or live provider secrets.
-- Consolidated installation, upgrade, backup/recovery, security, operations, compatibility and release runbooks. Schema 14 unchanged; signed upgrades from exact 1.4.7 sources are supported for managed paths. Manual live sign-off remains required.
+- Подписанная сборка, сравнение manifest с исходниками, нормализованный ZIP, подписанные SHA-256, репетиция установки, обновления и отката, отказ изменённых пакетов.
+- Защищённый GitHub workflow, отдельные тестовые ключи и проверка draft. Единые инструкции. Схема 14.
 
-## 1.4 series
+## Ветка 1.4
 
-- **1.4.7:** bounded private request telemetry, resource/backup monitoring, load tests.
-- **1.4.6:** environment compatibility, legacy schema migration preview/apply, trusted reverse proxy, browser/web-server test matrix.
-- **1.4.5:** opt-in GitHub signed auto-updates, UTC windows and recovery.
-- **1.4.4:** signed code-only CLI update engine with transaction snapshots and rollback; first transition from 1.4.3 is manual.
-- **1.4.3:** session, CSRF, OIDC, CSP, file/template/TAR hardening and offline dependency audit.
-- **1.4.2:** storage recovery journal, media consistency and verified atomic backups.
-- **1.4.1:** core transaction stability, concurrency and rollback fixes.
-- **1.4.0:** CMS Experience Stable automated acceptance and readiness/liveness.
+| Версия | Изменения |
+| :--- | :--- |
+| 1.4.7 | Приватная телеметрия, мониторинг ресурсов и резервных копий, нагрузочные тесты |
+| 1.4.6 | Совместимость среды, миграция legacy-схем, доверенный прокси, браузерная матрица |
+| 1.4.5 | Opt-in автоматические подписанные обновления GitHub, UTC-окна и recovery |
+| 1.4.4 | Подписанный code-only CLI updater, snapshots и rollback; первый переход с 1.4.3 вручную |
+| 1.4.3 | Усиление сессий, CSRF, OIDC, CSP, файлов, шаблонов и TAR, офлайн-аудит |
+| 1.4.2 | Журнал восстановления хранилища, согласованность медиа, проверяемые атомарные копии |
+| 1.4.1 | Стабильность транзакций, конкурентность, rollback |
+| 1.4.0 | CMS Experience Stable, автоматические проверки, readiness и liveness |
 
-## 1.3 series
+## Ветка 1.3 и ранее
 
-CMS experience: page management, blocks, media, SEO control, developer tools, operations, and integration hardening. See the version-specific sections of [README.md](README.md) for the complete retained history including 1.0, 1.1 and 1.2 releases, feature details and historical upgrade notes. Historical commands may refer to old versions; use current runbooks for new deployments.
+CMS Experience: управление страницами, блоками, медиа, SEO, инструменты разработчика, обслуживание и усиление интеграций. Подробные исходные описания версий 1.0–1.3 сохранены в [архиве истории](docs/HISTORY.md). Для новых установок используйте актуальные руководства, а не исторические команды.

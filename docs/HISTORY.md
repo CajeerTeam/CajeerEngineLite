@@ -1,0 +1,1670 @@
+# Архив истории разработки
+
+> **Архивный материал.** Ниже сохранён прежний README со всеми историческими описаниями и командами. Они относятся к указанным версиям, могут противоречить текущему состоянию и не являются инструкцией для 1.6.0. Актуальные сведения: [главная страница](../README.md), [журнал изменений](../CHANGELOG.md), [документация](README.md).
+
+---
+
+# CajeerEngine Lite Edition 1.6.0
+
+
+### 1.6.0 — GitHub Automatic Updates GA
+
+Stable distribution includes the exact RC base, signed publication verification, a fail-closed supervisor installation phase and a dedicated GA acceptance/sign-off gate. See [GITHUB_AUTOMATIC_UPDATES_GA.md](GITHUB_AUTOMATIC_UPDATES_GA.md) for deployment, real GitHub verification, recovery and operator evidence. GA code and local tests are not themselves a production sign-off. Schema 14 remains unchanged.
+
+### 1.5.9 — Automatic Updates Release Candidate
+
+Preview-only release. The recovery journal now remains until the aborted transaction receipt is cleared; a failed scheduler exit after a committed installation triggers a durable rollback intent even if HTTPS readiness passes. The CLI `update auto verify` downloads and validates the selected signed package without installing it. The acceptance suite exercises the managed trust policy, signed distribution, scheduler retries, opt-in preview, HTTP maintenance, successful commit and automatic rollback through actual TLS/Nginx and a disposable PHP backend. See [AUTOMATIC_UPDATES_RC.md](AUTOMATIC_UPDATES_RC.md) for staging and release gates; live GitHub, PHP-FPM/systemd and long-running staging acceptance remain separate. Schema 14 unchanged.
+
+### 1.5.8 — Release Automation & Monitoring
+
+Protected version tags trigger the signed release workflow with a published stable base, protected signing and verification of downloaded GitHub draft assets before publication. Update Control Center exposes operational alerts and CLI monitoring; verified rollback snapshot retention is explicit, serialized and preserves the latest recovery point. See [RELEASE_AUTOMATION_MONITORING.md](RELEASE_AUTOMATION_MONITORING.md). Schema 14 unchanged.
+
+### 1.5.7 — Update Security Hardening
+
+Operator-provisioned, root-owned trust policy with up to eight RSA public keys, overlapping rotation, explicit revocation and a minimum permitted target version. Package, distribution index and production artifact checks use the same policy; invalid configured policies never fall back to legacy trust. Automatic installation requires managed trust (legacy direct CLI only with explicit compatibility opt-in). The separately deployed supervisor requires read-only update transaction storage in managed services and managed trust for new installs. See [UPDATE_SECURITY_HARDENING.md](UPDATE_SECURITY_HARDENING.md) for the mandatory manual supervisor/guard upgrade. Schema 14 unchanged.
+
+### 1.5.6 — Automatic Health & Rollback
+
+The independent maintenance supervisor now validates baseline HTTPS readiness before draining services, checks the new runtime and signed-transition file snapshot after install, probes the expected release through a loopback-only TLS listener while the public gate remains closed, and rolls back the exact failed engine transaction. The previous runtime must pass readiness before the gate opens. A durable rollback phase and operator hold survive process/host restart and rollback to older code. See [AUTOMATIC_HEALTH_ROLLBACK.md](AUTOMATIC_HEALTH_ROLLBACK.md). Upgrade the separately installed root supervisor and probe vhost manually; the signed PHP updater cannot change those privileged copies. Schema 14 unchanged.
+
+### 1.5.5 — Maintenance Orchestration
+
+Optional root-owned systemd supervisor with a persistent web-server maintenance gate, guarded service startup, actual service stop/start, non-root signed-update worker, offline verification and interrupted-cycle recovery. Requires a dedicated FPM service, read-only code mount for HTTP/background services and one-time operator bootstrap. See [MAINTENANCE_ORCHESTRATION.md](MAINTENANCE_ORCHESTRATION.md). Live health/rollback after restart is not part of this version. Schema 14 unchanged.
+
+### 1.5.4 — Update Scheduler
+
+Durable one-tick scheduler, bounded retry of check jobs, heartbeat, installation failure pause and systemd/cron deployment examples. Existing signed installation and quiescence gates remain mandatory. See [UPDATE_SCHEDULER.md](UPDATE_SCHEDULER.md).
+
+### 1.5.3 — Update Control Center
+
+Authenticated `/admin/updates` provides verified update checks, release notes, exact-digest install requests, channel and periodic policy, cancellation and bounded history. Separate opt-in CLI worker performs network and installation operations; HTTP never executes the installer. See [UPDATE_CONTROL_CENTER.md](UPDATE_CONTROL_CENTER.md). Schema 14 is unchanged.
+
+### 1.5.2 — Update Package Distribution
+
+Signed per-release update indexes, exact-base packages for multiple supported versions, and shortest verified route to the highest reachable release. The old signed installer still validates each step; one step per CLI run. See [UPDATE_DISTRIBUTION.md](UPDATE_DISTRIBUTION.md).
+
+### 1.5.1 — GitHub Release Discovery
+
+The existing auto-update commands now scan up to 20 GitHub release pages, use private per-page ETag/304 caching, bounded transient retries and persistent rate-limit cooldowns. Discovery fails closed on incomplete scans rather than installing stale cached metadata. Stable remains the default; preview discovery includes numeric-version GitHub prereleases, with a separate opt-in for preview installation. `available` is the nearest eligible release, `latest` the highest observed eligible release; neither is a signed compatibility verdict. The existing signed exact-base installation and rollback remain mandatory. See [GITHUB_RELEASE_DISCOVERY.md](GITHUB_RELEASE_DISCOVERY.md). Schema 14 is unchanged.
+
+### 1.5.0 — Production Stable
+
+The production gate verifies signed release artifacts and the entire installed runtime, compatibility, backup/recovery, live TLS readiness/version and recent monitoring. A separate explicit operator sign-off records reviewed evidence and a fresh passing live gate in private storage. Official 1.5.0 updates use 1.4.8 as the stable base; 1.4.9 operators can use a separate exact-base signed package or manual patch. Schema 14 is unchanged. See [PRODUCTION_STABLE.md](PRODUCTION_STABLE.md) for commands, evidence requirements and limits. No production sign-off is inferred from local tests.
+
+### 1.4.9 — Production Release Candidate
+
+Feature freeze: no schema or feature changes. The operator-only `php bin/cajeer release rc-check` combines security, compatibility, update recovery, CMS and operational checks. `--live` requires `CAJEER_RC_STAGING_CONFIRM=STAGING`; `--provider=...` opts into selected real provider probes. Paid AI requires separate explicit approval. The gate reports failures, untested providers and pending manual acceptance rather than certifying production.
+
+The release rehearsal now verifies actual page/media data, sitemap, private routes and backup integrity before and after signed upgrade and rollback. CI adds real TLS-terminating Nginx staging and extends browser form E2E. Release 1.4.9 is published as a GitHub prerelease (not latest), so stable auto-update clients skip it. See [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md).
+
+### 1.4.8 — Documentation & Release Engineering
+
+The release builder `tests/release_build_148.py` creates the official signed incremental `.cjrupdate`, deterministic full installation ZIP, rehearsal report and signed checksums from two clean source exports. It verifies the complete managed diff against the old updater, installs both the clean ZIP and exact upgrade on disposable sites, checks real loopback HTTP, rolls back and rejects tampered packages. A protected GitHub Actions workflow runs full CI and exact-tag rehearsal before signing and draft publication. No key is included; schema stays 14. Local checks do not certify production.
+
+**Current operator documentation:** [INSTALL](INSTALL.md) · [UPGRADE](UPGRADE.md) · [BACKUP_RECOVERY](BACKUP_RECOVERY.md) · [SECURITY](../SECURITY.md) · [COMPATIBILITY](COMPATIBILITY.md) · [OPERATIONS](OPERATIONS.md) · [RELEASE](RELEASE.md) · [CHANGELOG](../CHANGELOG.md) · [PRODUCTION_ACCEPTANCE](PRODUCTION_ACCEPTANCE.md). For fresh deployments and upgrades, use these runbooks rather than historical release-specific instructions below.
+
+Test: `python3 tests/release_engineering_148.py`. See RELEASE.md for key provisioning, artifact checks and protected workflow setup.
+
+### 1.4.7 — Operational Reliability (monitoring, diagnostics, load regression)
+
+Added actual request instrumentation, bounded private rotating JSONL logs, percentile/error/memory statistics, configurable operational checks, backup freshness and optional actual archive integrity verification. The authenticated Developer Tools monitoring tab displays retained measurements; CLI: `php bin/cajeer monitor status --minutes=15` and `php bin/cajeer monitor check --verify-backup`. Readiness checks do not implicitly migrate legacy JSON. Generic unhandled-exception logging omits raw exception messages. Telemetry is best effort and excludes static requests and pre-bootstrap failures; it is not a replacement for external uptime or FPM monitoring. See [`OPERATIONAL_RELIABILITY.md`](OPERATIONAL_RELIABILITY.md) for settings, scheduler, limitations and deployment.
+
+Tests: `php tests/core_147.php`, `bash tests/operational_http_147.sh`, `python3 tests/operational_load_147.py --seconds 15 --workers 4`. The local load test uses a disposable CMS, not the production server. Schema remains 14.
+
+### 1.4.6 — Compatibility Assurance (runtime, web server, proxy, legacy site data)
+
+Implemented read-only runtime and data compatibility checks, explicit migration preview/apply for supported schema 1–13 → 14, a verified backup before migration, exact-peer trusted reverse proxy normalization, Apache/Nginx sample deployment configurations and real-browser HTTP-navigation acceptance. Commands: `php bin/cajeer compatibility check --json`, `php bin/cajeer compatibility migration preview`, and `CAJEER_COMPATIBILITY_CONFIRM=MIGRATE php bin/cajeer compatibility migration apply`. Legacy migrations are not executed automatically by the signed code-only updater. See [`COMPATIBILITY.md`](COMPATIBILITY.md); tests: `php tests/core_146.php`, `bash tests/compatibility_http_146.sh`, `python tests/browser_146.py --browser chromium|firefox|webkit`.
+
+### 1.4.5 — Automatic Updates (GitHub Releases, opt-in, signed package installation)
+
+Added working `php bin/cajeer update auto status|check|run`: HTTPS GitHub release discovery, SemVer selection, bounded private download, optional GitHub asset digest validation, mandatory RSA-SHA256 package verification against an independently configured trusted key, schema/version/file preflight, and real installation through the 1.4.4 updater with automatic rollback on failure. Auto runs are serialized by a private flock, restricted to an explicit UTC maintenance window, and can recover interrupted updates when separately permitted. No unsigned archives are executed and no unattended installation occurs by default.
+
+**Important:** automatic code replacement requires an operator-orchestrated quiet period with PHP-FPM and background workers quiesced, secure key provisioning, and a scheduler (cron/systemd). `CAJEER_AUTO_UPDATE_WORKERS_QUIESCED=1` is a *declaration by the operator*, not a worker-stopping mechanism. See [`AUTOMATIC_UPDATES.md`](AUTOMATIC_UPDATES.md). Schema remains 14. Commands run through CLI only; there is no HTTP installer.
+
+Tests: `php tests/core_145.php` and `bash tests/automatic_updates_cli_145.sh`. For update-engine regression, run `php tests/core_144.php` and `bash tests/update_engine_cli_144.sh`.
+
+### 1.4.4 — Update Engine (verified offline release installation)
+
+Implemented CLI commands `update status|verify|install|recover|rollback|package` with RSA-SHA256 signature verification against a separately pinned public key, SHA-256 verification of each code file and existing base files, exact version/schema compatibility, a shared operations lock, PHP syntax preflight, private pre-update code and site snapshots, durable interruption journal, real file installation/deletion, and actual automatic/manual rollback. Update packages are custom signed `.cjrupdate` streams, **not** unsigned ZIP or generic TAR archives. HTTP workers return 503 during an active update journal; running PHP-FPM/jobs must still be stopped before installation.
+
+**Bootstrap:** the first upgrade **1.4.3 → 1.4.4 is a manual ZIP patch** because older versions do not have the new `update` CLI. After installing 1.4.4, sign future versioned updates on a trusted build machine and provision the authorized public key separately on each server. No key is bundled or automatically trusted. The version 1.4.5 auto-update runner provides opt-in GitHub downloading and installation. Only code-only updates compatible with JSON schema 14 are supported. Full procedures and recovery instructions: [`UPDATE_ENGINE.md`](UPDATE_ENGINE.md).
+
+New test suites: `php tests/core_144.php` and `bash tests/update_engine_cli_144.sh`.
+
+**Manual patch installation:** stop PHP-FPM and scheduled jobs, back up the entire project including `storage/` and secrets, apply the 1.4.4 patch over 1.4.3, then run `php tests/core_144.php`, `bash tests/update_engine_cli_144.sh`, `php bin/cajeer doctor` and the existing CI/staging acceptance tests. No schema migration is required.
+
+### 1.4.3 — Security Hardening (session, CSRF, OIDC, CSP, TAR and dependency inventory)
+
+This release rejects same-site cross-subdomain administrative POSTs, unsupported POST content types, unsafe OIDC RSA exponents, hardlinked/symlinked template sources and privileged TAR headers. Compiled templates now allow documented `@include(...)` directives while rejecting reserved loop variable names. Template evaluation reads only a verified single-link inode. Admin requests use a private file session handler and explicitly fail closed if session startup fails. Admin CSP disables inline script attributes and workers.
+
+Run `php bin/cajeer security audit --json` for an offline scan of web-executable files, public-directory symlinks and installed dependency manifests and lockfiles. This command does **not** claim to check current CVEs; for third-party dependency vulnerabilities, a trusted online advisory scanner is still required. See `SECURITY_HARDENING.md`.
+
+**Upgrade from 1.4.2:** stop PHP-FPM and background jobs, make a verified independent backup of the code, templates, `storage/` and secrets, then overlay the patch keeping paths. Run `php tests/core_143.php`, `bash tests/security_hardening_http_143.sh`, `php bin/cajeer security audit` and your full CI test suite before restarting. JSON schema stays at 14. Do not import third-party TAR archives or use non-file PHP session handlers without a dedicated compatibility review.
+
+### 1.4.2 — Storage & Recovery Hardening
+
+Выполнено усиление рабочих операций с `site.json`, медиатекой и TAR-архивами без изменения JSON schema 14.
+
+- **Аварийное восстановление импорта:** перед первым изменением состояния и индекса сохраняется приватный durable undo journal (`storage/app/cms-operations/recovery/`) с исходными байтами `site.json`, `media/index.json` (или признаком отсутствия) и SHA-256 новых медиа. Прерванный процесс не может опубликовать неполный результат без маркера. Первый веб-запрос (кроме `/health/live`) или `php bin/cajeer operations recover` возвращает старые данные и удаляет только проверенные новые файлы. При повреждении recovery-снимка восстановление останавливается и HTTP отвечает 503 — требуется проверенный независимый бэкап, а не удаление маркера вручную.
+- **Атомарный индекс:** неудачная публикация индекса восстанавливает его прежние точные байты, включая отсутствие файла в чистой медиатеке. Импорт проверяет входные объекты до записи; при ошибке site/session commit удаляет добавленные медиа и восстанавливает индекс. Чтение изображения/документа удерживает тот же media lock, что загрузка, импорт и удаление.
+- **Безопасное удаление:** индекс обновляется раньше физического удаления, чтобы аварийное завершение не оставило ссылающуюся на отсутствующий файл запись. Прерванная очистка может оставить *осиротевший* файл — он обнаруживается аудитором и удаляется отдельной подтверждённой командой.
+- **Полный CMS backup/export:** TAR сначала собирается и проверяется в приватной временной директории, затем публикуется как новый готовый файл без перезаписи существующего. Неполный TAR не появляется в списке доступных для восстановления копий. Имена новых архивов сортируются до микросекунды в пределах прежнего формата. Retention не удаляет старые копии, если хотя бы одна из сохраняемых копий не прошла проверку целостности.
+- **Аудит медиа:** `php bin/cajeer operations audit` сверяет метаданные, все байты и orphan-файлы; при обнаружении orphan возвращает код 1. Только после резервирования допускается `CAJEER_OPERATIONS_CONFIRM=REPAIR_ORPHANS php bin/cajeer operations repair-orphans`; команда не удаляет повреждённые файлы, на которые ссылается индекс. `release stable-check` включает проверку целостности медиатеки.
+- **Регрессия:** `php tests/core_142.php` и `bash tests/storage_recovery_http_142.sh` проверяют реальное аварийное завершение PHP-процесса после записи индекса, автоматическое восстановление на веб-запросе, 503 при повреждённом undo-снимке, import rollback, отказ повреждённому TAR, orphan cleanup и защиту retention.
+
+**Развёртывание поверх 1.4.1:** остановить PHP-FPM и фоновые задания, сделать отдельную офлайн-копию **всего** проекта, `storage/` и сервера секретов; наложить патч с сохранением относительных путей; убедиться в доступе PHP-пользователя на запись в `storage/app/cms-operations/`; выполнить `php tests/core_142.php`, `bash tests/storage_recovery_http_142.sh`, `php bin/cajeer operations audit`, `php bin/cajeer doctor`; после этого запустить PHP-FPM. В случае существующего `pending.json` не удалять его: выполнить `php bin/cajeer operations recover` и устранить причину ошибки. Подробности в `STORAGE_RECOVERY.md`.
+
+**Ограничения:** транзакция импорта восстанавливается *при следующем запросе/запуске*, а не в выключенном сервере. Защита рассчитана на локальный файл-сторедж и соблюдение монопольных блокировок; ручное изменение `storage/` сторонними процессами, физическая потеря диска и corruption двух независимых копий требуют восстановления с офлайн-бэкапа. Локальные тесты не равнозначны production sign-off.
+
+---
+
+### 1.4.1 — Core Stability (исправления существующего ядра)
+
+Этот релиз устраняет ошибки сохранения и восстановления без смены JSON schema 14.
+
+- **Транзакции:** если обновление возвращает исходный неизменённый `site.json`, файл не перезаписывается и не создаётся ложная ревизия; миграции по-прежнему обязательно сохраняются. Параллельные реальные изменения сериализуются через `storage/site.lock`.
+- **Restore `site-*.json`:** после проверки и резервирования исходных байтов сначала фиксируется восстановленное состояние, затем выполняется отзыв административных сеансов. Если запись или отзыв завершаются ошибкой, предыдущие байты `site.json` восстанавливаются, а ошибка возвращается вызывающему коду. При невозможности отката сообщается о необходимости восстановления из pre-restore backup. Повреждённое старое JSON также сохраняется в копии.
+- **Durable I/O:** запись больших файлов через `OperationFiles::write` выполняется в цикле до записи всех байтов и затем синхронизируется. `writeNew` публикует новые файлы через `link` без перезаписи назначения; применяется к JSON-бэкапам, истории шаблонов и снимкам истории страниц.
+- **Новые исполняемые тесты:** `php tests/core_141.php` проверяет реальные файлы, отказ session registry, откат, идемпотентность и восстановление из повреждённого JSON; `php tests/site_concurrency_141.php` запускает восемь независимых PHP-процессов, делающих 32 конкурирующие записи, без потери обновлений. CI запускает оба теста вместе с предыдущей регрессией.
+
+**Установка поверх 1.4.0:** сначала сделайте независимую копию кода и `storage/`, затем остановите PHP-FPM и фоновые операции, распакуйте патч в корень CMS с сохранением относительных путей и запустите `php tests/core_141.php`, `php tests/site_concurrency_141.php`, `php bin/cajeer doctor`. Схема хранилища остаётся 14; миграция не требуется. Это локальные проверки, а не свидетельство production-приёмки на вашем сервере.
+
+---
+
+### 1.4.0 — CMS Experience Stable (производственная приёмка)
+
+Обновление 1.3.9 → 1.4.0 включает проверяемые изменения исполняемого кода, а не только отчёт или декларацию готовности:
+
+- **Атомарная копия без перезаписи**: `OperationFiles::copy()` публикует скопированный файл через `link()` без замены уже существующего назначения, в том числе если оно появилось между предварительной проверкой и записью. Используется для импортированных медиа и CLI-экспорта. Проверяются файловый дескриптор исходника, размер, права 0600 и `fsync`; ошибка не оставляет опубликованную копию.
+- **Строгий TAR**: проверяется нулевое выравнивание членов архива; изменение padding отвергается при импорте/верификации.
+- **Readiness endpoint**: `GET /health/ready` или `HEAD /health/ready` возвращает HTTP 200 `{"status":"ready"}` только когда JSON актуален, `storage/` доступен для записи и главная страница реально рендерится. При сбое — 503 `{"status":"unavailable"}` с `Retry-After`, без раскрытия ошибки и внутренних путей. `/health/live` остаётся отдельной проверкой живости PHP. POST не поддерживается.
+- **Исполняемая приёмка**: `php bin/cajeer release stable-check [--json] [--live]` проверяет реальное состояние хранилища, PHP, CSP, шаблоны, защищённость всего кода и ассетов, последний бэкап и выполняет **изолированный восстановительный прогон** — реальный экспорт TAR, проверка, импорт в новый сайт, сравнение контента, SEO, медиа по байтам и сохранение целевых учётных данных. На исходном сайте не изменяются страницы, пароль и медиа. При `--live` дополнительно проверяется HTTPS, административные заголовки, cookie и endpoint readiness через доверенную TLS-сессию без POST/токенов.
+- **Регрессия**: `tests/core_140.php`, `tests/cms_stable_http.sh`, `tests/browser_140.py` включены в CI вместе с предыдущими тестами. Обновлены исторические проверки версии 1.3.9 и recovery CLI для новой major/minor версии.
+
+Команды приёмки (в изолированном staging с production-подобной конфигурацией):
+
+```sh
+php bin/cajeer doctor
+php bin/cajeer developer check
+php bin/cajeer operations backup create
+php bin/cajeer release stable-check --json
+php tests/core_140.php
+bash tests/cms_stable_http.sh
+python tests/browser_140.py
+php bin/cajeer release stable-check --json --live  # только если публичный HTTPS staging доступен
+```
+
+**Коды выхода release stable-check**: `1` — локальная/live-проверка не пройдена; `2` — автоматизированные проверки пройдены, но требуется ручная приёмка staging/production и внешних интеграций. Команда **никогда не заявляет `production_accepted=true` только по локальным или read-only HTTPS пробам**. Это намеренно исключает ложный production sign-off. Полный список ручных действий — в `PRODUCTION_ACCEPTANCE.md`.
+
+**Совместимость**: JSON schema 14, без миграции. Создайте внешнюю копию кода, шаблонов, секретов и `storage/` до установки; выключите PHP-FPM и задания, наложите ZIP с сохранением путей, затем перезапустите PHP-FPM после проверок. Проверки localhost/CI не заменяют ручную проверку TLS, FPM, OIDC, AI и аналитики на вашем сервере.
+
+---
+
+### 1.3.9 — CMS Experience Hardening (безопасность и полная интеграционная регрессия)
+
+В этом релизе исправлены реальные границы безопасности существующей CMS, а не добавлены демонстрационные маршруты или интерфейсы:
+
+- **Проверка административного authority на каждом запросе:** все `/admin` маршруты, включая HTTP-стенды, сверяют `Host` (домен и порт) с `settings.url` из сохранённого сайта и отклоняют неподходящий источник (HTTP 421). Для HTTPS-админки требуется фактическое `HTTPS=on` или `HTTPS=1`, установленное доверенным веб-сервером. `X-Forwarded-Proto` / `X-Forwarded-Host` не являются доказательством TLS и не используются для проверки. По возможности настройте отдельный TLS vhost для канонического сайта.
+- **Защита POST:** непустые `Origin` и `Referer` должны соответствовать действующему каноническому origin. `Sec-Fetch-Site: cross-site` отклоняется даже при корректном CSRF-токене. Серверный **OIDC backchannel logout** исключён только из проверки браузерного источника — его JWT по-прежнему проверяется криптографически. Прежняя проверка CSRF обязательна для форм и не заменена заголовками.
+- **Безопасная передача бэкапов:** приватные TAR скачиваются через проверенный файловый дескриптор (тип, inode/dev, одна ссылка, права 0600, размер). Замена пути, hardlink и symlink не допускаются; поток не загружается целиком в оперативную память.
+- **Ограниченные запросы:** до начала мутации CMS отклоняются некорректный `Content-Length`, chunked body и тела, превышающие 350 000 байт для обычных админ-форм, 8 500 000 байт для медиатеки и 116 000 000 байт для CMS Operations. **Также** ограничивайте upload на уровне Nginx/Apache и `post_max_size`, `upload_max_filesize` в PHP; проверка PHP не заменяет лимиты фронтового веб-сервера. Большие операции выполняйте CLI.
+- **Атомарность восстановления:** при ошибке сохранения сайта или отзыва сеансов повторно сохраняется предыдущее состояние `site.json`; MediaLibrary откатывает свой индекс и удаляет добавленные во время неудачного импорта файлы. При невозможности восстановить JSON выдаётся явная ошибка с указанием pre-restore backup. Освобождение глобального lock гарантировано и при ошибке очистки временных данных.
+- **Схема данных 14 без миграции** — страницы, SEO, медиатека, настройки AI, SkiF4er ID и existing backups совместимы. Не меняйте canonical origin сайта без обновления `settings.url` и корректных TLS/Host на прокси.
+
+**Новые исполняемые интеграционные тесты:**
+
+```sh
+php tests/core_139.php
+bash tests/experience_hardening_http.sh
+python tests/browser_139.py  # нужен Playwright + Chromium
+```
+
+`core_139.php` проверяет матрицу Host/Origin/Referer/Fetch Metadata, лимиты и реальную транзакцию импорта с принудительным сбоем session registry, затем успешный повторный импорт с медиа и SEO. `experience_hardening_http.sh` поднимает настоящий PHP-сервер, использует реальные cookie/CSRF, POST, multipart и TAR и последовательно проходит создание и публикацию страницы, экранирование XSS, медиа, SEO, бэкап, повреждённый импорт, восстановление, отзыв сеанса и повторный вход. `browser_139.py` получает действительный серверный HTML через авторизованные HTTP-запросы и проверяет в Chromium экраны Media, SEO, Developer, Operations, Editor, AI на 1280/768/390/320 px, а также создание бэкапа. Для совместимости с изолированным CI браузерный тест **отображает** полученные HTTP-страницы через `set_content`, не выдавая эту проверку за навигацию Chromium по реальной сети.
+
+CI выполняет новые сценарии наряду со всеми предыдущими PHP/HTTP/Chromium наборами. Локальные тесты не подтверждают доставку данных в реальные внешние AI/analytics/OIDC-сервисы, TLS-настройки конкретного reverse proxy или производительность под production-нагрузкой. Для этих пунктов нужна отдельная проверка staging.
+
+**Установка поверх 1.3.8:** сохраните внешнюю копию кода и `storage/`, остановите PHP-FPM/плановые задачи, распакуйте ZIP-патч с сохранением путей, затем выполните `php bin/cajeer doctor`, `php bin/cajeer operations check` и указанные тесты в staging. Проверьте `settings.url`, `Host` и `fastcgi_param HTTPS on;` (пример в `deploy/nginx.conf`) перед перезапуском PHP-FPM. Удалённые файлы отсутствуют; код хранилища не требует миграции.
+
+---
+
+### 1.3.8 — CMS Operations (резервные копии, импорт/экспорт и обслуживание)
+
+Это действующая реализация раздела **`/admin/operations`** (доступ только после входа в админку), а не прототип интерфейса:
+
+- **Создание и скачивание приватного архива** с текущими `storage/site.json` и зарегистрированной медиатекой (`storage/media/index.json` + фактические файлы). Снимок согласован блокировками media → site. Формат — потоковый, строго валидируемый `ustar` без зависимости от расширения PHP ZIP/Phar. Для каждого файла вычисляются размер и SHA-256. Архив хранится в `storage/app/cms-operations/backups` (0700/0600).
+- **Проверка архива** читает TAR в изолированный приватный каталог; проверяет заголовки, хэши, медиафайлы, размеры, MIME, структуру изображений, JSON-схему и ссылки страниц на медиа. Символические ссылки, нестандартные TAR-записи, повторные/лишние пути, traversal и повреждённые данные блокируются. Верификация не изменяет CMS.
+- **Переносимый экспорт** скачивается из админки по защищённому POST, с теми же страницами и медиа, но с заменённым хэшем пароля, отвязанным владельцем, сброшенными сеансами и настройками AI по умолчанию. Токены окружения PHP в архив не входят.
+- **Импорт и восстановление** принимают проверенный TAR, сохраняют активный пароль, привязку SkiF4er ID, `auth_policy`, конфигурацию AI и текущий основной URL сайта; перед записью делают стандартный защищённый pre-restore backup исходного `site.json`, отзывают все PHP-сеансы. Новые медиа устанавливаются под прежними ID; ранее существовавшие медиа не удаляются. Конфликты ID/хэшей запрещаются. При ошибке до фиксации JSON отменяются изменения индекса и добавленных файлов.
+- **Обслуживание**: текущие сведения о числе страниц, медиафайлов, копий и диске; ограниченная по каталогу очистка кэша аналитики; ротация старых CMS-архивов с сохранением от 1 до 100 последних. Все изменяющие формы защищены CSRF и подтверждением опасных операций. Технические действия пишут коды событий в Developer Events.
+
+Команды CLI (полезны для серверов и архивов свыше HTTP-лимитов):
+
+```bash
+php bin/cajeer operations check
+php bin/cajeer operations backup create
+php bin/cajeer operations backup list
+php bin/cajeer operations backup verify cms-YYYYMMDDTHHMMSSZ-XXXXXXXXXXXXXXXX.tar
+CAJEER_OPERATIONS_CONFIRM=cms-YYYYMMDDTHHMMSSZ-XXXXXXXXXXXXXXXX.tar php bin/cajeer operations backup restore cms-YYYYMMDDTHHMMSSZ-XXXXXXXXXXXXXXXX.tar
+php bin/cajeer operations export /secure/path/cajeer-export.tar
+CAJEER_OPERATIONS_CONFIRM=IMPORT php bin/cajeer operations import /secure/path/cajeer-export.tar
+php bin/cajeer operations cache clear
+CAJEER_OPERATIONS_CONFIRM=PRUNE php bin/cajeer operations prune 10
+```
+
+**Ограничения и эксплуатация:** это архив содержимого Lite **(JSON + зарегистрированные медиа)**, а не полная резервная копия сервера: исходники PHP, пользовательские `.cjr`-шаблоны, секреты окружения, история правок и журналы не входят. Их нужно резервировать отдельно, вне `DocumentRoot`. Размер TAR ограничен 115 МБ (медиа до 100 МБ); максимальный HTTP upload дополнительно ограничивается `post_max_size`, `upload_max_filesize` в PHP-FPM и `client_max_body_size` в Nginx (в примерном Nginx-конфиге по умолчанию — 10 MB). Большие архивы переносите через CLI с приватными правами 0600. Для восстановления и импорта запланируйте окно обслуживания и резервирование `storage/`; приложение сериализует свои операции с редакторами, но не блокирует чтения публичных страниц другими PHP-процессами. После переноса на другой домен проверьте абсолютные canonical-URL и параметры SEO. В целях безопасности **не публикуйте резервные копии** (в них есть хэш пароля).
+
+**Обновление с 1.3.7:** сохраните полную резервную копию проекта и `storage/`, остановите PHP-FPM, распакуйте patch ZIP поверх корня 1.3.7 и запустите `php bin/cajeer operations check`, затем PHP-FPM. Схема JSON **14** не меняется; миграция не требуется. Автоматические проверки: `php tests/core_138.php`, `bash tests/cms_operations_http.sh`, общая регрессия через CI. Браузерную загрузку крупных TAR и восстановление под реальной нагрузкой проверяйте в staging.
+
+
+Облегчённая CMS для визиток, лендингов, портфолио и небольших корпоративных сайтов. Изначально основана на CajeerEngine 1.3.0; общие компоненты ядра синхронизированы с предоставленными исходниками CajeerEngine 2.1.0: Cajeer Template Engine (.cjr), PublicPath и защищённые файловые операции. Lite сохраняет собственное минимальное ядро, схему хранения и независимую версию. Apache-2.0. Подробности и ограничения переноса — в `CORE_BASELINE.md`.
+
+## Быстрый старт
+
+PHP 8.4.1+ (CLI и web SAPI), стандартные расширения PHP (JSON, session, filter, hash). Composer, Node.js, SQL и Redis не нужны.
+
+```sh
+php bin/cajeer install http://127.0.0.1:8080 "Мой сайт"
+php bin/cajeer doctor
+php -S 127.0.0.1:8080 -t public router.php
+```
+
+Установщик спросит пароль (12–72 байта; ввод видимый). Можно передать его через переменную окружения `CAJEER_ADMIN_PASSWORD` из менеджера секретов. Откройте `/admin`, войдите, настройте сайт, создайте страницы. Нет стандартного пароля и публичного веб-установщика. Главная `/` всегда опубликована; черновики недоступны публично. Меню формируется из опубликованных страниц с флагом «В меню». Контент — простой текст, HTML экранируется. Для изображений и сложных блоков разработчик меняет доверенные `.cjr` шаблоны и добавляет статические файлы в `public/assets/`.
+
+## Production
+
+- Document root строго `public/`, не корень проекта. Все остальные файлы, включая `storage/site.json`, вне веб-доступа.
+- Используйте HTTPS, PHP-FPM и Apache с mod_rewrite (включите AllowOverride FileInfo Options Indexes) либо Nginx (пример `deploy/nginx.conf`). Встроенный PHP-сервер только для разработки.
+- Запускайте установку от пользователя PHP-FPM или назначьте ему владельца `storage/`; код и шаблоны не должны быть доступны ему для записи. Укажите реальный HTTPS origin при установке: от него зависит canonical, sitemap и Secure cookie.
+- Одно приложение на локальном диске, не NFS / multi-node. Хранение JSON с проверяемым flock, защитой от символьных ссылок в пути, fsync и атомарной заменой; до 100 страниц и 4 MB JSON. Старые JSON-схемы 1–8 автоматически и через CLI мигрируют в schema 9 с резервной копией исходных данных до изменения. Резервное копирование и восстановление через CLI (см. ниже). Публичного API, HTML-редактора, загрузчика файлов, почтовых форм, ролей, плагинов, автоматических обновлений нет.
+- Вход: 5 неудачных попыток за 5 минут на весь сайт; сессия 1 час бездействия, CSRF-токены и ротация ID. Дополнительно ограничьте `/admin` на reverse proxy (например, VPN/IP allowlist). Шаблоны являются доверенным кодом разработчика; редактирование через Developer Tools выключено по умолчанию и требует явного разрешения во время обслуживания.
+
+## Проверка
+
+```sh
+php tests/smoke.php
+php tests/core_210.php
+php tests/core_102.php
+php tests/core_103.php
+php tests/core_104.php
+php tests/core_105.php
+php tests/core_106.php
+php tests/core_107.php
+php tests/core_108.php
+bash tests/http.sh
+# Дополнительно при наличии Python Playwright + Chromium:
+python tests/browser_103.py
+python tests/browser_104.py
+python tests/browser_105.py
+python tests/browser_106.py
+python tests/browser_107.py
+python tests/browser_108.py
+```
+
+Миграции из полной версии нет: перенос контента вручную. Lite имеет независимую схему хранения и версию. Основной проект: https://github.com/CajeerTeam/CajeerEngine. Репозиторий Lite: https://github.com/CajeerTeam/CajeerEngineLite.
+
+## 1.0.2 — рабочее ядро, модули, миграции и резервирование
+
+Обновление приложения: замените файлы из патч-архива в корне Lite 1.0.1, сделайте внешнюю копию `storage/site.json` и выполните `php bin/cajeer migrate` **до запуска веб-сервера**. Для schema 1 создаётся долговременная защищённая копия `storage/backups/site-*.json`, после чего атомарно фиксируется schema 2. При первом чтении страницы миграция также может выполниться автоматически; в production используйте явную команду во время техобслуживания. Новая установка Lite 1.1.1 сразу создаёт schema 9.
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php bin/cajeer module list
+php bin/cajeer module disable sitemap
+php bin/cajeer module enable sitemap
+php bin/cajeer backup create
+php bin/cajeer backup list
+php bin/cajeer backup verify site-YYYYMMDDTHHMMSSZ-XXXXXXXXXXXXXXXX.json
+# Восстановление: ОСТАНОВИТЬ PHP-FPM и все задачи, работающие с сайтом!
+CAJEER_RESTORE_CONFIRM=site-YYYYMMDDTHHMMSSZ-XXXXXXXXXXXXXXXX.json php bin/cajeer backup restore site-YYYYMMDDTHHMMSSZ-XXXXXXXXXXXXXXXX.json
+```
+
+Модули `navigation`, `robots`, `sitemap` управляются в админ-панели и CLI. Выключение `navigation` скрывает меню в шаблоне, выключение `robots` или `sitemap` отключает соответствующий HTTP-маршрут (404); выключенный `sitemap` также исключает строку Sitemap из `robots.txt`. Базовые страницы и администрирование не отключаются.
+
+Бэкапы находятся строго в `storage/backups` (закрытый каталог 0700, файлы 0600), содержат исходный JSON (включая **хэш пароля**) и SHA-256, проверяются до восстановления; перед заменой живого файла делается копия `pre-restore`, даже если текущий JSON повреждён. Операции синхронизируются единым lock-файлом и используют атомарную запись с fsync. Восстановление старых копий schema 1–8 автоматически преобразует их в schema 9. Не размещайте `storage/` в DocumentRoot; обеспечьте отдельное внешнее резервирование и ротацию бэкапов в системном планировщике. Восстановление выполняется только с остановленным веб-сервером / PHP workers, иначе параллельные запросы могут читать старую версию данных. Удаление бэкапов приложением автоматически **не выполняется**, чтобы избежать потери точек восстановления.
+
+## 1.0.3 — Cookie Consent Core (production)
+
+Обновление с **1.0.2**: сохраните внешнюю копию `storage/site.json`, распакуйте **только** изменённые файлы патча в корень проекта, остановите PHP-FPM на время обновления и выполните `php bin/cajeer migrate` перед запуском веб-приложения. Преобразование schema 2 → 3 создаёт приватный снапшот исходного JSON и сохраняет все страницы, пароль, модули и настройки. Команда `php bin/cajeer doctor` должна показать Lite 1.0.3, schema 3. Перед раскаткой убедитесь, что доступны новый `public/assets/consent.js` и изменённый шаблон.
+
+**Что работает:** на каждой опубликованной странице показывается первосторонний баннер с явными действиями «Принять все», «Отклонить необязательные» и «Настроить»; категории — необходимые (всегда включены), аналитика, маркетинг, запись сессий. Отдельные чекбоксы сохраняют частичный выбор. Выбор хранится в `cajeer_lite_consent` с `SameSite=Lax`, `Path=/`, `Secure` на HTTPS и настраиваемым сроком 1–365 дней (по умолчанию 180). В cookie находится только версия политики, время решения и битовая маска категорий — никаких пользовательских идентификаторов. **Это не авторизационная cookie и не подтверждение юридической личности.**
+
+Ссылка «Настройки cookie» в футере всегда открывает текущие разрешения: их можно изменить, полностью отозвать (сохранив запрет необязательных категорий) либо предоставить заново. Браузер проверяет срок, формат и ревизию, а сервер также валидирует cookie для безопасного серверного отображения. При ошибке сохранения появляется сообщение, а баннер остаётся видимым. Событие `cajeer:consentchange` с текущими разрешениями отправляется после изменения; `window.CajeerConsent.get()/has()/open()/revoke()` предоставляет рабочий API для собственных JS-модулей. Другие вкладки синхронизируются через BroadcastChannel с проверкой при возврате фокуса.
+
+В `/admin` → «Cookie Consent» администратор может включать/отключать баннер, изменять заголовок, текст, срок действия и путь к своей странице политики конфиденциальности. Изменение конфигурации автоматически увеличивает номер политики; старые решения перестают действовать и снова требуется согласие. URL политики должен быть локальным каноническим путём опубликованной страницы; создайте такую страницу вручную при необходимости.
+
+**Безопасность:** на публичных страницах CSP разрешает только скрипты с собственного origin (`script-src 'self'`); на `/admin` по-прежнему `script-src 'none'`. В Lite 1.0.3 **нет** подключения GA4, GTM, Метрики, Clarity или Matomo, поэтому отправки сторонних аналитических запросов по умолчанию нет. Последующие интеграции обязаны проверять предоставленные категории *до загрузки* сторонних скриптов и отключать сбор при отзыве согласия. Само наличие события не гарантирует, что произвольный сторонний скрипт автоматически прекратит работу.
+
+Для управления выбором необходим JavaScript. Без него сторонняя аналитика не загружается, но интерактивный выбор недоступен. Установщик и админ-панель используют отдельные необходимые сессионные cookies. Длительность, текст политики и состав категорий следует адаптировать под реально подключённые сервисы и применимые требования к конфиденциальности. Автоматическое удаление ранее отправленных провайдерам данных не осуществляется.
+
+## 1.0.4 — Google Analytics 4 Integration (production runtime)
+
+**Обновление 1.0.3 → 1.0.4:** сохраните внешнюю копию `storage/site.json`, остановите PHP-FPM, распакуйте только изменённые файлы в корень проекта, затем выполните:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_104.php
+bash tests/http.sh
+```
+
+Миграция `schema 3 → 4` выполняется атомарно и перед записью создаёт защищённую резервную копию **точного JSON schema 3**; страницы, настройки, пароль, модули и Cookie Consent сохраняются без изменений. Новая секция `integrations.ga4` изначально выключена, Measurement ID пустой. Восстановление бэкапов со схемами 1–3 переносит их в текущую схему 4. PHP, JSON, стандартные web-сервер и браузер достаточны в production: Composer, Node, SQL, сторонние PHP-библиотеки не требуются.
+
+**Подключение:** создайте поток данных типа «Веб» в Google Analytics 4, получите *Measurement ID* (`G-XXXXXXXXXX`, не ID контейнера `GTM-...`). В `/admin` → «Google Analytics 4» укажите ID, включите GA4 и оставьте включённым Cookie Consent. Опциональные флаги: `page_views` — один ручной `page_view` для каждой загрузки страницы; `contact_clicks` — событие `contact_click` при клике на `mailto:` / `tel:` без передачи адреса или номера; `debug_mode` — данные для GA4 DebugView. Параметры валидируются на сервере и сохраняются в `storage/site.json`. Состояние можно проверять в GA4 Realtime/DebugView при реальном Measurement ID и разрешении посетителя; доставка зависит от доступности Google, блокировщиков и настроек потока GA4.
+
+**Cookie Consent + Consent Mode v2:** используется **Basic Consent Mode**. При первом посещении, отказе, просроченной/отозванной cookie или отключённой политике Cookie Consent внешние ресурсы GA4 *не запрашиваются*. `public/assets/ga4.js` — локальный исполняемый модуль. После явно сохранённого разрешения категории «Аналитика» он инициализирует `dataLayer`, устанавливает Google consent defaults `denied`, обновляет разрешения согласно текущему решению посетителя, и только затем загружает официальный `gtag.js` с `www.googletagmanager.com`. Параметры `analytics_storage`, `ad_storage`, `ad_user_data`, `ad_personalization` отражают выбор категорий «Аналитика» и «Маркетинг». Google signals и ad-personalization signals отключены на уровне конфигурации GA4 по умолчанию независимо от этого разрешения. Google `config` использует `send_page_view: false`, чтобы ручной `page_view` не дублировался из-за авто-отправки. Проверяйте также настройки Enhanced Measurement, если включаете GA4-автособытия.
+
+**Рабочий API событий:** при включённом GA4 и после разрешения аналитики из доверенного кода сайта можно отправлять пользовательские события:
+
+```js
+window.CajeerGA4?.track('signup_clicked', { placement: 'footer' });
+window.CajeerGA4?.status(); // enabled, consent, initialized, tagLoaded, pageViewSent
+```
+
+`track()` возвращает `false`, если нет согласия, GA4 не инициализирован, имя или параметры не проходят валидацию. Ограничения: имена `a-z`, `0-9`, `_` длиной до 40 символов, до 25 примитивных параметров, строки до 100 символов. Не отправляйте в GA4 email, телефоны, персональные данные или поисковые запросы. На `/admin` GA4 никогда не включается и CSP остаётся `script-src 'none'`.
+
+**Отзыв согласия:** `CajeerConsent.revoke()` и кнопка «Настройки cookie» прекращают события из Lite и устанавливают `ga-disable-G-...`, отправляют `consent update` с `denied`, очищают доступные first-party `_ga*`, `_gid`, `_gat*` cookies (включая попытку очистки cookie родительского домена). Загруженный Google script не удаляется из памяти браузера, а уже переданные Google данные невозможно отменить локальной очисткой. Требования по удалению данных реализуются отдельно через Google Analytics при наличии соответствующих оснований и доступа.
+
+**CSP:** на публичных страницах *с включёнными GA4 и Cookie Consent* разрешён `https://www.googletagmanager.com` для внешнего JavaScript и минимальный список Google Analytics endpoints для `connect-src`/`img-src`. На страницах с выключенной интеграцией и во всей админ-панели сохраняется строгая исходная политика. Не добавляйте сторонние скрипты вручную в шаблон или через GTM без согласования с Consent Manager; одновременный прямой GA4 и GA4 через GTM приведут к дублированию.
+
+**Проверки:** `tests/core_104.php` проверяет настройки, негативные кейсы и реальную миграцию/резервирование schema 3. `tests/http.sh` проверяет CSRF, админ-формы, CSP и доступность скрипта. `tests/browser_104.py` в Chromium проверяет загрузку только после согласия, порядок команд Consent Mode v2, событие page_view, события контактов, отзыв и повторное предоставление согласия. Для надёжности в окружениях без browser→localhost доступа тест использует настоящую PHP-разметку и штатные JS-модули с имитацией cookie-хранилища и ответа Google. **Он не подтверждает фактическую доставку событий в живую GA4**, её нужно проверить отдельно на сайте с собственным Measurement ID.
+
+
+## 1.0.5 — Яндекс Метрика, JavaScript-цели, Вебвизор
+
+**Обновление с 1.0.4:** остановите веб-работники и задачи Lite, сделайте внешнюю копию `storage/site.json`, распакуйте патч только с изменёнными файлами в корень проекта и выполните:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_105.php
+bash tests/http.sh
+```
+
+Миграция `schema 4 → 5` создаёт резервную копию точного исходного JSON до атомарного обновления. Данные страниц, пароли, модули, Cookie Consent и **настроенная GA4** сохраняются. Новая секция `integrations.metrica` по умолчанию выключена. Переход с 1.0.1–1.0.3 и восстановление старых копий проходят через всю последовательность миграций. Зависимости Composer, БД или NPM для production не требуются.
+
+**Подключение:** создайте счётчик на сайте [Яндекс Метрики](https://metrika.yandex.ru/), затем в `/admin` → «Яндекс Метрика» укажите **числовой ID счётчика** и включите интеграцию. Оставьте включённым Cookie Consent. Можно настроить учёт просмотров страниц (`page_views`), точный показатель отказов (`accurate_bounce`), карту кликов (`clickmap`), Вебвизор (`webvisor`) и цели контактов (`contact_goals`). Идентификаторы целей `contact_email`, `contact_phone` задаются в форме; **создайте цели с теми же идентификаторами типа «JavaScript-событие» в интерфейсе Метрики**. В Lite нет токена Яндекса и нет скрытого создания целей через API. Одно посещение не даёт гарантии немедленного появления событий в отчёте — проверьте счётчик и цели в интерфейсе Яндекса.
+
+**Работающие механизмы:** локальный `public/assets/metrica.js` после явно сохранённого согласия `analytics` создаёт официальную очередь `ym`, вызывает `ym(counterId, 'init', ...)` и запрашивает `https://mc.yandex.ru/metrika/tag.js`. Начальный `hit` отправляется единожды, только если разрешён просмотр (`page_views`); опция `defer:true` исключает повторную отправку при `init`. При отправке просмотров Lite удаляет query и fragment из URL; `trackLinks:false` не отправляет адреса ссылок автоматически. Клики по `mailto:` и `tel:` отправляют только указанную цель, без самого адреса или номера. Доступные программные вызовы:
+
+```js
+window.CajeerMetrica?.goal('signup');
+window.CajeerMetrica?.goal('form_submit', { placement: 'footer' });
+window.CajeerMetrica?.hit('/about'); // для дополнительных просмотров SPA
+window.CajeerMetrica?.status(); // initialized, allowed, webvisor, remoteLoaded и прочее
+```
+
+API возвращает `false`, если согласия нет или имя/параметры недопустимы. Переданные в `goal()` параметры ограничены 10 короткими примитивными значениями; **не отправляйте персональные данные даже при наличии согласия на аналитику**. `hit()` принимает только относительный путь без query, fragment и `..`. При блокировке Яндекса браузером события могут остаться в очереди, и фактическая доставка не гарантируется.
+
+**Cookie Consent и Вебвизор:** до разрешения категории `analytics` нет ни скрипта Метрики, ни запросов к Яндексу. `webvisor` и `clickmap` включаются в параметрах `init` только при наличии *одновременно* разрешений `analytics` и `recordings`. Если уже запущенному счётчику меняют или отзывают `recordings` либо отзывают `analytics`, Lite немедленно инициирует перезагрузку страницы, поскольку официальный JS API не предоставляет надёжной выгрузки действующего Вебвизора. После перезагрузки настройка разрешений применяется до загрузки тега. Доступные first-party `_ym*` cookies удаляются при смене, однако уже отправленные данные и cookies доменов Яндекса локально удалить невозможно. Для обработки удаления ранее собранной информации используйте соответствующие средства провайдера и собственную политику хранения данных. При отключённом Cookie Consent интеграция принудительно неактивна.
+
+**CSP:** только на публичных страницах включённой Метрики разрешается официальный список Yandex tag/Webvisor HTTPS и WSS доменов, `yastatic.net`, а также `child-src`/`frame-src` для Вебвизора. Если включён Webvisor, CSP публичных страниц допускает встраивание из ограниченного списка доменов Яндекс Метрики для просмотра записей. Это требуется согласно рекомендациям Яндекса, но **ослабляет защиту от встраивания именно для публичных страниц**. `/admin` продолжает возвращать `X-Frame-Options: DENY`, CSP `script-src 'none'` и `frame-ancestors 'none'`. Без включённых сервисов внешние домены не разрешаются.
+
+**Тестирование:** `tests/core_105.php` проверяет настройку счётчика, валидацию, отсутствие записи ошибочных значений, миграцию 4→5, сохранение GA4 и оригинальных байтов в backup. `tests/http.sh` проверяет настройки в админке, CSRF, CSP и отключение при выключенном Cookie Consent. `tests/browser_105.py` использует Chromium и оригинальную PHP-разметку с настоящими клиентскими скриптами, но эмулирует ответ Яндекса и сам переход `location.reload()` при изменении согласия, так как сетевые переходы заблокированы в некоторых sandbox-средах. Прямую навигацию при перезагрузке и отправку данных в настоящий счётчик следует дополнительно проверить в staging с реальным ID.
+
+
+## 1.0.6 — Google Tag Manager, dataLayer, Consent Mode v2
+
+**Обновление с 1.0.5:** остановите веб-работники и задания Lite, отдельно сохраните `storage/site.json`, распакуйте patch ZIP в корень проекта с заменой совпадающих файлов, выполните:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_106.php
+php tests/core_107.php
+bash tests/http.sh
+```
+
+Миграция `schema 5 → 6` под блокировкой создаёт защищённую резервную копию исходных байтов JSON, затем атомарно добавляет `integrations.gtm` со значениями `enabled: false`, `container_id: ""`, `contact_events: true`. Настройки `integrations.ga4`, `integrations.metrica`, Cookie Consent, контент, модули и хэш пароля сохраняются. Старые бэкапы schema 1–5 восстанавливаются через те же миграции. PHP 8.4.1+, JSON и обычный браузер достаточны для production, без Composer, SQL и Node.
+
+**Подключение:** создайте web-контейнер в [Google Tag Manager](https://tagmanager.google.com/), получите ID формата `GTM-XXXXXXX` и укажите его в `/admin` → «Google Tag Manager». Включите GTM и оставьте Cookie Consent включённым. Прямое включение GA4 в Lite при этом сохраняется в JSON, но **не запускает `ga4.js`**: события GA4 теперь должны настраиваться в **самом контейнере GTM**. Это исключает двойную загрузку GA4 через два независимых маршрута Lite, но не предотвращает двойное срабатывание двух ошибочно настроенных GA4-тегов внутри GTM. Если GTM отключить, прямая GA4 снова начнёт работать.
+
+**Реальная загрузка:** `public/assets/gtm.js` — локальный исполняемый модуль, который обрабатывается после `consent.js`. Он синхронно создаёт `window.dataLayer` и ставит Google consent defaults **`denied`** для `analytics_storage`, `ad_storage`, `ad_user_data` и `ad_personalization`. Пока пользователь не сохранил разрешение **хотя бы одной** необязательной категории (`analytics`, `marketing` или `recordings`), **нет HTTP-запроса** к Google и `gtm.js` не загружается. После разрешения модуль ставит `gtag('consent', 'update', ...)`, событие `cajeer_consent_update` с булевыми категориями, затем стандартное `event: 'gtm.js'` с `gtm.start` и запрашивает `https://www.googletagmanager.com/gtm.js?id=GTM-...`. События и параметры согласия помещаются в очередь до запуска удалённого контейнера. Параметры `ad_storage`, `ad_user_data`, `ad_personalization` предоставляются только при разрешении категории **маркетинг**; `analytics_storage` — только при **аналитике**. `recordings` передаётся отдельной переменной `cajeer_consent.recordings`, не является встроенным Google Consent Mode параметром. Выбран **Basic Consent Mode**, без cookieless pings до согласия.
+
+**Важная настройка внутри GTM:** загрузка контейнера после любого необязательного разрешения **не означает** автоматического разрешения всех тегов. Для каждого тега установите встроенные или Additional Consent Checks в GTM и соответствующие триггеры/исключения: например, GA4 — `analytics_storage`, рекламные теги — соответствующие маркетинговые consent-параметры, запись экрана — событие/переменную `cajeer_consent.recordings`. Простые Custom HTML / сторонние теги GTM не могут автоматически останавливаться Lite по разрешениям и могут блокироваться строгой Content Security Policy. Для них необходимы отдельная безопасная настройка CSP и согласия. Не запускайте две установки GTM, не добавляйте произвольный GTM-код в `.cjr` вручную. Контейнер GTM не должен собирать идентификаторы пользователей без надлежащего разрешения.
+
+**Рабочий `dataLayer` API:** при подключённом GTM и разрешённой категории из доверенного кода шаблона можно отправлять собственные события:
+
+```js
+window.CajeerGTM?.track('cajeer_signup', { placement: 'footer', count: 1 });
+window.CajeerGTM?.track('cajeer_conversion', { campaign: 'test' }, 'marketing');
+window.CajeerGTM?.status(); // initialized, allowed, remoteLoaded, remoteFailed, reloading, consentMask
+```
+
+`track()` возвращает `false` без требуемого согласия или при некорректных данных. Имена событий имеют префикс `cajeer_`; запрещены зарезервированные системные события, вложенные объекты, потенциально чувствительные названия полей, email, URL, длинные последовательности цифр, до 20 коротких параметров. При включённом `contact_events` клики по `mailto:` и `tel:` создают `cajeer_contact_click` только с `contact_type` (`email` либо `phone`), **без значения адреса/номера**. Контейнер получает стандартное GTM событие просмотра `gtm.js`; Lite **не** отправляет отдельный GA4 `page_view` в GTM, чтобы избежать двойного просмотра. Настройте один GA4 page view в GTM самостоятельно. Никогда не передавайте PII через пользовательские теги или прямой `dataLayer.push()`.
+
+**Отзыв или изменение:** при изменении уже активного контейнера Lite отправляет обновлённый Consent Mode v2 и безопасные категории в очередь, блокирует собственные события, очищает видимые Google cookies при отзыве разрешений и **немедленно перезагружает документ**. Загруженные скрипты GTM/Custom HTML нельзя выгрузить надёжно; после перезагрузки новый выбор применяется **до** возможной загрузки контейнера. При отказе после перезагрузки скрипт больше не запрашивается. Уже переданные Google или сторонним поставщикам сведения локально не удаляются, а HTTP-only и third-party cookies остаются вне контроля Lite. При полном выключении Cookie Consent GTM неактивен. `/admin` по-прежнему имеет `script-src 'none'` и не загружает интеграции.
+
+**CSP:** для включённого GTM в публичной политике добавляется Google Tag Manager/Analytics HTTPS allowlist. Она намеренно **не** разрешает произвольные домены или `unsafe-inline`; если контейнер использует дополнительные поставщики, проверьте в браузере их действующие CSP требования, а затем добавляйте только доверенные источники в серверный CSP. Автоматического ослабления CSP произвольными тегами нет.
+
+**Проверки:** `tests/core_106.php` тестирует настройки и миграцию 5→6 с сохранением GA4, Метрики, контента и точных байтов исходного backup; `tests/http.sh` проверяет административные формы, CSRF, CSP, загрузку по включению и работу прямой GA4 при выключении GTM. `tests/browser_106.py` в Chromium исполняет штатную PHP-разметку с настоящими `consent.js`/`gtm.js` и проверяет порядок Google consent default/update/gtm.js, запрет загрузки до разрешения, события, переключение категорий, отзыв и запланированную перезагрузку. Ответ GTM и браузерная навигация в sandbox **имитируются**; реальную доставку необходимо проверить на staging с вашим GTM ID и Tag Assistant Preview.
+
+
+## 1.0.7 — Microsoft Clarity: поведенческая аналитика и управление записью
+
+**Обновление 1.0.6 → 1.0.7:** остановите веб-приложение, сделайте внешнюю копию `storage/site.json`, распакуйте архив **только изменённых файлов** в корень 1.0.6 с заменой совпадающих файлов, затем выполните:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_107.php
+bash tests/http.sh
+```
+
+Миграция `schema 6 → 7` выполняется внутри блокировки, перед изменением создаёт резервную копию **исходных байтов** JSON (с SHA-256 и закрытыми правами доступа). Добавляется `integrations.clarity` с параметрами `enabled: false`, `project_id: ""`, `recordings: true`, `contact_events: false`. Сохраняются страницы, пароль, модули, политика Cookie Consent и настройки GA4 / Яндекс Метрики / GTM. Откат требует остановки PHP-FPM и `php bin/cajeer backup restore` с подтверждением. Новая установка создаёт schema 7.
+
+**Включение в `/admin` → Microsoft Clarity:** создайте проект на [clarity.microsoft.com](https://clarity.microsoft.com/) и скопируйте **Project ID**, а не HTML-код и не URL. Включите Clarity и «Разрешить модуль записи сессий», сохраните. Идентификатор проверяется на сервере (`a-z`, `0-9`, длина 1–40) и публикуется в HTML только после экранирования. Для корректной работы Consent API v2 включите Consent Mode в настройках самого проекта Clarity. Не устанавливайте **тот же проект** через GTM одновременно с прямым подключением Lite: иначе возможны дублированные записи.
+
+**Строгое согласие:** Clarity одновременно собирает поведенческие сигналы и данные для записи сессий, поэтому Lite не загружает Clarity, пока посетитель не разрешил **обе категории** `analytics` и `recordings`. При разрешении лишь одной категории внешних запросов к Clarity нет. Отключение флага `recordings` администратором полностью выключает Clarity (не создаёт вводящий в заблуждение «режим тепловых карт без записи»). На отклонённом/просроченном/неизвестном согласии и при выключенном Cookie Consent Clarity не запускается. В отличие от cookieless-режима, который поддерживается Clarity, Lite применяет строгий opt-in и **не** отправляет telemetry/pings до согласия.
+
+**Настоящий клиентский runtime:** `public/assets/clarity.js` читает текущие разрешения из `window.CajeerConsent`, и только после принятия создаёт штатную асинхронную очередь `window.clarity`. Перед запросом `https://www.clarity.ms/tag/<project_id>` в очередь ставится **Microsoft Clarity Consent API v2**:
+
+```js
+clarity('consentv2', {
+  analytics_Storage: 'granted',
+  ad_Storage: 'denied' // или 'granted' только при разрешении маркетинга
+});
+```
+
+Ключи `analytics_Storage` и `ad_Storage` чувствительны к регистру (это **не** имена полей Google Consent Mode v2). При изменении категории «Маркетинг» во время действующей сессии Lite вызывает `consentv2` повторно с актуальным состоянием. Если отозвано разрешение на аналитику или запись сессий, Lite немедленно передаёт запрет `denied`, блокирует собственные новые события, удаляет видимые first-party cookies Clarity `_clck`/`_clsk` и перезагружает документ. Уже загруженный сторонний код нельзя надёжно выгрузить без смены документа; после перехода запрещённая интеграция не загружается. Данные, отправленные ранее Microsoft, и third-party/HttpOnly cookies нельзя удалить из Lite — используйте средства провайдера и политику обработки данных.
+
+**Поведенческие события:** при разрешении и включённой опции `contact_events` клики по ссылкам `mailto:` и `tel:` записываются как `cajeer_contact_email` / `cajeer_contact_phone` **без фактического email или номера**. Для собственных событий есть API:
+
+```js
+window.CajeerClarity?.event('cajeer_signup'); // true при отправке в очередь, false без разрешения
+window.CajeerClarity?.status(); // initialized, permitted, reloading, remoteLoaded, remoteFailed
+```
+
+Имена событий строго ограничены префиксом `cajeer_`, короткими ASCII-символами и запретом длинных цифровых последовательностей. Значения форм, идентификаторы пользователей, URL и свободные текстовые поля через API не передаются. Публичные `<main>` и `<footer>` помечены `data-clarity-mask="true"`, чтобы текст и контакты не раскрывались в записях. Не добавляйте в шаблоны `data-clarity-unmask` для пользовательского контента и отдельно проверьте правила маскирования в настройках Clarity.
+
+**Защита и совместимость:** админ-панель остаётся без JavaScript (`script-src 'none'`) и без внешних Clarity-ресурсов. На публичных страницах при включённой интеграции CSP точечно разрешает официальный загрузчик `www.clarity.ms` и HTTPS-соединения с поддоменами `*.clarity.ms`. Ни `unsafe-inline`, ни произвольные внешние источники не добавляются. Подключённые GA4, Метрика и GTM сохраняют своё поведение; при самостоятельной настройке тега Clarity **внутри GTM** не включайте дублирующий прямой тег Lite. Учитывайте, что теги в GTM нужно дополнительно ограничивать собственными проверками согласия.
+
+**Приёмка:** `tests/core_107.php` проверяет строгий Project ID, сохранение конфигурации, включение/отключение Clarity, миграцию schema 6→7, целостность старых настроек и точное сохранение исходных байтов в резервной копии. `tests/http.sh` проверяет реальные серверные настройки, CSRF, CSP, доступ к скрипту и запрет подключения при выключенной политике. `tests/browser_107.py` исполняет оригинальные JS-модули `consent.js` + `clarity.js` вместе с разметкой, сгенерированной PHP, в Chromium; проверяет отсутствие запросов до двойного согласия, загрузку тега, очередь `consentv2`, события, изменение рекламного разрешения, отзыв, очистку cookies и блокировку новых вызовов. **Ответ Microsoft и `location.reload()` в браузерном тесте эмулированы**; фактическую доставку сессий и работоспособность CSP с реальным Clarity Project ID проверьте на staging в разделе Recordings/Heatmaps. Clarity не следует применять на ресурсах, ориентированных на детей младше 18 лет; соблюдайте применимые правила конфиденциальности.
+
+
+## 1.0.8 — Matomo Cloud / On-Premise Integration
+
+**Обновление с 1.0.7:** остановите приложение, сохраните отдельную копию `storage/site.json`, распакуйте patch ZIP с заменой файлов в корень проекта и выполните:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_108.php
+bash tests/http.sh
+# Дополнительно: Python Playwright и Chromium
+python tests/browser_108.py
+```
+
+Миграция **schema 7 → 8** добавляет `integrations.matomo` (по умолчанию выключено) и выполняется атомарно под файловой блокировкой. До изменения сохраняется проверяемая резервная копия исходных байтов `site.json`. Прежние страницы, пароль, модули, политика согласия, GA4, Яндекс Метрика, GTM и Clarity сохраняются. Настройки можно изменять через авторизованную форму `/admin` → **Matomo Analytics (Cloud / On-Premise)** с CSRF-защитой. Новая установка сразу использует schema 8.
+
+**Matomo Cloud:** укажите режим «Matomo Cloud», `https://<имя>.matomo.cloud/`, числовой Site ID; JS загружается с официального `https://cdn.matomo.cloud/<имя>.matomo.cloud/matomo.js`, а события отправляются на `https://<имя>.matomo.cloud/matomo.php`. Для **On-Premise** укажите HTTPS-адрес своей установки (например, `https://analytics.example.org/matomo/`, допустим подкаталог и нестандартный HTTPS-порт) и соответствующий Site ID; трекер `matomo.js` и endpoint `matomo.php` формируются относительно этого адреса. Нельзя задавать HTTP, логины/пароли в URL, query, fragment, escape-последовательности, `..` или произвольный путь к JS. Сервер Lite никуда не выполняет HTTP-запросы: взаимодействие с Matomo происходит из браузера. Для On-Premise необходим доступ браузеров посетителей к серверу Matomo, корректный HTTPS-сертификат и разрешения сети/сайта Matomo.
+
+**Согласие и отзыв:** нет загрузки `matomo.js`, beacons или сбора в cookieless-режиме до сохранённого разрешения `analytics`. Для каждого посещения CajeerConsent сначала проверяет действующую ревизию first-party cookie, только затем `matomo.js` настраивается с `requireConsent`, `requireCookieConsent`, `setTrackerUrl`, `setSiteId`, `setConsentGiven`, `setCookieConsentGiven`. Matomo не использует отдельный запоминающий cookie согласия (`rememberConsentGiven` намеренно не вызывается), поэтому отозванный выбор нельзя восстановить из прошлого сеанса Matomo. При отзыве Lite блокирует новые события, вызывает `forgetConsentGiven`, `forgetCookieConsentGiven`, `deleteCookies`, пытается удалить доступные first-party cookies `_pk_*` и перезагружает документ для остановки уже загруженных обработчиков. Прошедшие события и HttpOnly/third-party cookies нельзя удалить через браузер Lite; для удаления данных используйте интерфейс Matomo и применимые требования конфиденциальности. При отключённом Cookie Consent Matomo неактивен.
+
+**Сбор данных:** настройками управляются просмотры `trackPageView` и необязательные символические события контактов (`contact/email`, `contact/phone` без адреса и номера). На публичной странице доступно API:
+
+```js
+CajeerMatomo.event('signup', 'complete', 'footer'); // trackEvent(category, action, name)
+CajeerMatomo.goal(3, 49.90);                  // trackGoal(goalId, revenue)
+CajeerMatomo.status();                       // initialized, permitted, reloading, remoteLoaded, remoteFailed
+```
+
+Методы возвращают `false`, если согласия нет или параметры недопустимы. Категория, действие и имя события принимают только короткие символические ASCII-токены без длинных числовых последовательностей; пользовательские данные, произвольные URL, телефон и email не поддерживаются. Цели необходимо заранее создать в Matomo; для `goal` указывается положительный числовой ID. API добавляет события в официальную очередь `_paq`; доставка зависит от доступа к сервису и настроек Matomo.
+
+**Безопасность:** CSP на публичных страницах точечно разрешает только конкретный Matomo script origin, `connect-src` и `img-src` для подтверждённого HTTPS origin сервера Matomo. Для `/admin` по-прежнему `script-src 'none'`, разрешения внешних провайдеров не добавляются. Не настраивайте дубль одного и того же Matomo трекера внутри GTM. Если вы также используете запись сессий в Matomo (дополнительный плагин), необходимо отдельно связать её с категорией `recordings` — версия 1.0.8 **не активирует и не настраивает Matomo Heatmaps/Session Recording**.
+
+**Проверки:** `core_108.php` проверяет конфигурацию, безопасность URL, сохранение других интеграций, точные байты резервной копии, миграцию и восстановление. `http.sh` тестирует реальный веб-админ, отказ некорректных URL, включение/отключение, Cloud / On-Premise CSP, CSRF и запрет при отключённой политике. `browser_108.py` проверяет реальные PHP-шаблоны и JavaScript в Chromium с эмуляцией ответов Matomo: отказ, разрешение, очередь, просмотры, события, цели, возврат пользователя и отзыв. **Доставка в настоящий Matomo Cloud / On-Premise и реальный браузерный HTTP-обмен не проверялись:** перед production проверьте в Matomo Visitors → Real-time на тестовом сайте и в DevTools CSP / Network.
+
+
+## 1.0.9 — Integrations Hardening (без новой JSON-миграции)
+
+**Обновление с 1.0.8:** остановите PHP workers и CLI-задачи, сохраните внешнюю
+копию `storage/site.json`, распакуйте только изменённые файлы в корень Lite,
+затем запустите:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php bin/cajeer integrations check
+php bin/cajeer integrations check --json
+```
+
+JSON **остаётся schema 8** — существующие настройки пяти провайдеров,
+Cookie Consent, страницы и пароли не переписываются при обновлении. `migrate`
+также обеспечивает закрытые права `storage/` (0700) на локальном диске,
+когда процесс владеет каталогом. Если исправить их не удалось, остановите
+развёртывание и исправьте владельца/права на хосте. `site.json` должен быть 0600.
+
+**Security hardening:** генерация CSP публичных страниц перенесена в
+`PublicCsp`, с отдельными проверяемыми списками Google, Яндекса, Microsoft и
+Matomo. Запрещены inline-обработчики (`script-src-attr 'none'`), `unsafe-inline`,
+`unsafe-eval`; встроенные ресурсы и фрейминг по умолчанию запрещены. Исключение
+для фреймов Вебвизора включается **только** при активной Метрике и включённом
+Вебвизоре. Админка по-прежнему запрещает любые скрипты и фрейминг. Добавлены
+`Permissions-Policy` и `Cross-Origin-Opener-Policy`, сохранена защита CSRF.
+Для GA4 и Яндекс Метрики пользовательские параметры событий ограничены
+короткими неперсональными метками (без свободных URL, email, телефонов,
+ключей вроде `user_id`, длинных цифровых идентификаторов). Изменены версии
+ресурсов GA4/Метрики в шаблоне для обновления кэша браузера. Не считайте эти
+эвристические фильтры юридической гарантией отсутствия ПДн: события должны
+проектироваться с безопасными именами и значениями.
+
+**Диагностика (CLI и авторизованная админ-панель, без сетевых запросов):** `/admin` показывает статусы и предупреждения, а `integrations check` сообщает
+статусы провайдеров `active` / `blocked` / `disabled`, проверяет локальные
+скрипты на отсутствие подмены символьными ссылками или world-writable прав,
+приватность `storage/site.json`, CSP и предупреждает о конфликте прямого GA4
+с GTM (прямой GA4 отключён и должен быть настроен в контейнере).
+`--json` выдаёт машинно-читаемый объект `ok`, `checks` и `providers`.
+Статус `warn` информирует об ожидаемом ограничении и не означает поломку.
+Ошибки `fail` приводят к ненулевому коду возврата. Файловые SHA-256 в
+диагностике — для сверки развёртывания, **не** подпись издателя или гарантия
+подлинности по доверенному эталону. Команда **не проверяет** доступность
+Google/Яндекса/Microsoft/Matomo и не запрашивает секреты/API.
+
+**Набор тестов:**
+
+```sh
+php tests/core_109.php
+bash tests/http.sh
+python tests/browser_103.py
+python tests/browser_104.py
+python tests/browser_105.py
+python tests/browser_106.py
+python tests/browser_107.py
+python tests/browser_108.py
+python tests/browser_109.py
+```
+
+Проверяются реальные PHP-рендеринг, HTTP-маршруты, CSRF, заголовки CSP,
+конфигурация пяти провайдеров, конфликт GA4/GTM, порядок Google Consent Mode
+v2, отсутствие внешних запросов до согласия, отказ, отзыв, хранение cookies,
+события и попытки передачи персональных данных. Скрипты провайдеров и
+`location.reload` в браузерных тестах **имитируются**, но локальный JS Lite
+исполняется в Chromium. Для production-приёмки дополнительно проверьте
+реальную доставку в GA4 DebugView, Яндекс Метрику, GTM Preview, Clarity и
+Matomo на staging с действительными ID, соответствующую политику хранения
+данных и маскирования в кабинетах провайдеров. Наличие `ok: true` само по
+себе не подтверждает реальную доставку аналитики или правовое соответствие.
+
+
+## 1.1.0 — Metrics & Integrations Stable: проверяемая release-приёмка
+
+**Обновление с 1.0.9:** остановите PHP-FPM/обработчики и CLI-записи, отдельно
+сохраните `storage/site.json` и `storage/backups/`. Распакуйте патч с заменой
+файлов, затем запустите:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php bin/cajeer integrations check --json
+php bin/cajeer release check --json
+php tests/core_110.php
+bash tests/http.sh
+python tests/browser_110.py  # требуется Playwright + Chromium
+```
+
+**JSON schema остаётся 8** — смена версии приложения не затрагивает данные,
+миграция не нужна, прежние настройки GA4, Яндекс Метрики, GTM, Clarity и
+Matomo остаются на месте. После распаковки перепроверьте права на `storage/`
+(0700) и `storage/site.json` (0600), DocumentRoot должен указывать строго на
+`public/`. Рекомендованы отдельная staging-среда и проверенный откат через
+`php bin/cajeer backup verify/restore` (с остановленными обработчиками).
+
+**Исправления исполняемого кода:** отзыв разрешения на аналитику для прямого
+GA4 не только запрещает Lite-события и устанавливает `ga-disable-...`, но и
+завершает текущий документ перезагрузкой. До перехода запрещены новые события,
+очищаются доступные first-party GA cookies, отменяется загрузка ещё не
+загруженного `gtag.js`. Это не удаляет ранее отправленные данные, HttpOnly cookies
+или cookies чужого домена. Изменение сохранённого согласия во второй вкладке
+теперь обновляет и видимость баннера, и открытые переключатели категорий в
+текущей вкладке. Версии локальных JS в HTML обновлены (`?v=110`) для сброса
+браузерного кэша.
+
+**Автоматический production gate:** `php bin/cajeer release check [--json]`
+действительно читает текущее состояние и файловую систему, запускает
+диагностику интеграций, проверяет версию PHP, HTTPS-origin, активность Cookie
+Consent, опубликованную внутреннюю страницу политики конфиденциальности (если
+есть включённые интеграции), защитные директивы CSP, а также сообщает о
+возможном дублировании GA4 через GTM. При ошибках возвращает код `1`; при
+успехе — `0`. При отсутствии аналитики HTTPS всё равно обязателен в production.
+Это отдельная проверка для боевого развёртывания: локальный HTTP-сайт,
+используемый в разработке, закономерно её не пройдёт.
+
+**Ключи JSON-отчёта:** `ok` (результат автоматической локальной проверки),
+`checks` (отдельные `pass`, `warn`, `fail`), `providers` (состояние интеграций)
+и `manual` (непроверенные внешние зависимости). Даже `ok: true` не является
+подтверждением успешной отправки данных или юридической сертификацией.
+
+**Ручная проверка на staging перед публикацией** (под собственными ID/аккаунтами):
+
+1. На HTTPS-странице до выбора — нет сетевых запросов сторонней аналитики;
+   после отказа — та же блокировка, в том числе после перезагрузки и
+   повторного открытия страницы.
+2. После разрешения аналитики — `page_view` и события в GA4 DebugView,
+   Яндекс Метрике и Matomo Realtime. При активном GTM прямой GA4 не загружается;
+   наличие и разрешения тега GA4 проверяются отдельно в GTM Preview/Tag Assistant.
+3. При согласии на запись — записи Clarity и Вебвизора в соответствующих
+   кабинетах, но без содержимого чувствительных полей; при отзыве записи
+   прекращаются на новой странице. Отдельно перепроверьте настройки маскирования
+   и исключения страниц в кабинетах провайдеров.
+4. Matomo Cloud и On-Premise — проверка соответствия Site ID, реального HTTPS
+   `matomo.js`/`matomo.php`, доступности CSP-host и доставки событий/целей.
+5. Проверка изменения категорий, отзыва, повторного выбора и новой вкладки;
+   проверка, что внутри GTM нет дублирующих или неправильно классифицированных
+   тегов, отправляющих данные без нужного согласия.
+6. Откат на резервной копии **в staging** и проверка сохранности страниц,
+   модулей, настроек интеграций и учётной записи администратора. Проверка
+   заголовков на настоящем reverse proxy/CDN, включая запрет кеширования
+   персонализированных страниц и отсутствие доступа к `storage/`.
+
+**Регрессионные тесты:** `core_110.php` реально создаёт резервную копию,
+изменяет настройки, восстанавливает данные и проверяет production gate
+на успешных и ошибочных состояниях пяти интеграций. `browser_110.py`
+исполняет настоящий JavaScript Lite в Chromium, моделирует изменение выбора
+между вкладками и подтверждает остановку GA4 после отзыва. Предыдущие тесты
+1.0.3–1.0.9, HTTP-проверки и CI продолжают выполняться.
+
+**Граница проверки в CI:** внешние скрипты Google/Яндекса/Microsoft/Matomo
+и навигация при отзыве в Chromium имитируются. CI не имеет прав доступа
+к реальным аналитическим кабинетам и не подтверждает фактическую доставку
+событий. Для production-sign-off выполните указанные ручные staging-проверки.
+
+
+## 1.1.1 — Analytics Dashboard: отчёты провайдеров и вебмастеров
+
+### Установка и хранение
+
+Версия Lite `1.1.1`, CajeerEngine core baseline `2.1.0`, JSON **schema 9**. Перед распаковкой патча 1.1.0 → 1.1.1 сделайте внешнюю резервную копию `storage/site.json`, остановите веб-приложение, затем выполните:
+
+```bash
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_111.php
+bash tests/http.sh
+```
+
+Миграция `8 → 9` добавляет `reporting` с пустыми идентификаторами отчётных ресурсов; все предыдущие настройки сайта, аналитических тегов, баннера согласия и контент сохраняются. Перед миграцией автоматически создаётся проверяемый бэкап схемы 8. В `site.json` нет API-токенов и приватных ключей.
+
+В `/admin` → **Настройки отчётов и вебмастеров** укажите:
+
+- **GA4 Property ID** — числовой идентификатор ресурса Google Analytics 4, НЕ Measurement ID вида `G-...`.
+- **Яндекс Метрика: ID цели** — числовой ID созданной цели; просмотры, пользователи и визиты берутся из счётчика уже настроенного в Lite.
+- **Google Search Console property** — точное имя ресурса, например `sc-domain:example.org` либо `https://example.org/`; передайте права сервисному аккаунту.
+- **Яндекс Вебмастер user-id и host-id** — идентификаторы из API, например `123456` и `https:example.org:443`.
+- **Matomo и Clarity** — используют ранее настроенный URL/Site ID и Project ID соответственно.
+
+Для серверной авторизации задайте переменные окружения PHP-FPM/веб-процесса (не в шаблоне, публичной странице или `site.json`):
+
+| Переменная | Назначение |
+| --- | --- |
+| `CAJEER_GOOGLE_SERVICE_ACCOUNT_FILE` | Абсолютный путь к JSON приватному ключу Google service account с правами **0600**, вне `public/`, с доступом к GA4 Data API и Search Console. Требуемые scopes: `analytics.readonly` и `webmasters.readonly` |
+| `CAJEER_REPORT_GOOGLE_TOKEN` | Альтернатива для кратковременного OAuth access token (истекает; не рекомендуется для production без внешнего механизма обновления) |
+| `CAJEER_REPORT_YANDEX_TOKEN` | OAuth-токен для чтения Яндекс Метрики и Яндекс Вебмастера (проверьте scopes/доступ к обоим) |
+| `CAJEER_REPORT_MATOMO_TOKEN` | Matomo `token_auth` с доступом на чтение нужного сайта; передаётся исключительно в теле POST, не в URL |
+| `CAJEER_REPORT_CLARITY_TOKEN` | Токен Data Export API из Clarity → Settings → Data Export |
+
+**Не предоставляйте административный доступ без необходимости:** все серверные токены дают доступ к данным собственных ресурсов. По возможности используйте отдельные учётные данные и минимальные разрешения. Если PHP-FPM настроен с `clear_env = yes`, явно передайте эти переменные в пул. Для потокового HTTPS-клиента нужны PHP OpenSSL и `allow_url_fopen`.
+
+### Использование
+
+Войдите в `/admin?analytics=1`, выберите период 3, 7, 14, 30 или 90 полных дней (по UTC, по вчерашний день включительно). Нажмите **«Получить данные из API»**; запрос выполняется сервером только после POST с CSRF и сессией администратора. Просмотр сохранённых данных не обращается к внешним сервисам. Для автоматического обновления используйте системный планировщик с командой:
+
+```bash
+php bin/cajeer analytics refresh --days=7
+php bin/cajeer analytics status --days=7
+```
+
+Запускайте CLI из корня установленного сайта под владельцем закрытого `storage/`; `refresh` обращается к провайдерам, а `status` читает кэш без сети. Отчёты сохраняются атомарно и с правами 0600 в `storage/analytics-cache/`. Кэш содержит только агрегированные числа и разрешённые метки событий (GA4), **не** запросы с токенами и **не** сырые сессии/поисковые фразы. После 15 минут отчёт маркируется устаревшим; повторные нажатия обновления в течение 60 секунд используют готовый результат. В каждом блоке различаются `ok`, `unconfigured`, `error` и `not_applicable`; реальные API-ошибки никогда не подменяются придуманными нулями.
+
+Сервисы и данные:
+
+- **GA4 Data API:** `runReport`, сессии, пользователи, просмотры, *keyEvents*, топ событий и цели/конверсии.
+- **Яндекс Метрика Reports API:** визиты, пользователи, просмотры; при наличии ID цели — достижения цели и предупреждение о сэмплировании.
+- **Matomo Cloud / On-Premise Reporting API:** визиты, уникальные пользователи, действия, визиты с конверсиями, сводка `Goals.get` и метрики целей, если API их возвращает.
+- **Microsoft Clarity Data Export API:** суммарные сессии в поддерживаемом окне последних 1–3 суток; лимит Microsoft — **10 запросов в сутки на проект**. Не ставьте частое обновление по расписанию.
+- **Google Search Console:** клики, показы, CTR и средняя позиция из Search Analytics, с усреднением позиции по показам.
+- **Яндекс Вебмастер:** клики/показы из поиска по истории всех запросов; CTR вычисляется из полученных сумм.
+- **GTM:** собственных отчётов о конверсиях не предоставляет; настроенные через него GA4-теги отражаются в GA4 Data API, когда разрешён доступ к ресурсу.
+
+Получение отчётов **не зависит от включения клиентского трекера**: данные о предыдущих периодах можно прочитать и после его выключения. Сами события посетителей по-прежнему защищены Cookie Consent. Отчёты предназначены для доверенного администратора и не публикуются на сайте; `public/` сохраняет ограничения CSP. Встроенный клиент не выполняет перенаправлений, проверяет TLS и ограничивает размер ответа 1 MiB, а для Matomo On-Premise запрещает приватные IP и фиксирует проверенный DNS-адрес, уменьшая риск SSRF.
+
+**Ограничения приёмки:** тесты проверяют реальные пути PHP-кода, построение запросов, обработку официальных JSON-ответов, OAuth JWT, миграцию, CSRF и закрытый кэш, но используют имитацию ответов внешних API. Проверить доступы, квоты, право чтения, GA4 key events и фактическое поступление аналитики на staging можно только с действующими данными владельца. Ошибки 401/403/429 сохраняются как ошибки конкретного провайдера, а не как нулевые показатели.
+
+## SkiF4er ID OIDC (Lite 1.1.2)
+
+В версии 1.1.2 доступен реальный **серверный OIDC-вход** через
+[SkiF4er ID](https://id.skif4er.ru/sdk/): Authorization Code, PKCE S256,
+`state`, `nonce`, проверка ID Token RS256 по JWKS и подтверждение владельца по
+постоянной паре `iss + sub`. Отдельные библиотеки/Composer не требуются;
+нужно расширение PHP `openssl` и работающее HTTPS-подключение к провайдеру.
+
+1. В `php bin/cajeer install` либо в админ-панели задайте публичный HTTPS URL
+   сайта (точный origin, например `https://lite.example.org`).
+2. В админ-панели Keycloak realm `skif4er` зарегистрируйте **confidential client**:
+   Standard Flow включён, PKCE S256, Implicit/Direct Access Grants выключены,
+   Client Authentication включена, `openid profile email`. В списке Valid Redirect
+   URIs укажите **точный** `https://lite.example.org/admin/oidc/callback`
+   (без `*`). При настройке разрешённых origins и post-logout redirects не
+   допускайте произвольные wildcard-значения.
+3. Настройте окружение PHP-FPM (или вашего PHP-процесса):
+
+   ```sh
+   CAJEER_OIDC_CLIENT_ID=your-keycloak-client-id
+   CAJEER_OIDC_CLIENT_SECRET=replace-with-secret-from-keycloak
+   ```
+
+   Передавайте секрет через защищённое окружение сервиса. В стандартной
+   конфигурации PHP-FPM `clear_env=yes` скрывает переменные от воркера —
+   разрешите именно эти две переменные через `env[...]` в приватном FPM pool.
+   **Не сохраняйте client secret в `storage/site.json`, .env внутри public или Git.**
+4. Выполните `php bin/cajeer migrate`, затем войдите **локальным паролем** в
+   `/admin`. В разделе «SkiF4er ID» повторно подтвердите локальный пароль,
+   пройдите OIDC-вход и подтвердите привязку. Привязка записывает только
+   `iss` и `sub` в приватный JSON. Пока привязки нет, OIDC-вход сам по себе
+   **не предоставляет** административных прав.
+5. Выйдите из админки и выберите «Войти через SkiF4er ID». Успешно
+   проверенный `iss + sub` создаёт обычную серверную PHP-сессию (HttpOnly,
+   Secure при HTTPS, SameSite=Lax), с ротацией session ID и сроком действия
+   3600 секунд неактивности. Другие аккаунты SkiF4er ID получают отказ.
+
+OIDC-вход запускается CSRF-защищённой POST-формой в `/admin` (`action=oidc_login`); GET `/admin/oidc/login` больше не инициирует вход. Возврат провайдера поступает
+на `/admin/oidc/callback`. Возврат использует одноразовую транзакцию,
+хранящуюся в PHP-сессии не дольше пяти минут. Коды авторизации и токены
+не возвращаются в HTML и не записываются в `site.json`.
+
+**Важное ограничение версии 1.1.2:** локальный пароль остаётся доступным
+для аварийного входа. Список устройств, отзыв других сессий, RP-Initiated и
+Back-Channel Logout, SSO-only и отдельные recovery-механизмы предусмотрены
+следующими релизами 1.1.3–1.2.0. Текущий локальный «Выйти» завершает
+сессию Lite, но не глобальную сессию Keycloak.
+
+Проверка: `php tests/core_112.php`, `bash tests/http.sh`. Unit-интеграционные
+тесты имитируют ответы Keycloak и реально подписывают тестовые RS256 токены;
+для production-приёмки отдельно нужен зарегистрированный OIDC-клиент и
+проверка перенаправления, входа и callback на staging с действующим SkiF4er ID.
+
+
+## SkiF4er ID — Owner Account Binding (Lite 1.1.3)
+
+**Обновление с 1.1.2:** выполните `php bin/cajeer migrate` после резервной копии
+`storage/site.json`. Миграция **schema 10 → 11** сохраняет существующую пару
+`iss + sub`, пароль и настройки интеграций; добавляется случайная ревизия
+`identity.generation` (48 hex-символов). При обновлении прежние административные
+сессии нужно открыть заново: они не содержат ревизию привязки.
+
+В `/admin` → «SkiF4er ID» при настроенном confidential OIDC-клиенте доступны:
+
+- **Первоначальная привязка:** войдите локальным паролем; повторите пароль в
+  форме и пройдите вход в SkiF4er ID. До этого момента любой OIDC-пользователь
+  не может войти в админку без локального пароля.
+- **Смена владельца:** авторизуйтесь, повторите локальный пароль, отметьте
+  подтверждение. В первый OIDC-переход войдите **под текущим привязанным
+  владельцем**, во второй — **под новым аккаунтом**. Для каждого перехода
+  Keycloak получает `prompt=login` и `max_age=0`. Оба ID Token проверяются по
+  JWKS и `auth_time` (не старше пяти минут). После второго входа изменение
+  выполняется атомарно, только если привязка и ревизия совпадают с начальной.
+  Привязка к тому же аккаунту отклоняется. Никаких административных прав
+  по email, логину или одному факту успешной OIDC-аутентификации не выдаётся.
+- **Отвязка:** авторизуйтесь, повторите локальный пароль, подтвердите
+  операцию и повторно войдите **под текущим владельцем** в SkiF4er ID.
+  Привязка очищается, но локальный пароль **не удаляется**. Для новой привязки
+  снова используйте первоначальную процедуру.
+
+При любой успешной привязке, смене или отвязке генерируется **новая ревизия**.
+Старые PHP-сессии перестают проходить проверку на следующем защищённом
+запросе; действующая сессия обновляется и получает новый случайный CSRF.
+Это немедленное логическое аннулирование доступа в Lite, но **не** выход из
+глобальной SSO-сессии Keycloak. Список устройств и Back-Channel Logout
+будут добавлены в следующих версиях.
+
+Для защиты чувствительных операций обязательны: авторизованная сессия,
+CSRF, повторная проверка локального пароля и **свежая OIDC-аутентификация**.
+Операция отклоняется при потерянном `state`, подменённом ID Token, чужом
+`iss + sub`, устаревшей ревизии или попытке повтора callback. Одноразовые
+состояния и токены не сохраняются в `site.json` и не выводятся в HTML.
+Поскольку Keycloak может удерживать текущий SSO-аккаунт, для второго входа
+при смене выберите именно **нового** владельца, а не подтверждайте старый аккаунт.
+
+Проверка: `php tests/core_113.php` и `bash tests/http.sh`. Автоматические
+тесты подписывают собственные RS256-токены и имитируют ответы Keycloak;
+реальные две последовательные авторизации (особенно переключение аккаунтов)
+нужно отдельно проверить со staging-клиентом `https://id.skif4er.ru/`.
+
+
+## CajeerEngine Lite 1.1.4 — Session Management
+
+Обновление с 1.1.3: распакуйте файлы патча поверх проекта и проверьте
+`php bin/cajeer doctor`. Схема JSON **остаётся 11**: существующие
+`storage/site.json`, привязка владельца, Analytics Dashboard и настройки
+провайдеров сохраняются. **После обновления необходимо войти заново:**
+сессии, созданные до 1.1.4, не имеют серверной записи и не принимаются.
+
+В `/admin` → **Активные сеансы и устройства** доступен список сессий владельца
+(тип входа: пароль/SkiF4er ID, User-Agent, IP исходного подключения,
+последняя активность UTC и пометка текущего устройства). Доступны:
+
+- **Завершить** — атомарно отозвать выбранную сессию, включая текущую;
+- **Завершить остальные сеансы** — оставить только текущую;
+- **Завершить все сеансы** — повторно ввести локальный пароль, затем завершить
+  все сеансы, включая текущий, и очистить cookie;
+- **Выйти** — удалить текущий серверный сеанс и PHP session cookie.
+
+Защищённые запросы проверяют реестр **при каждом обращении**. Записи
+автоматически истекают после **60 минут бездействия** или через **24 часа
+после входа**, даже при активности. Изменение привязки владельца, хэша
+пароля или восстановление резервной копии аннулирует прежние сеансы.
+Параллельные операции защищены `flock` и атомарной записью JSON.
+
+Хранилище: `storage/auth/sessions.json` (0600), lock-файл и изолированные
+файлы PHP-сессий в `storage/auth/php/` (каталоги 0700). Секретные
+одноразовые токены реестра не записываются в `sessions.json`; там находятся
+только их SHA-256-отпечатки. Обычный браузерный cookie содержит случайный
+идентификатор PHP-сессии с `HttpOnly` и `SameSite=Lax`; для HTTPS также
+`Secure`. Хранилище должно быть за пределами web document root
+(в стандартной конфигурации им является `public/`). Не предоставляйте
+публичный доступ к `storage/` и не копируйте оттуда сеансы в артефакты CI.
+
+Во избежание восстановления отозванных сеансов команда
+`backup restore` **аннулирует весь реестр до записи восстановленного
+состояния**. При восстановлении потребуется повторная авторизация.
+Изоляция относится к Lite: этот релиз не завершает глобальные SSO-сессии
+на стороне SkiF4er ID (Back-Channel Logout реализован в 1.1.5).
+
+Проверка: `php tests/core_114.php`, `bash tests/http.sh`, а также старые
+регрессии `core_102.php`–`core_113.php`. HTTP-тест проверяет два независимых
+клиента и отказ в защищённых запросах после отзыва; PHP-тест проверяет
+временные ограничения, безопасность хранилища и отсутствие повторного
+использования идентификаторов.
+
+## CajeerEngine Lite 1.1.5 — Unified Logout
+
+Версия 1.1.5 реализует три независимых сценария завершения доступа:
+
+- **«Выйти только из Lite»** (`POST /admin`, `action=logout`): под CSRF-защитой
+  отзывает **текущий** серверный сеанс и удаляет PHP-cookie. SSO-сеанс SkiF4er ID
+  при этом не завершается.
+- **«Выйти из Lite и SkiF4er ID»** (`POST /admin`, `action=logout_global`):
+  доступен только после OIDC-входа. Сначала безусловно отзывает локальный сеанс,
+  затем направляет браузер на проверенный `end_session_endpoint` SkiF4er ID
+  с `client_id` и зарегистрированным `post_logout_redirect_uri`.
+  При недоступности IdP локальный выход остаётся успешным, а страница входа
+  сообщает о невозможности подтвердить глобальный выход.
+- **Back-Channel Logout** (`POST /admin/oidc/backchannel-logout`): серверный
+  endpoint для запросов от SkiF4er ID; он не использует cookie/CSRF браузера.
+  Принимает `application/x-www-form-urlencoded` с параметром `logout_token`.
+  Подпись проверяется по публичным ключам JWKS (RS256), затем проверяются
+  `iss`, `aud`, `iat`, `exp`, `jti`, `events` и отсутствие `nonce`. Отдельно
+  проверяется `sid` и/или `sub`; неподписанные и некорректные запросы получают
+  `400`. Уже обработанные `jti` распознаются по приватному файловому кэшу;
+  повторные уведомления идемпотентны и не повторяют отзыв.
+
+Реестр `storage/auth/sessions.json` автоматически переходит с формата 1 на
+формат 2 **при первом изменении**. Основной `storage/site.json` остаётся на
+схеме 11, миграция сайта не требуется. Для OIDC-сеансов сохраняются только
+SHA-256-отпечатки issuer/subject и `sid`; подписанные токены, raw `sub` и
+`sid` в JSON-реестре не хранятся. Старые OIDC-сеансы без пригодных отпечатков
+отзываются при первом обращении после обновления; **потребуется повторный вход**.
+Действующие локальные сессии продолжают работать.
+
+### Конфигурация клиента SkiF4er ID
+
+В настройках конфиденциального клиента Keycloak укажите:
+
+```text
+Valid Redirect URI:             https://YOUR-DOMAIN/admin/oidc/callback
+Valid Post Logout Redirect URI: https://YOUR-DOMAIN/admin/oidc/logged-out
+Backchannel Logout URL:         https://YOUR-DOMAIN/admin/oidc/backchannel-logout
+```
+
+Включите Back-Channel Logout для этого клиента. Веб-сервер должен принимать
+внешние HTTPS POST к этому пути и передавать запросы в `public/index.php`.
+Секрет клиента по-прежнему задаётся через `CAJEER_OIDC_CLIENT_SECRET`, а не
+в публичной конфигурации или JS. В настройках клиента используйте
+Authorization Code Flow с PKCE; точный публичный URL сайта должен совпадать с
+настройками Lite. Если у Keycloak включён `Backchannel Logout Session Required`,
+удостоверьтесь, что ID Token действительно содержит `sid`. Lite поддерживает
+и logout по одному `sub`, и logout по `sid` при наличии этого claim.
+
+После настройки проверьте с **реальным** SkiF4er ID на staging: локальный
+выход; глобальный переход и возврат; выход из аккаунта Keycloak на другом
+устройстве; отзыв одного и нескольких OIDC-сеансов; отсутствие доступа по
+старым cookie. Автоматические тесты валидируют подписи реальным OpenSSL,
+но не подтверждают доставку уведомлений с production Keycloak.
+
+Проверки: `php tests/core_115.php`, `bash tests/http.sh` и имеющиеся
+регрессионные PHP / Chromium-наборы.
+
+## CajeerEngine Lite 1.1.6 — Secure Access Recovery
+
+Этот механизм предназначен для **аварийного восстановления владельца через доверенный
+CLI сервера**, когда утрачен доступ к SkiF4er ID и/или локальному паролю. Публичной
+формы сброса по email, API токенов восстановления или анонимного HTTP endpoint нет.
+Доступ к shell и приватным файлам сайта является обязательным доверенным фактором.
+
+### Восстановление доступа
+
+1. Откройте shell **на сервере приложения** от пользователя, которому разрешён доступ
+   к `storage/`. Желательно временно остановить административные операции и сделать
+   защищённый внешний бэкап контента. Убедитесь, что `public/` — единственный
+   document root веб-сервера, а `storage/` недоступен по HTTP.
+2. Выпустите одноразовый токен:
+
+   ```sh
+   php bin/cajeer recovery issue
+   ```
+
+   **Секрет отображается однократно** в терминале. Хранится только SHA-256 отпечаток
+   токена. Новый вызов `issue` немедленно заменяет старый grant. Токен действует
+   **10 минут** и блокируется после **5 неверных попыток**.
+3. Создайте *вне web document root* два приватных текстовых файла с правами `0600`
+   (на Unix: `umask 077`): первый содержит токен, второй — **новый** пароль
+   администратора длиной 12–72 UTF-8 байт. Не передавайте секреты через аргументы
+   командной строки, переменные URL, query string или команду с вводом значения в
+   shell history. Используйте локальный редактор, который не сохраняет резервные
+   копии этих файлов в общедоступном каталоге.
+4. Завершите восстановление, указав **абсолютные пути** к этим файлам:
+
+   ```sh
+   php bin/cajeer recovery complete /secure/recovery-token.txt /secure/new-password.txt
+   ```
+
+   Если вы храните файлы в другом месте, замените пути. В случае ошибки токена
+   проверьте `php bin/cajeer recovery status`. Для досрочной отмены используйте
+   `php bin/cajeer recovery cancel`. Не сохраняйте токен в CI-логи.
+5. Удалите временные файлы с секретами, войдите в `/admin` с новым паролем,
+   проверьте активные сеансы и **заново привяжите проверенный аккаунт SkiF4er ID**.
+   Без успешной новой OIDC-авторизации прежняя привязка не восстанавливается.
+
+**Эффект:** локальный пароль заменяется, счётчик неудачных попыток сбрасывается,
+старый `iss + sub` удаляется, ревизия владельца меняется, все серверные сеансы
+отзываются. Уже выданные токены поставщика идентификации остаются в управлении
+SkiF4er ID; для их отзыва используйте инструменты провайдера. Данные сайта,
+аналитические настройки и контент остаются неизменными.
+
+Реестр recovery хранится в `storage/auth/recovery.json` (0600), журнал событий
+без секретов — в `storage/auth/recovery-audit.jsonl` (0600). Файлы проверяются
+на символьные ссылки, небезопасные права и подмену в процессе чтения. Операции
+сериализуются через `recovery.lock`. После успешной операции token grant
+безвозвратно погашается **перед** сменой учётных данных: при сбое нужно выпустить
+новый токен, нельзя повторно использовать прежний.
+
+### Резервные копии после recovery
+
+В приватном `storage/auth/recovery-protected.json` сохраняется защищённая копия
+**хэша** восстановленного локального пароля и ревизии владельца (не plaintext).
+После восстановления контента из старого бэкапа текущие действующие учётные
+данные не откатываются. Если основной `site.json` повреждён, восстановление
+использует этот приватный recovery-snapshot вместо устаревших credentials
+из бэкапа. Этот файл **нельзя удалять** при эксплуатации, иначе защита от
+возврата старого пароля при восстановлении повреждённого JSON потеряется.
+Не переносите `storage/auth/` и его файлы на другой сервер без отдельного
+защищённого плана миграции. Перед ручным восстановлением повреждённого сайта
+сохраните приватный `storage/auth/` и все файлы восстановления.
+
+Проверки: `php tests/core_116.php`, `bash tests/recovery_cli.sh`, а также
+полный набор `core_102.php`–`core_115.php`, `bash tests/http.sh`.
+
+
+## CajeerEngine Lite 1.1.8 — Authentication Hardening
+
+`/admin` → **Управление способами входа** позволяет владельцу выбрать:
+
+- **Локальный пароль + SkiF4er ID** (после миграции используется по умолчанию).
+- **Только SkiF4er ID**: POST с локальным паролем не авторизует администратора; действующие локальные сеансы теряют доступ.
+
+Смена режима требует действующего авторизованного сеанса, CSRF, локального пароля,
+явного подтверждения и **нового интерактивного входа в привязанный аккаунт SkiF4er ID**
+(PKCE S256, RS256, `auth_time` не старше 5 минут). После подтверждения происходит
+атомарная запись политики и ротация ревизии владельца, поэтому предыдущие сеансы
+теряют доступ. Текущий браузер получает новый OIDC-сеанс. Повторный callback или
+устаревшая ревизия отвергаются. Нельзя перейти в SSO-only без настроенного HTTPS,
+клиентских OIDC-секретов и привязанного аккаунта владельца.
+
+**Аварийный возврат к паролю:** если SkiF4er ID недоступен, используйте имеющийся
+серверный `php bin/cajeer recovery issue` и `php bin/cajeer recovery complete ...`.
+Успешное восстановление снимает OIDC-привязку, сбрасывает режим на совместный,
+устанавливает новый пароль и отзывает все сеансы. Публичного обхода SSO нет.
+
+Миграция JSON **11 → 12** сохраняет все настройки, контент, OIDC-привязку и
+аналитику; перед обновлением создаётся резервная копия. При восстановлении
+содержимого из бэкапа текущая политика авторизации сохраняется, чтобы старый
+бэкап не отключил SSO-only. Проверки: `php tests/core_117.php`,
+`bash tests/auth_policy_http.sh`, `bash tests/http.sh`.
+
+
+### Authentication Hardening (1.1.8)
+
+- Начало SkiF4er ID-входа — только POST c корректным CSRF-токеном (защита от login-CSRF).
+- Незавершённая OIDC-транзакция не может быть перезаписана другой вкладкой в течение пяти минут; отмена через CSRF-защищённую кнопку в `/admin`.
+- Callback `iss` (RFC 9207) сверяется с SkiF4er ID issuer **до** обмена кода; если параметр отсутствует, продолжают действовать проверки ID Token и JWKS.
+- Неподдерживаемые и небезопасные заголовки JWT (`crit`, `jku`, `jwk`, `x5u`, `x5c`, `b64`, `zip`, `cty`) отклоняются. Проверяются разрешённые операции JWK и поддержка S256 в metadata.
+- При HTTPS-сайте `/admin` принимает запросы только по TLS с каноническим Host; reverse proxy должен передавать доверенный `HTTPS=on` в PHP-FPM (не клиентский `X-Forwarded-Proto`).
+- Сессии с невозможными метками времени отзываются; переполненный replay-кэш не вытесняет ещё действующие logout-токены; при временной невозможности отзыва Back-Channel Logout возвращает 503/Retry-After. Recovery-операции допустимы только в PHP CLI.
+- Установка: заменить изменённые файлы 1.1.7, затем `php tests/core_118.php` и `bash tests/auth_hardening_http.sh`. Основная JSON-схема остаётся **12**, миграция не требуется.
+- Криптографические тесты используют локально подписанные JWT; реальный Keycloak, настройки обратного прокси и актуальные сертификаты требуют отдельной staging-проверки.
+
+
+## CajeerEngine Lite 1.1.9 — Security & Migration Acceptance
+
+Версия приложения `1.1.9`, CajeerEngine shared core `2.1.0`, JSON schema `12`.
+Обновление с `1.1.8` не меняет формат `site.json` и не требует миграции данных.
+
+### Исправления в рабочей авторизации
+
+- Authorization Code response теперь отклоняется при отсутствии непустого `access_token` или неправильном формате токена. Один ID Token из частичного ответа более не открывает админ-панель.
+- ID Token с истёкшим `exp` отклоняется без принятия уже просроченного токена; проверяется согласованность `iat`, `nbf` и `exp`.
+- Claim `aud` принимает только строку либо непустой массив уникальных строк. Ассоциативные JSON-объекты, пустые и повторяющиеся значения запрещены.
+- Back-Channel Logout Token должен содержать **ровно одно** событие `http://schemas.openid.net/event/backchannel-logout` с пустым JSON-объектом. Другие события или дополнительные поля не принимаются.
+- Существующие проверки RS256/JWKS, PKCE S256, state/nonce, привязки `iss+sub`, одноразового callback и отзыва сессий остаются обязательными.
+
+### Реальные проверки локального развёртывания
+
+```bash
+php bin/cajeer migrate
+php bin/cajeer doctor
+php bin/cajeer auth check --json
+php tests/core_119.php
+php tests/auth_concurrency_119.php
+bash tests/auth_acceptance_http.sh
+bash tests/auth_hardening_http.sh
+bash tests/auth_policy_http.sh
+bash tests/recovery_cli.sh
+bash tests/http.sh
+```
+
+`auth check` использует действующее состояние сайта, проверяет структуру JSON и политику входа,
+конфигурацию OIDC, права `site.json`, читает и очищает истёкшие записи **настоящего**
+серверного реестра сессий под `flock`, проверяет приватное PHP-хранилище и состояние
+одноразового восстановления доступа. Результат содержит `ok`, детальные `checks`,
+нечувствительную к секретам статистику `sessions` и оставшиеся `manual` действия.
+В SSO-only отсутствие корректных OIDC credentials/HTTPS приводит к ошибке и ненулевому коду выхода.
+Проверка не делает сетевых запросов к IdP и **не** подтверждает работу зарегистрированного клиента.
+
+`core_119.php` выполняет подписанные RSA/OIDC сценарии с тестовым провайдером, отклонение
+неправильных токенов, миграции настоящих JSON-файлов схем 9/10/11→12 с проверкой исходных
+байтов резервных копий, выборочное завершение сеансов через logout token, защиту SSO-only
+от отката резервной копией и аварийное CLI-восстановление. `auth_concurrency_119.php`
+проверяет два конкурирующих изменения владельца и десять одновременных записей сессий
+**в отдельных процессах PHP**. `auth_acceptance_http.sh` использует работающий PHP HTTP-сервер,
+два отдельных cookie-jar, реальный отзыв устройств, CSRF и сценарий восстановления.
+
+### Необходимая внешняя production-приёмка
+
+Автоматические тесты OIDC подписывают JWT настоящим OpenSSL, но используют контролируемые
+HTTP-ответы вместо доступа к SkiF4er ID. Перед выпуском необходимо проверить на staging:
+
+1. Согласованные `redirect_uri`, post-logout URI и back-channel URL зарегистрированного клиента SkiF4er ID на HTTPS.
+2. Успешный интерактивный Authorization Code + PKCE вход и отказ постороннему аккаунту владельца.
+3. Step-up для смены владельца, блокировку старых сессий и переключение hybrid ↔ SSO-only.
+4. Глобальный выход из IdP, фактическую доставку Back-Channel Logout и выборочный отзыв сессий.
+5. Восстановление доступа с утраченной учётной записью, а затем восстановление контентного бэкапа без возврата старых credentials.
+
+Наличие локального зелёного CI **не означает**, что эти внешние действия уже проверены.
+Храните `CAJEER_OIDC_CLIENT_SECRET` вне JSON и публичного каталога.
+
+
+## CajeerEngine Lite 1.2.0 — SkiF4er ID Stable
+
+Обновление с **1.1.9** не меняет JSON-схему (**12**) или формат Session Registry (**2**).
+Существующие страницы, настройка аналитики, пароль, привязка владельца и сеансы сохраняются.
+Сначала сохраните резервную копию `storage/site.json` и остановите веб-процессы.
+Установите изменённые файлы в корень Lite 1.1.9, затем выполните:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php bin/cajeer auth check --json
+php tests/core_120.php
+bash tests/auth_release_http.sh
+```
+
+### Production release acceptance
+
+Перед production-развёртыванием настройте переменные окружения **на сервере**:
+
+```sh
+CAJEER_OIDC_CLIENT_ID=<client-id>
+CAJEER_OIDC_CLIENT_SECRET=<long-private-client-secret>
+```
+
+Никогда не записывайте секрет в `site.json`, JS, репозиторий или параметры URL.
+Обязательно укажите канонический **HTTPS** URL сайта в настройках Lite и
+зарегистрируйте в SkiF4er ID соответствующие адреса:
+
+- Redirect URI: `https://YOUR-DOMAIN/admin/oidc/callback`
+- Post-logout redirect URI: `https://YOUR-DOMAIN/admin/oidc/logged-out`
+- Back-channel logout URL: `https://YOUR-DOMAIN/admin/oidc/backchannel-logout`
+
+В Keycloak включите Authorization Code, confidential client authentication,
+PKCE S256, RS256 и Back-Channel Logout. Проверяйте фактическую регистрацию в
+кабинете провайдера: публичные metadata сами по себе этого не подтверждают.
+
+```sh
+# Локальные проверки без сетевого обращения к провайдеру:
+php bin/cajeer auth release-check --json
+
+# Реальные HTTPS-проверки подключённого сайта и SkiF4er ID:
+php bin/cajeer auth release-check --live --json
+```
+
+`--live` делает HTTPS GET к фиксированным безопасным адресам: Discovery/JWKS
+SkiF4er ID и только `/health/live`, `/admin`, `/admin/oidc/login`,
+`/admin/oidc/backchannel-logout`, `/admin/recovery` вашего настроенного сайта.
+Проверяется публичная RSA-ключевая информация и рекламируемые возможности
+провайдера, HSTS, CSP, `Cache-Control`, `Secure`/`HttpOnly`/`SameSite=Lax`,
+ожидаемые HTTP-коды и отсутствие публичного маршрута восстановления.
+Не выполняет интерактивный вход, не использует пароль владельца и не передаёт токены.
+Сетевые запросы ограничены по времени, отключены перенаправления и проверяется TLS.
+
+Статусы:
+
+- `failed`: критическое требование не выполнено; exit code 1.
+- `pending_live`: локальная проверка прошла, но live-проверка не запускалась; exit code 2.
+- `pending_manual`: автоматические live-проверки прошли, но реальные действия владельца
+  ещё не подтверждены; exit code 2.
+
+`production_accepted` остаётся `false`, пока не подтверждены интерактивные
+операции с реальным зарегистрированным клиентом. Это сознательное ограничение:
+самопроверка не должна выдавать сертификат реальной авторизации только по
+доступному Discovery и корректным ключам JWKS.
+
+На staging **обязательно** проверьте полный сценарий:
+
+1. Привязанный владелец входит через реальный SkiF4er ID; другой реальный ID
+   получает отказ в доступе к `/admin`.
+2. В двух независимых браузерах есть активные сессии; отзыв одной блокирует её,
+   вторая остаётся действительной.
+3. Глобальный выход приводит к странице выхода Keycloak, а Back-Channel Logout
+   отзывает именно соответствующую сессию Lite.
+4. Смена владельца и переключение режима входа требуют повторной авторизации,
+   аннулируют старые сессии и не блокируют CLI recovery.
+5. CLI recovery с однократным токеном восстанавливает пароль при утрате SSO;
+   восстановление старого резервного файла не восстанавливает прежний доступ.
+6. Проверены TLS-терминация, доставка `HTTPS=on` в PHP-FPM, HTTPS URL и правильные
+   redirect URI, журнал ошибок без утечки токенов и восстановление из бэкапа.
+
+В `/admin?auth_acceptance=1` авторизованный администратор может увидеть локальные
+проверки. Сетевые запросы из браузерной административной страницы не запускаются.
+
+В 1.2.0 дополнительно проверяется `c_hash` в подписанном ID Token, **если этот
+claim присутствует**: его несоответствие использованному authorization code
+приводит к отказу. Проверка совместима с OIDC Authorization Code Flow, где
+`c_hash` в ответе token endpoint может отсутствовать.
+
+
+## OpenAI Integration — 1.2.1 (Responses API)
+
+Интеграция не использует Composer, SQL или cURL и работает на стандартном PHP 8.4 с HTTPS streams (необходимы OpenSSL и `allow_url_fopen=On`).
+Обновление с 1.2.0: остановите приложение, сохраните резервную копию `storage/site.json`, замените файлы патча,
+затем выполните `php bin/cajeer migrate` и `php bin/cajeer doctor`. При миграции schema 12 → 13 создаётся
+точная приватная копия исходного JSON; контент, учётная запись владельца, аналитические интеграции и сессии
+сохраняются. На новой установке AI выключен. Дополнительная секция `ai` хранит только несекретные настройки.
+
+### Настройка
+
+1. Создайте API-ключ в OpenAI Platform для отдельного проекта и настройте его биллинг. Подписка ChatGPT не
+   предоставляет API-баланс. На PHP-FPM задайте `CAJEER_OPENAI_API_KEY` через менеджер секретов или конфигурацию
+   окружения сервиса (не в `site.json`, `.env` внутри DocumentRoot или аргументах CLI).
+2. Откройте `/admin` (локальный вход или SkiF4er ID) → «OpenAI — серверная интеграция».
+   Включите OpenAI, укажите ID модели (по умолчанию `gpt-5-mini`, если он доступен вашему API-проекту)
+   и ограничения. Сохраните настройки. «Проверить доступные модели» выполняет настоящий `GET /v1/models`;
+   в списке могут быть модели без поддержки Responses API.
+3. «Сгенерировать тестовый ответ» отправляет введённый текст на `POST https://api.openai.com/v1/responses`
+   с `store: false`, сохраняет полученные значения `usage.input_tokens` и `usage.output_tokens`.
+   Генерация платная. Ответ виден только авторизованному администратору, HTML экранируется.
+4. `php bin/cajeer ai status` выводит текущие настройки и расход токенов за сутки UTC без ключа.
+
+Лимиты: 100–16000 байт входного текста, 64–4096 токенов ответа, 1–500 запросов и 5000–2000000 токенов
+в сутки UTC. Квоты учитываются атомарно под `flock`; незавершённые запросы резервируют консервативный бюджет,
+сетевые ошибки учитываются как потенциально платные операции. При смене суток открывается отдельный журнал.
+Это **лимиты запросов и токенов**, а не точный денежный лимит: фактическую сумму проверяйте в OpenAI Platform
+и дополнительно устанавливайте бюджет проекта там. Приложение намеренно не выполняет автоматические повторные
+POST-запросы, чтобы исключить двойное начисление после сетевого обрыва.
+
+Безопасность: разрешён только HTTPS-хост `api.openai.com`, проверяется сертификат, отключены redirects,
+ограничены длительность и размер запроса/ответа. При отсутствии ключа, недоступности API, ошибке 429,
+незавершённом ответе или исчерпании лимита CMS продолжает работать. Секреты не попадают в страницы, JSON
+или журналы приложения. AI не получает право изменять страницы и не выполняет инструменты/команды.
+Не отправляйте на тестовую генерацию личные данные и секреты. Режим `store: false` не отменяет всех
+правил обработки данных провайдером. Публичным посетителям AI недоступен.
+
+**Тесты:** `php tests/core_121.php`, `bash tests/ai_http.sh`, затем полный CI. API-тесты используют
+детерминированный транспорт с реальным форматом Responses API; без действующего API-ключа и разрешённого
+интернет-доступа они не подтверждают успешную генерацию в реальном OpenAI-проекте.
+
+
+## AI Assistant Chat — 1.2.2
+
+`/admin/ai` provides a private chat for the authenticated owner. OpenAI settings and
+`CAJEER_OPENAI_API_KEY` are configured as described in the 1.2.1 section. Create a
+conversation, send messages, read incremental responses, stop an active request, and
+delete one conversation or all history. Without JavaScript the send form uses a regular
+server-side response and redirects back to the saved conversation. Responses API calls
+are made exclusively from PHP using `store: false` and count toward existing daily
+request/token limits. Prompts and assistant messages are stored under
+`storage/ai/conversations/<owner-generation>/` (private 0700 directories and 0600
+files). This history is deliberately excluded from normal site backups and public
+pages. The API key is never written to JSON. Changing the owner generation isolates
+prior chat history. A chat has at most 80 messages, and the oldest turns are omitted
+from the **API context** as necessary to honor `max_input_chars`. Maximum 30 conversations
+per owner generation. No AI content is automatically published or executed.
+
+The chat route has its own same-origin JavaScript CSP exception; all other admin routes
+retain their previous `script-src 'none'` policy. Stopping an answer requests cancellation
+of the server job and invalidates its storage reservation. If the upstream API may have
+already billed tokens without returning usage, the daily quota counts the full reserved
+amount. Real OpenAI account delivery requires a working key and network access; local
+contract tests use a deterministic fake transport.
+
+Run `php tests/core_122.php` and `bash tests/ai_chat_http.sh` after upgrading.
+
+
+## AI Content Generation — 1.2.3
+
+Open `/admin/ai/content` after logging in as the administrator. Enable OpenAI in `/admin`
+and provide `CAJEER_OPENAI_API_KEY` in the PHP server environment. The new generator
+creates **unpublished page drafts**, or suggests a **title** or **SEO description** for
+an existing page. Choose a mode, enter a subject, style, audience, keywords and length,
+then submit. The generation uses the server-side OpenAI Responses API with strict
+`text.format: json_schema`, TLS verification, `store: false`, and the existing atomic
+request/token quotas. An API request is billable.
+
+The result is shown in an editable preview. **Nothing is saved until the administrator
+submits the separate confirmation form.** New pages are always created as unpublished
+and hidden from the menu. Existing-page suggestions change only the chosen metadata
+field, with an optimistic revision check to prevent overwriting concurrent edits.
+Proposals are held in the private PHP session for 30 minutes, and expire after owner
+replacement; discarding the preview does not touch site data. There is no new SQL,
+Composer or external browser JavaScript dependency and **no JSON migration** from
+1.2.2 (`schema 13` remains current). The public renderer continues to escape text.
+
+Tests:
+
+```sh
+php tests/core_123.php
+bash tests/ai_content_http.sh
+```
+
+The PHP test exercises actual Structured Outputs request construction and parsing
+using a local injected test transport, validates quota accounting, draft creation,
+metadata updates, concurrent revisions and malformed AI responses. The HTTP test
+exercises authenticated admin routes and CSRF with no API key configured. End-to-end
+response delivery from a live OpenAI project requires staging credentials.
+
+
+## AI Page Editor — 1.2.4
+
+Open `/admin/ai/editor` (also linked beside each page in `/admin`) after signing in.
+Select an existing page and the field to edit: full body text, title, SEO description,
+or all three. Choose improve, proofread, shorten, expand, change tone, rewrite, or
+custom instructions. The server sends the selected page context to the configured
+OpenAI Responses API with Structured Outputs, `store: false`, TLS verification and
+the existing atomic usage quotas. Each AI request can incur provider charges.
+
+The response is **only a preview**. The original and proposed fields are displayed
+side by side, and the proposed text can be edited before approval. The admin must
+explicitly check the confirmation and click Apply. A proposed edit is valid for
+30 minutes, is bound to the current owner generation, and cannot overwrite a page
+changed since its generation. Paths, publishing status and menu visibility are never
+modified by the AI editor. Changes to published pages become public after approval.
+The existing plaintext renderer continues to escape HTML and JavaScript.
+
+Before applying a change, Lite saves a durable copy of the *previous* page in
+`storage/ai/page-history/<owner-generation>/<sha256-of-path>/<snapshot-id>.json`.
+These private files use 0700 directories and 0600 files and are protected against
+symlink/hardlink substitution. Up to 20 revisions per page are retained. Open the
+same editor page, expand a history entry and confirm Restore to roll back. Restoring
+also snapshots the currently live page, enabling undo of a restore. A restore
+fails if the page was modified after the restoration form was opened. Other manual
+editor changes are not versioned retroactively.
+
+History is scoped to the active owner generation, stored separately from
+`storage/site.json`, and not included in ordinary site backups. Back up the
+`storage/ai/page-history/` directory independently if archival retention is needed.
+Changing owners isolates earlier revision history. Do not place `storage/` under a
+public web root. If the page text exceeds configured AI context limits, the editor
+rejects the request rather than silently sending a truncated page. Increase
+`max_input_chars` carefully and check expected token costs.
+
+Upgrade from 1.2.3 by replacing patch files, then run:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_124.php
+bash tests/ai_page_editor_http.sh
+python tests/browser_124.py
+```
+
+The site JSON schema remains 13; no migration is needed. Local tests use a test
+transport for provider responses. Live generation requires a configured API key,
+network access and an available Structured Outputs-compatible model.
+
+
+## 1.2.5 — AI SEO Assistant (site audit and approved fixes)
+
+Upgrade from 1.2.4: save a copy of `storage/site.json`, stop the PHP workers,
+apply the changed-files ZIP at the repository root and run:
+
+```sh
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_125.php
+bash tests/ai_seo_http.sh
+```
+
+Open `/admin/ai/seo` as an authenticated administrator. Local site audit works
+**without an OpenAI key**: it checks published-page title/description duplicates,
+missing or unusually short/long SEO metadata, thin body text, canonical URLs,
+unpublished status, HTTPS, and enabled sitemap/robots modules. Score values
+are heuristic local editorial indicators, **not real search rankings**.
+The canonical address displayed is generated from the site's configured origin
+and page path. The assistant does not silently change server settings or routing.
+
+With OpenAI enabled and a server-side `CAJEER_OPENAI_API_KEY`, select a page and
+request either metadata-only (title + description) or full-text SEO suggestions.
+This makes a real Responses API request with Structured Outputs and uses the
+existing daily request/token limits. For very long pages choose metadata mode;
+full-text mode rejects inputs exceeding the configured context limit rather than
+truncating them silently. The site's current text and audit results are sent
+to OpenAI; do not include personal or confidential text without authorization.
+
+Suggestions are **not saved automatically**. Inspect side-by-side old/new text,
+edit the suggested fields, check the confirmation box, and approve. The server
+checks the owner's identity generation, the page revision and a 30-minute
+preview lifetime inside the site transaction. Metadata-only edits preserve the
+body verbatim; all modes preserve the page URL, publishing flag and menu flag.
+A durable snapshot is written to `storage/ai/page-history/` before each update.
+Use `/admin/ai/editor` to restore a snapshot (also revision checked). Back up
+this private page-history directory separately if you want to retain revision history.
+
+Server-side HTML escaping protects both admin preview and public rendering.
+The API key never reaches the browser. No SQL/Composer/Node dependencies are
+needed for the PHP runtime. CI tests use locally simulated API responses;
+validate actual OpenAI requests on staging with your project key. The JSON
+schema remains **13**; no storage migration occurs with this release.
+
+## 1.2.6 — AI Analytics Insights: отчёты и конверсии
+
+Новый административный раздел **`/admin/ai/analytics`** использует рабочие `ReportService` и `ReportCache` версии 1.1.1: он **не** выдумывает показатели из идентификаторов счётчиков и **не** запрашивает API аналитики при открытии страницы или запуске OpenAI. Отчёты за 3, 7, 14, 30 или 90 полных дней по UTC сначала получаются в `/admin?analytics=1` (или `php bin/cajeer analytics refresh --days=7`); при отсутствии реальных API-учётных данных соответствующий провайдер отображается как недоступный, а не с нулевыми значениями.
+
+Сначала настройте серверные переменные для нужных источников (GA4 / Google Search Console, Яндекс Метрика / Яндекс Вебмастер, Matomo, Microsoft Clarity), как описано выше в разделе Analytics Dashboard. Включите существующую интеграцию OpenAI и задайте `CAJEER_OPENAI_API_KEY` **на сервере**. Затем откройте `/admin/ai/analytics`, выберите период и нажмите **«Создать AI-анализ»**. Только эта кнопка выполняет оплачиваемый OpenAI Responses API-запрос. Работа модели использует существующие дневные лимиты запросов и токенов. Необходимы авторизованная сессия владельца и действующий CSRF-токен.
+
+**Отображение фактов и интерпретаций разделено:** точные числа и конверсии показаны по каждому провайдеру отдельно; затем — AI-объяснение, гипотезы, возможные проверки и ограничения. Нельзя суммировать разные определения сессий, конверсий и просмотров между сервисами. Без отдельного сопоставимого предыдущего периода AI не должен делать утверждения о динамике или причинно-следственных связях. Для Clarity выводится предупреждение, что данные могут покрывать лишь 3 суток, независимо от выбранного диапазона. Устаревший (>15 минут) кэш помечается; данные источника с ошибкой не заменяются выдуманными нулями.
+
+В OpenAI передаются **только разрешённые агрегированные числовые метрики**, обезличенные номера целей и признаки наличия данных. Токены, поисковые запросы, email/телефоны посетителей, названия целей, URL-адреса сессий и подробные ошибки API исключены. Ответ структурирован четырьмя текстовыми полями (`summary`, `hypotheses`, `recommendations`, `limitations`) и экранируется при выводе. AI-текст не является подтверждённой отчётностью: сверяйте рекомендации с показателями источника. OpenAI вызывается с `store: false`.
+
+Результат сохраняется в закрытом `storage/ai/analytics-insights/` (права каталога `0700`, файлов `0600`), отдельно от `site.json`. Ключ привязан к поколению владельца и отпечатку конкретного снимка отчёта: после обновления кэша прежняя интерпретация не используется. Результат можно удалить из админ-панели. Настройки JSON остаются на schema 13; миграция данных для 1.2.6 не нужна. **При резервном копировании истории AI** отдельно включите `storage/ai/`.
+
+Проверки:
+
+```bash
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_126.php
+bash tests/ai_analytics_http.sh
+```
+
+Тесты используют реальный PHP-код, HTTP-авторизацию, Structured Outputs с подменённым сетевым ответом и проверку файлового хранения. Получение ответа с реальным OpenAI API-ключом и данными рабочих аккаунтов провайдеров необходимо отдельно проверить на staging. Пользовательские изменения страниц в этой версии AI Analytics Insights **не выполняет**.
+
+
+## 1.2.7 — AI Technical Support: безопасная диагностика CMS
+
+После обновления с версии 1.2.6 откройте `/admin/ai/support`. На странице без внешних
+запросов выполняются фактические проверки состояния CMS, PHP/OpenSSL, OIDC/сессий,
+файлового хранилища, Cookie Consent и загрузчиков аналитики. Можно выбрать область
+неисправности, просмотреть статусы PASS/WARN/FAIL, увидеть базовые инструкции и скачать
+обезличенный JSON-отчёт. Все действия доступны только авторизованному администратору;
+создание AI-рекомендации и её удаление защищены CSRF.
+
+Если OpenAI включён и переменная `CAJEER_OPENAI_API_KEY` настроена, кнопка
+«Получить AI-рекомендации» отправляет **только** ограниченный набор кодов и статусов
+проверок. Содержимое сайта, пользовательские запросы, сырые логи, IP-адреса,
+файловые пути, пароли, токены и идентификаторы владельца не передаются.
+Используется настоящий Responses API со Structured Outputs и действующим учётом квот.
+Рекомендации являются гипотезами и не приводят к автоматическим изменениям CMS.
+
+Результаты сохраняются в `storage/ai/technical-support/` с приватными правами
+`0700/0600`, привязаны к поколению владельца, области диагностики и отпечатку
+конкретного снимка статусов. После изменения результатов проверок или владельца
+старый анализ не отображается. Историю можно удалить из админки. Для сохранения
+истории во время переноса сайта нужно отдельно архивировать `storage/ai/`.
+
+На сервере те же безопасные статусы можно получить через CLI:
+
+```bash
+php bin/cajeer support check
+php bin/cajeer support check --json
+php tests/core_127.php
+bash tests/ai_support_http.sh
+```
+
+Команда возвращает ненулевой код выхода при критических ошибках. Она не обращается
+к OpenAI и не пытается устранять сбои самостоятельно. Требования PHP, JSON schema 13
+и базовые компоненты CajeerEngine 2.1.0 остаются прежними. Результаты локальных
+тестов не заменяют проверку реальной работы OpenAI API и SkiF4er ID на staging.
+
+
+## 1.2.8 — AI Security & Cost Control
+
+Обновление с **1.2.7**: остановите PHP-FPM, сохраните резервную копию, распакуйте changed-only ZIP, затем выполните `php bin/cajeer migrate`, `php bin/cajeer doctor`, `php tests/core_128.php`, `php tests/ai_cost_concurrency_128.php`, `bash tests/ai_cost_http.sh`.
+
+**Рабочая защита расходов**. Раздел `/admin` → «AI Security & Cost Control» хранит настройки в `storage/ai/cost-policy.json` (0600), а не в `site.json`. Денежный лимит отключён при обновлении до явного ввода *цены входных и выходных токенов* по актуальному тарифу выбранной модели. Значения цены задаются **в центах USD за 1 млн токенов**, дневной и месячный бюджеты — в центах USD. Цены не загружаются автоматически, не подтверждаются OpenAI и могут отличаться от реальной суммы биллинга. Включённый бюджет резервирует максимально оценённую стоимость до API-запроса; учитывает фактические входные/выходные токены после успешного ответа; на ошибке/тайм-ауте списывает полную резервную оценку. При превышении дневного или месячного ограничения новые запросы отклоняются до обращения к провайдеру. Месячные суммы вычисляются из защищённых дневных реестров за текущий месяц UTC под одним lock. Изменение тарифов не пересчитывает прошлые суммы; отключённый бюджет не накапливает цену запросов. Дневные токены/запросы, заданные в настройках OpenAI, продолжают ограничиваться независимо.
+
+**Параллельность и сбои**. `max_concurrent` ограничивает активные AI-запросы в одной установленной копии Lite. При прерывании PHP-процесса зарезервированные суммы остаются зарезервированными; после 20 минут они учитываются по максимальной оценке и освобождают слот. Механизм рассчитан на один локальный файловый storage; не является распределённым биллинговым лимитером и не может гарантировать точный USD-расход при изменении тарифов, наличии кешированных токенов, инструментов или неожиданного превышения реальных токенов. Для обязательного финансового ограничения установите бюджет также в панели OpenAI.
+
+**Минимизация данных**. Все `generate`, `chat`, потоковый чат и Structured Outputs перед отправкой проходят финальную фильтрацию очевидных секретов (`sk-...`, bearer-токены, JWT, пары `password=` / `client_secret=` / `access_token=`), email, телефонных номеров и IPv4. Фильтр — дополнительная защитная мера, **не гарантия полного удаления любых персональных данных**. Нельзя отправлять в AI незамаскированные договоры или конфиденциальные данные без предварительной проверки. OpenAI-ключ хранится только в `CAJEER_OPENAI_API_KEY`; исходные сообщения могут оставаться в приватной истории диалогов, если пользователь не удалил их. `store: false` не гарантирует отсутствия всех серверных журналов провайдера. Контент сайта и диалога рассматривается как недоверенный ввод, не имеющий полномочий изменять правила или автоматически публиковать страницы. Все изменения страниц по-прежнему требуют подтверждения владельца.
+
+**Совместимость**. Основная JSON schema остаётся 13; миграция не нужна. Дневные `usage-*.json` версии 1.2.7 читаются без удаления истории запросов и токенов, а стоимость для старых записей равна нулю, поскольку исторические тарифы неизвестны. При переносе/восстановлении сайта каталог `storage/ai/` с конфигурацией стоимости и реестрами необходимо копировать отдельно от `site.json`; потеря реестра приведёт к обнулению локального счётчика, поэтому сохраняйте файловые права 0700/0600 и внешние резервные копии этого каталога.
+
+
+## 1.2.9 — AI Integration Acceptance
+
+Исправлено сохранение невыбранных полей в AI Page Editor и Content Generation: редактура заголовка или SEO-описания не изменяет исходный текст страницы даже при наличии завершающих пробелов в ранее импортированных данных.
+
+Добавлены интеграционные проверки AI-функций, бюджетов и отказов OpenAI. Проверка готовности установленного сайта:
+
+```bash
+php bin/cajeer ai acceptance --json
+php bin/cajeer ai acceptance --live --json
+php tests/ai_integration_129.php
+php tests/ai_failures_129.php
+bash tests/ai_acceptance_http.sh
+python tests/browser_129.py
+```
+
+`ai acceptance` не выполняет платных запросов: `--live` обращается только к `/v1/models`. Код выхода `1` означает, что локальные проверки не пройдены, `2` — локальные проверки пройдены, но ручная приёмка с реальными аккаунтами и платной генерацией остаётся открытой. Это **не** подтверждение полного production-ready статуса. В CI используется управляемый транспорт OpenAI без передачи учётных данных.
+
+
+## 1.3.0 — Cajeer AI Assistant Stable
+
+Версия **1.3.0** добавляет рабочую *операционную* финальную приёмку всей AI-подсистемы:
+
+- Текущее состояние AI-конфигурации, хранилища, защищённых файлов, TLS, API-ключа и бюджета проверяется без платных запросов. В авторизованной `/admin?ai_release=1` можно прочитать результат локальной проверки.
+- Команда `ai release-check --live --json` проверяет доступность выбранной модели через настоящий `/v1/models`, без генерации текста.
+- Опциональный **платный** smoke-test выполняет три реальных запроса через действующие `OpenAIClient` и `UsageLimiter`: обычный текст, Structured Outputs, потоковый чат. Он сверяет полученные фрагменты SSE с завершённым ответом и проверяет, что все фактически сообщённые токены сохранены в реестре затрат.
+- Платные запросы выполняются **только** по CLI с `--paid` и отдельно установленной переменной `CAJEER_AI_PAID_PROBE_CONFIRM=I_ACCEPT_API_CHARGES`. Для их выполнения должны быть включены действующие бюджетные ограничения, а `CAJEER_OPENAI_API_KEY` и настройки модели должны быть корректными.
+- Отчёт не содержит ключа, приватных путей, отправленных сообщений или текста ответа провайдера. Ошибка любого платного сценария делает проверку неуспешной. Даже успешный smoke-test **не подтверждает** итоговую production-приёмку сайта без ручной проверки на staging.
+
+### Установка и локальная проверка
+
+Перед обновлением остановите PHP-FPM / веб-приложение, сделайте внешнюю резервную копию `storage/site.json` **и** приватного `storage/ai/`, затем наложите changed-only ZIP поверх **1.2.9** и запустите:
+
+```bash
+php bin/cajeer migrate
+php bin/cajeer doctor
+php tests/core_130.php
+bash tests/ai_release_http.sh
+php bin/cajeer ai release-check --json
+```
+
+Версия JSON-схемы **13** не меняется, миграция хранилища для перехода 1.2.9 → 1.3.0 не требуется. `storage/ai/` нельзя размещать внутри web-root или публиковать через HTTP. Секреты остаются в окружении процесса PHP.
+
+### Staging: проверка настоящего OpenAI API
+
+1. Настройте тестовый OpenAI API-проект с биллингом и доступной моделью. Укажите `CAJEER_OPENAI_API_KEY` **только** на сервере.
+2. В `/admin` включите OpenAI и денежный контроль, задайте актуальные тарифы и небольшие дневной и месячный лимиты. Учтите, что внутренние суммы приблизительны; установите лимит также в кабинете OpenAI.
+3. Запустите read-only проверку модели: `php bin/cajeer ai release-check --live --json`.
+4. При согласии оплатить **три** тестовых генерации запустите на сервере:
+
+```bash
+CAJEER_AI_PAID_PROBE_CONFIRM=I_ACCEPT_API_CHARGES php bin/cajeer ai release-check --live --paid --json
+```
+
+Тестовые запросы используют только синтетические фразы; сайт, сессии и отчёты в OpenAI не передаются. Отправка дополнительных тестов потребует отдельного запуска. Проверьте в реальном биллинге расход, сопоставьте с локальным журналом и вручную протестируйте все шесть AI-разделов: чат, генерацию черновика, редактор с откатом, SEO, аналитику и поддержку. Дополнительно проверьте SkiF4er ID, Cookie Consent, восстановление бэкапа и опубликованный сайт.
+
+**Коды завершения:** `1` — не пройдена техническая проверка, `2` — автоматические проверки пройдены, но остаются обязательные ручные действия. Статус `production_accepted` остаётся `false`, даже после успешного платного smoke-test. Это намеренное fail-closed поведение: без учётных данных и живого окружения нельзя автоматически подтвердить все критические бизнес-процессы.
+
+Проверки, выполняемые в CI, используют фиктивный HTTP-транспорт, **не** настоящую оплату или пользовательские данные. CI подтверждает работу реализации, но не фактический ответ платного API на вашей установке.
+
+
+## 1.3.1 — Admin Experience
+
+Вход в `/admin` открывает новый **Dashboard** без зависимости от JavaScript.
+Показатели: реальные количества страниц/черновиков, включённые провайдеры аналитики,
+активные серверные сессии, состояние SkiF4er ID, OpenAI и Cookie Consent.
+Встроенные ссылки позволяют создать страницу, открыть редактор, аналитические отчёты и диагностику.
+
+Разделы через `?view=`: `dashboard`, `pages`, `ai`, `analytics`, `integrations`,
+`security`, `settings`. Все ранее действовавшие `/admin?new=1`, `/admin?edit=...`,
+`/admin?ai=1`, `/admin?analytics=1` продолжают работать. Формы с текущими действиями
+остались серверными, защищёнными авторизацией и CSRF; после изменения настроек
+страница возвращается к соответствующему разделу с уведомлением.
+В AI-инструментах `/admin/ai/*` используется общая боковая навигация.
+Мобильная версия раскрывает меню через стандартный HTML `<details>` без JavaScript.
+
+Файлы интерфейса: `core/Admin/AdminExperience.php` и `public/assets/admin.css`.
+Для Apache/Nginx не требуются новые rewrite-правила: CSS обслуживается существующим
+маршрутом `/assets/*.css`. Не менялись ни OIDC/CSRF/сессии, ни основной JSON schema 13.
+
+Проверки версии:
+
+```bash
+php tests/core_131.php
+bash tests/admin_experience_http.sh
+python tests/browser_131.py
+```
+
+Dashboard показывает только локальное состояние, не утверждает, что события были
+доставлены в GA4/Метрику или что продакшен-приёмка OpenAI и SkiF4er ID завершена.
+
+## 1.3.3 — Pages Management
+
+Раздел `/admin?view=pages` содержит **рабочий серверный менеджер страниц**:
+поиск по заголовку, URL и описанию (без требования `mbstring`), фильтр
+`all`/`published`/`draft`, сортировку по названию, адресу и статусу,
+постраничный вывод (10, 20, 50 или 100 строк) и очистку фильтров.
+Поиск выполняется исключительно в памяти по текущему `site.json`, без SQL
+и сторонних зависимостей. Все параметры GET проверяются по спискам допустимых
+значений; страницы остаются недоступными без входа администратора.
+
+Для каждой строки доступны открытие существующего редактора, AI-редактор,
+SEO-аудит, непосредственная публикация/снятие с публикации и создание копии.
+Копия всегда является **неопубликованным черновиком**, не включённым в меню;
+путь создаётся из исходного с суффиксом `-copy`, `-copy-2` и т. д.
+Публикация и снятие с публикации также работают для нескольких отмеченных
+страниц через кнопки в верхней части списка. Эти операции выполняются
+**атомарной транзакцией** `Lite::change`, которая проверяет ревизии всех
+выбранных страниц непосредственно под файловой блокировкой. Если хотя бы
+одна ревизия изменилась, операция целиком отклоняется с HTTP 422; без
+частичного применения. Главная страница `/` всегда остаётся опубликованной.
+Старые URL `/admin?edit=...` и `/admin?new=1`, формы и механизмы OIDC/CSRF
+сохранены. JSON schema остаётся **13**, миграция не требуется.
+
+Браузерный интерфейс не требует JavaScript. На мобильных устройствах таблица
+прокручивается внутри контейнера, а не расширяет всю страницу. Сервис
+`core/Admin/PagesManagement.php` исполняет фильтры, проверку ревизий,
+дублирование и пакетную публикацию, а не имитирует действия в UI.
+
+Проверки релиза:
+
+```bash
+php tests/core_132.php
+bash tests/pages_management_http.sh
+python tests/browser_132.py
+```
+
+
+### 1.3.3 — Enhanced Content Editor
+
+The authenticated `/admin/editor` page is a functional client-side block editor: headings H2–H6, paragraphs, quotes, ordered/unordered lists, safe HTTPS/local links, buttons and dividers. Blocks can be inserted, reordered and removed; undo/redo and per-tab draft recovery are provided. A live text-safe preview is shown next to the editor; **Check on site** posts the proposed content to `/admin/editor/preview`, rendering the actual `.cjr` template in a sandboxed, script-disabled iframe without saving it. Clicking **Save** performs a CSRF-protected, revision-checked, atomic JSON transaction and retains the previous version in AI Page History. Legacy plain-text pages remain unchanged until edited in the block editor; the old text editor remains accessible.
+
+Schema **14** adds an optional `blocks` array to each page while retaining the plain `body` field for search and AI. Migration from schema 13 preserves all original text and publication flags; back up `storage/site.json`, `storage/ai/` before upgrade. AI metadata changes preserve blocks; AI body rewrites intentionally return pages to plain-text mode (the old structured document is available via page history). Block content is escaped server-side and never interpreted as submitted HTML or JavaScript.
+
+Checks: `php tests/core_133.php`, `bash tests/block_editor_http.sh`, `python tests/browser_133.py`.
+
+
+### 1.3.4 — Media Library
+
+The authenticated `/admin/media` screen accepts JPEG, PNG, WebP, GIF and PDF uploads (8 MB/file,
+250 files and 100 MB total). Images must be at most 24 megapixels; extension, detected MIME and
+image structure are validated server-side. Stored filenames use unpredictable identifiers.
+
+Files and `index.json` live in `storage/media/`, outside `public/` and are created with
+private permissions. `/media/<32-hex-id>` serves only indexed, integrity-checked files with
+fixed MIME, `nosniff` and a sandbox CSP; PDFs always download as attachments.
+The original filename is display metadata only and never controls disk paths.
+
+Deployment: set `upload_max_filesize=8M`, `post_max_size=10M`, and ensure `file_uploads=On`
+in PHP-FPM. The example Nginx config now allows a 10 MB request body and routes `/media/`
+through `index.php`; do **not** configure an alias to `storage/media/`. The directory
+`storage/media/` must remain writable by the PHP worker and outside the web root.
+The library uses PHP's `fileinfo` and `getimagesizefromstring` extensions.
+It does not embed media into content blocks (planned for 1.3.5).
+Back up `storage/media/` alongside `storage/site.json`; exports containing site.json alone
+do not include media assets. Existing site schema remains 14.
+
+Tests: `php tests/core_134.php`, `bash tests/media_library_http.sh`.
+
+
+### 1.3.5 — Media Content Integration
+
+The visual editor (`/admin/editor`) now supports real media blocks: **Image**
+(`media_id`, `alt`, `caption`, `size`: small/medium/full) and **PDF file**
+(`media_id`, `label`). The editor loads selectable assets from `/admin/media` and
+shows safe inline previews. Images render as lazy-loaded, responsive `<img>`
+elements and PDF files as download links. Media IDs resolve to the existing
+private, checksum-verified `/media/<id>` delivery route; arbitrary external
+file URLs, SVG, HTML and executable uploads remain unsupported. Text-only
+pages and the JSON schema (14) are unchanged. Alt text may be empty only for
+intentionally decorative images; editors should provide meaningful alt text
+for informative media. The public HTML escaper is also applied to captions
+and document link labels.
+
+An editor save and its media-reference validation happen within the same media
+file lock used for media deletion. The Media Library displays the pages using
+each file and forbids deleting an item referenced by any current page,
+including unpublished drafts. Historic page restoration rechecks referenced
+media and rejects snapshots with missing assets. PDF is a download, not an
+inline embedded PDF viewer. Back up `storage/media/` together with site JSON
+and `storage/ai/page-history/`.
+
+Tests: `php tests/core_135.php`, `bash tests/media_content_http.sh`,
+`python tests/browser_135.py`.
+
+
+### 1.3.6 — SEO Control Center
+
+Рабочий серверный раздел **`/admin/seo`** (доступен только вошедшему
+администратору) управляет реальной SEO-разметкой и поведением публичных
+маршрутов. AI SEO Assistant `/admin/ai/seo` остаётся самостоятельным аудитом
+и генератором предложений; для ручного SEO не нужны OpenAI и API-ключи.
+
+- Для сайта: разрешение/запрет индексации, добавление названия сайта к
+  `<title>`, общее изображение Open Graph из медиатеки. При общем запрете
+  индексации публичный HTML и HTTP-заголовок `X-Robots-Tag` передают `noindex`,
+  `robots.txt` содержит `Disallow: /`, а `sitemap.xml` не публикует URL.
+- Для каждой страницы: `index/noindex`, `follow/nofollow`, включение в sitemap,
+  относительный canonical на опубликованную внутреннюю страницу, собственные
+  Open Graph title/description/image, частота обновления и приоритет sitemap.
+  Исключены непубликуемые, неиндексируемые страницы и страницы с canonical на
+  другой адрес; опции sitemap не обещают фактическую частоту обхода поисковиками.
+- Публичный шаблон выводит canonical, meta robots, Open Graph, Twitter Card,
+  JSON-LD (`WebPage`/`WebSite`). Значения экранируются; JSON-LD кодируется
+  с `JSON_HEX_TAG` и аналогичными флагами против внедрения HTML.
+- SEO-изображения могут ссылаться **только** на действующие изображения
+  медиатеки. Проверка изображения и сохранение выполняются под общим lock
+  медиатеки. Удаление используемого SEO-изображения запрещено (включая
+  изображение сайта по умолчанию). Использование отображается в медиатеке.
+- Изменения страниц и настроек сайта требуют CSRF и актуальной SHA-256-ревизии,
+  чтобы устаревшая форма не перезаписала более свежую настройку. Обычный
+  текстовый, визуальный и AI-редакторы сохраняют SEO-настройки страниц;
+  история изменений хранит их для восстановления.
+- **JSON schema остаётся 14**. Новые поля `seo` типизированы и необязательны
+  для существующих установок; старые страницы и site.json не изменяются до
+  явного сохранения настроек. Принудительная миграция для 1.3.6 не нужна.
+
+Обновление 1.3.5 → 1.3.6: сделайте копию `storage/site.json` и
+`storage/media/`, остановите PHP-FPM, распакуйте патч **поверх** текущего
+проекта с сохранением каталогов, запустите тесты и `doctor`, затем верните
+веб-приложение в работу. `storage/` не входит в патч и не удаляется.
+
+```bash
+php -l public/index.php
+php tests/core_136.php
+bash tests/seo_control_http.sh
+python tests/browser_136.py
+php tests/core_135.php
+bash tests/media_content_http.sh
+php bin/cajeer doctor
+```
+
+SEO-интерфейс `/admin/seo` доступен через боковое меню, страницы и Dashboard.
+SEO-настройки управляют техническими подсказками для индексаторов и
+социальных сетей, но не гарантируют позиции в поисковой выдаче,
+индексацию или отображение расширенных сниппетов.
+
+
+### 1.3.7 — Developer Tools (диагностика, шаблоны, отладка)
+
+**Обновление с 1.3.6:** остановите PHP-FPM, сохраните полную резервную копию проекта и `storage/`, распакуйте патч с сохранением путей, запустите `php bin/cajeer doctor` и `php bin/cajeer developer check`, затем верните PHP-FPM в работу. Схема состояния сайта остаётся **14**, миграция не требуется. Новые файлы `core/Developer/*` обязательны для маршрута `/admin/developer`. Восстановление шаблона из истории доступно в том же разделе.
+
+В `/admin/developer` доступны:
+
+- **Диагностика:** проверка реальной версии PHP и расширений, целостности JSON, прав хранилища, состояния обслуживания, свободного места, компиляции всех `.cjr` и действительного рендеринга главной. Коды статусов `pass/warn/fail` с инструкциями. Безопасный JSON-отчёт доступен только после авторизации (также `php bin/cajeer developer check --json`). Локальный отчёт не подтверждает доступность внешних провайдеров.
+- **Шаблоны:** чтение `.cjr`, проверка синтаксиса с компиляцией без выполнения исходника, in-memory предпросмотр выбранной опубликованной страницы **без сохранения изменений**, редактирование с проверкой SHA-256 ревизии, атомарной записью и закрытой историей последних 20 версий. До каждой фактической замены создаётся снапшот; восстановление также сохраняет текущее состояние.
+- **Отладка:** приватный ограниченный по размеру журнал событий `storage/app/developer/events.jsonl`, отображает коды событий, UTC, уровень и случайные ID. Исключения, заголовки запросов, ключи, IP, URL, содержимое шаблонов и персональные данные в журнал не записываются. Это не замена системного error log.
+
+По умолчанию админ-панель **не может изменять шаблоны**. Для обслуживания временно установите `CAJEER_DEVELOPER_TEMPLATE_WRITE=1` в **окружении PHP-FPM**, выдайте его пользователю право записи в `templates/`, а после правок **удалите переменную и отзовите запись**. Доступ к `/admin/developer` защищён существующей авторизацией, CSRF, HTTPS/Host-проверкой. Адрес предпросмотра `/admin/developer/preview` отвечает только на авторизованные POST-запросы с CSRF, отключает скрипты через CSP и запрещает индексацию; preview и проверки ничего не публикуют.
+
+**Ограничения:** шаблоны — исполняемый доверенный слой оформления. Доступ на изменение следует выдавать только владельцу в окно обслуживания; ошибочный HTML может изменить внешний вид и функциональность сайта. Новые шаблоны вручную добавляются в `templates/` через процесс деплоя; веб-инструмент редактирует только существующие `.cjr`. Внешние HTTP-запросы и произвольные команды из админки не выполняются. Диагностика не собирает сырые PHP-логи, не выводит пути файловой системы и секреты. Для полноценной production-приёмки дополнительно проверьте бэкап, права и откройте реальные страницы через HTTPS.

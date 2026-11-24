@@ -1,46 +1,59 @@
-# 1.5.0 — Production Stable: deployment acceptance
+# Production Stable — базовая приёмка CMS
 
-The version identifies the stable release line. A particular installation is accepted only after its own live checks and operator review. Schema 14 and the existing CMS features remain frozen. The ZIP patch from 1.4.9 is a manual source overlay, not an official signed update. Do not confuse a disposable test key or fixture evidence with production acceptance.
+Механизм введён в 1.5.0, применяется к актуальному runtime; для 1.6.0 дополнительно обязателен [GA gate](GITHUB_AUTOMATIC_UPDATES_GA.md). CMS-only sign-off не подтверждает автоматические обновления GA.
 
-## Official release
+## Подписанные артефакты
 
-Build the official 1.5.0 artifacts from exact tags **v1.4.8 → v1.5.0** using the protected workflow in RELEASE.md. This is the last stable base, so the automatic updater can skip 1.4.9 (prerelease). The 1.4.9 operator may either use a separately signed exact 1.4.9 → 1.5.0 build from the same target sources or the supplied manual source patch after independent verification. Never install the 1.4.8 package on 1.4.9. The official workflow refuses a different base for 1.5.0. Obtain the five artifacts from the authorized publisher and independently provision its public RSA key. Keep the artifacts and key outside the project, in a trusted operator-owned directory; don't allow the web worker or untrusted processes to modify them. Do not use a test signing key for publication.
+Исторический официальный переход 1.5.0 использует v1.4.8 как последнюю Stable-базу; для 1.4.9 требуется отдельно подписанный exact-base переход или проверенный ручной patch. Для 1.6.0 см. [RELEASE](RELEASE.md). Храните весь комплект и независимо закреплённый публичный ключ вне проекта, недоступными для изменения web worker. Не используйте временный тестовый ключ для публикации.
 
-`release-report.json` now includes SHA-256 for every shipped runtime file (VERSION, bootstrap, router, CLI, core, public, templates). The signed checksum list binds the report, full ZIP and incremental package. The gate verifies all three hashes, the RSA signature, signed package and exact local runtime tree. Local custom templates or extra runtime files intentionally fail: incorporate them in a separately reviewed and signed build or use the unmodified official tree. A proxy's version header is a version check, not remote attestation of the full executable tree. Run the gate on the installed server itself using the same data and environment as FPM.
+`release-report.json` содержит SHA-256 каждого runtime-файла (VERSION, bootstrap, router, CLI, core, public, templates). Gate сверяет подпись, артефакты, пакет и фактическое локальное дерево; дополнительные или локально изменённые runtime-файлы вызывают отказ. Отдельно согласуйте и подпишите собственную сборку либо используйте неизменённый runtime. HTTP version header не является удалённой аттестацией всего кода. Запускайте проверки на установленном сервере с актуальными данными и окружением FPM.
 
-## Automated gates
+## Автоматические проверки
 
-Follow INSTALL.md, UPGRADE.md and BACKUP_RECOVERY.md. Stop writers for update/rollback; take and verify an independent off-host backup. Restore it on an isolated staging host and exercise the exact signed upgrade and rollback. Verify full CI, including PHP 8.4/8.5, real browser navigation (Chromium/Firefox/WebKit), and web-server checks. Restart FPM and verify the production deployment; create a new CMS backup. Keep monitoring enabled and observe real traffic, latency and errors against your agreed thresholds. The following checks verify the actual locally installed code, runtime compatibility, security, recovery drill, fresh verified backup, pending update state, HTTPS readiness, and telemetry. At least 20 retained measurements in the past hour, latest within five minutes, no invalid records, and all configured health thresholds are required for the live gate. Best-effort telemetry is not an exact traffic counter and these checks are not a substitute for external monitoring/load testing.
+Следуйте [INSTALL](INSTALL.md), [UPGRADE](UPGRADE.md), [BACKUP_RECOVERY](BACKUP_RECOVERY.md). Репетируйте точные переход и rollback на off-host копии в изоляции; проверьте CI (PHP 8.4/8.5), Chromium/Firefox/WebKit, web-server и провайдеров. После развёртывания создайте новый проверенный CMS backup. Для live gate требуется не менее 20 сохранённых измерений за час, последнее — не старше пяти минут, без некорректных записей и с соблюдением настроенных порогов. Телеметрия не заменяет внешний мониторинг и нагрузочные тесты.
 
-```sh
-export CAJEER_UPDATE_TRUSTED_KEY_FILE=/etc/cajeer/update-trusted.pem
-php bin/cajeer release production-check --artifacts=/srv/release/1.5.0 --json
+```bash
+export CAJEER_UPDATE_TRUST_POLICY_FILE=/etc/cajeer/update-trust.json
+php bin/cajeer release production-check --artifacts=/srv/releases/1.6.0 --json
 CAJEER_PRODUCTION_LIVE_CONFIRM=LIVE php bin/cajeer release production-check \
-  --artifacts=/srv/release/1.5.0 --live --json > /secure/review/live.json
+  --artifacts=/srv/releases/1.6.0 --live --json
 ```
 
-Exit codes: 1 = failed/refused (some failures are on stderr); 2 = automated gates passed, review still pending; 0 is reserved for an explicitly recorded operator sign-off. Local checks do not contact providers. For live checks explicitly add `--provider=NAME` for every configured API provider reported under `required_providers`. The underlying RC probe is reused; no network probes are implicitly enabled. Paid AI probes additionally require `--paid` and `CAJEER_AI_PAID_PROBE_CONFIRM=I_ACCEPT_API_CHARGES`; read-only Clarity calls may consume quota. Browser tracking without reporting credentials, GTM, actual OIDC login/logout, AI billing and actual analytics delivery/consent are mandatory manual review where applicable. Unconfigured providers must be explicitly marked not applicable with a reason in the operator evidence, not called successful. Do not run this gate on a public host with disposable TLS trust or without authorization.
+Используйте подходящую к версии trust policy. Exit 1 — ошибка/отказ, 2 — автоматические проверки прошли, ручная приёмка ожидается, 0 — записан sign-off. Локальные проверки не обращаются к провайдерам. Для live укажите `--provider=NAME` каждого настроенного провайдера из `required_providers`; платный AI требует `--paid` и `CAJEER_AI_PAID_PROBE_CONFIRM=I_ACCEPT_API_CHARGES`. Clarity может расходовать квоту. Реальные browser tracking/consent, GTM, OIDC login/logout, доставка событий и billing проверяются отдельно, если применимы. Неподключённые провайдеры отметьте N/A с причиной, а не passed. Не используйте искусственный TLS trust на публичном сервере.
 
-## Documented human sign-off
+## Доказательства оператора
 
-Create a private review directory outside public/ and fill eight real evidence files: `ci.txt`, `browser_e2e.txt`, `staging_fpm_tls.txt`, `providers_and_consent.txt`, `offhost_restore.txt`, `upgrade_rollback.txt`, `load_soak.txt`, `production_observation.txt`. Include exact tag/commit and artifact digest, actual results, dates, test environment and links to retained evidence. Resolve all blockers before approval; include justified N/A only for disabled integrations. Redact tokens and personal information. The evidence format is operator text, not a claim that arbitrary text has been independently validated.
+Создайте приватный каталог вне `public/` и заполните реальными результатами восемь файлов:
 
-In the same directory create `approval.json`: keys `reviewer` (human reviewer identifier), `decision` (`approve`), `version` (`1.5.0`), `receipt_sha256`, `site_sha256` and `origin_sha256` copied from the fresh gate report (`artifact.receipt_sha256`, `site_sha256` and `origin_sha256`), and `evidence` (object mapping each of the eight basenames without `.txt` to the SHA-256 of its actual file). Use `sha256sum` to calculate each digest. Do not fabricate evidence. The operator must review the actual content before approving.
+| Файл | Содержание |
+| :--- | :--- |
+| `ci.txt` | CI, тег, commit, результат |
+| `browser_e2e.txt` | Фактическая навигация и формы |
+| `staging_fpm_tls.txt` | Реальный PHP-FPM и TLS |
+| `providers_and_consent.txt` | Подключённые провайдеры, согласие, обоснованные N/A |
+| `offhost_restore.txt` | Восстановление независимой копии |
+| `upgrade_rollback.txt` | Проверенный exact-base переход и откат |
+| `load_soak.txt` | Нагрузка, продолжительность, пороги и измерения |
+| `production_observation.txt` | Наблюдение после развёртывания |
 
-```sh
+В каждом файле — среда, дата, тег/commit, digest артефакта, фактические результаты и ссылки на сохранённые доказательства. Устраните блокирующие ошибки до approval, удалите токены и персональные данные. Не фабрикуйте evidence.
+
+В `approval.json` заполните `reviewer` (идентификатор человека), `decision` (`approve`), `version` (точная установленная версия), `receipt_sha256`, `site_sha256`, `origin_sha256` из свежего live-отчёта (`artifact.receipt_sha256`, `site_sha256`, `origin_sha256`), `evidence` (объект: имя каждого файла без `.txt` → его реальный SHA-256). Для GA добавьте ещё три файла и два digest согласно GA runbook. Вычисляйте хеши через `sha256sum`.
+
+```bash
 CAJEER_PRODUCTION_LIVE_CONFIRM=LIVE \
 CAJEER_PRODUCTION_SIGNOFF_CONFIRM=I_REVIEWED_PRODUCTION_EVIDENCE \
-php bin/cajeer release sign-off --artifacts=/srv/release/1.5.0 \
+php bin/cajeer release sign-off --artifacts=/srv/releases/1.6.0 \
   --live --evidence=/secure/review --json
 ```
 
-Include the same provider flags as above. The command reruns live checks and verifies the approval and evidence hashes. It rejects changed runtime/site state, incomplete evidence and missing consent. Pause content edits during review; if the site changes, obtain a new report and review the new state before signing off. The final write briefly obtains exclusive operations and site locks; if busy, retry. It atomically creates a private, non-overwriting record in `storage/app/release-signoff/<id>.json`, with exact runtime and artifact hashes, review identity, evidence digests, gate checks, monitoring and UTC timestamps. Status `operator_attested` records the human decision, not verified identity or independent certification of evidence text. The record is not a cryptographically signed reviewer statement and the storage owner could modify it: export it and the underlying evidence to an independently protected audit store, optionally sign there. No record changes the result of a subsequent gate or approves a different deployment. Repeat review after changes. Keep external uptime/FPM metrics and alerts active; see OPERATIONS.md.
+Для GA используйте `ga-sign-off` и его расширенный evidence. Передайте те же provider flags. Sign-off повторяет live gate и проверяет хеши; при изменении site/runtime или устаревшем отчёте требуется новый review. Приостановите редактирование контента на время приёмки. Финальная запись под эксклюзивными locks создаётся атомарно и без перезаписи в `storage/app/release-signoff/<id>.json`. `operator_attested` — свидетельство оператора, не криптографически подписанное заключение и не независимая проверка личности/текста. Экспортируйте evidence и receipt в защищённый аудит-архив. При изменении развёртывания повторите приёмку.
 
-## Local reproduction
+## Изолированная проверка базового механизма
 
-```sh
+```bash
 python3 tests/production_stable_150.py
 python3 tests/production_stable_150.py --base /path/to/clean/previous/source
 ```
 
-The test builds real RSA-signed disposable artifacts and exercises actual loopback HTTPS via Nginx, page/media/backup/restore, production gate and test-only sign-off, refusal of missing consent, altered evidence/artifacts, runtime drift and disabled monitoring. It is not production FPM, actual provider credentials, browser matrix, long soak or human sign-off. Never retain its synthetic approval as real evidence.
+Тест использует временные RSA-ключи, локальный HTTPS/Nginx, содержимое, backup/restore, gate и тестовый sign-off; проверяет отказ при подмене данных, runtime и отсутствии согласия. Не подтверждает фактический production FPM, провайдеров, долгую нагрузку или человеческую приёмку. Не сохраняйте тестовый approval как реальный.

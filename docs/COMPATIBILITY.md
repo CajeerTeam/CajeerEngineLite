@@ -1,49 +1,47 @@
-# CajeerEngine Lite 1.4.8 — Compatibility Assurance
+# Совместимость и миграция
 
-## Supported configurations
+| Компонент | Поддерживаемая конфигурация |
+| :--- | :--- |
+| PHP | 8.4.1+; json, hash, filter, session, openssl, fileinfo, fsync; 8.3 и ниже не поддерживаются |
+| PHP 8.5 | Кандидат CI-матрицы; фактический прогон обязателен |
+| Диск | Одна локальная POSIX FS, блокировки, атомарный rename, hardlinks и fsync; не NFS/SMB/multi-node |
+| Web | Nginx или Apache 2.4 + PHP-FPM, `public/`; отдельный доверенный reverse proxy |
+| Браузеры | Chromium, Firefox, WebKit — реальные HTTP navigation tests, не автоматическая сертификация |
+| Данные | Чтение схем 1–14; целевая схема 14 |
 
-- **PHP:** 8.4.1+ with `json`, `hash`, `filter`, `session`, `openssl` and durable `fsync` support. The local suite validates PHP 8.4; PHP 8.5 is included in CI as an additional candidate and should not be considered certified until its pipeline passes. PHP 8.3 and below are unsupported.
-- **Persistence:** one writable local POSIX-style filesystem (file locks, atomic rename, hardlinks, `fsync`); no NFS, SMB, multi-node or distributed locks. Site schemas 1–14 can be read; schema 14 is written after migration.
-- **Web servers:** Nginx + PHP-FPM (`deploy/nginx.conf`), Apache 2.4 + PHP-FPM (`deploy/apache-vhost.conf`), or an isolated reverse proxy via `deploy/nginx-reverse-proxy.conf`. In every case the real document root must be `public/`.
-- **Browsers:** Chromium, Firefox and WebKit have **real HTTP navigation** integration checks in `tests/browser_146.py`. Run all three in CI. Existing Chromium `set_content` screenshot/layout tests remain independent.
+## Проверка среды и предварительный просмотр миграции
 
-## Read-only environment and data checks
-
-```sh
+```bash
 CAJEER_COMPAT_DOCUMENT_ROOT=/var/www/cajeer-lite/public php bin/cajeer compatibility check --json
 php bin/cajeer compatibility migration preview
 ```
 
-`check` validates the running PHP extensions, the installed version, filesystem separation, configured document root, trusted-proxy IP list and JSON data. The document-root check is explicitly marked manual if the environment does not provide it. `preview` loads the current site file, validates it, computes the complete 1–13 → 14 migration **in memory**, and reports source/target hashes and page count without touching site data or creating a backup.
+`check` проверяет расширения, версию, разделение путей, document root, trusted peers и JSON. Без переменной document root проверяется вручную. `preview` вычисляет миграцию 1–13 → 14 в памяти, возвращает исходный и целевой хеш и число страниц, не записывает данные и не создаёт backup.
 
-## Applying a legacy migration
+## Применение legacy-миграции
 
-1. Make a verified independent backup of **code, templates, storage and server secrets** and stop PHP-FPM, cron and update workers.
-2. Run `php bin/cajeer compatibility migration preview`; review the schema and checksum.
-3. Run `CAJEER_COMPATIBILITY_CONFIRM=MIGRATE php bin/cajeer compatibility migration apply`.
-4. The existing `SiteRepository::migrate` acquires the exclusive writer lock, creates a checksummed `migration` snapshot in private `storage/backups`, and atomically commits schema 14. It preserves page content, credentials and origin.
-5. Run `php bin/cajeer compatibility check --json`, `php bin/cajeer doctor` and your HTTP/browser acceptance. Keep the independent backup available for recovery.
+1. Создайте проверенную независимую копию кода, шаблонов, storage и секретов, остановите FPM, cron и workers.
+2. Выполните preview и проверьте схему/хеш.
+3. Выполните `CAJEER_COMPATIBILITY_CONFIRM=MIGRATE php bin/cajeer compatibility migration apply`.
+4. `SiteRepository::migrate` удерживает эксклюзивную блокировку, создаёт checksummed migration snapshot в приватном `storage/backups` и атомарно записывает схему 14; сохраняет контент, credentials и origin.
+5. Повторите `compatibility check --json`, `doctor` и HTTP/browser acceptance; сохраните независимую копию.
 
-Do not enable unattended updates on old schemas. The **signed Update Engine remains code-only** and requires schema 14; it does not run untrusted migration scripts from release packages. For upgrading from a pre-1.4.4 release, use the documented manual code upgrade and this explicit migration path before enabling automatic updates. Do not claim arbitrary direct version jumps are tested: base-file hashes must match the signed release's exact `from` version.
+Signed updater работает только с кодом и схемой 14; он не исполняет произвольные migration scripts. Для версий до 1.4.4 используйте проверенный ручной переход. Exact-base и хеши не позволяют произвольные скачки версии.
 
-## Reverse proxy trust
+## Доверенный reverse proxy
 
-By default, forwarded headers are ignored and `AdminRequestGuard` requires a canonical `Host` and an authenticated `HTTPS=on` signal from the web server. For TLS offloading, set `CAJEER_TRUSTED_PROXY_IPS` to at most 16 **exact** IPv4 or IPv6 peer addresses (not CIDR ranges), e.g. `127.0.0.1`. The PHP request must be received directly from one of those peers. If both `X-Forwarded-Host` and `X-Forwarded-Proto` arrive from a trusted peer, they must identify the exact configured canonical origin. Malformed, multiple, contradictory or wrong-origin values are rejected. Client-supplied `X-Forwarded-For` is never used for authentication or rate limiting.
+По умолчанию forwarded headers игнорируются; AdminRequestGuard требует canonical Host и серверный `HTTPS=on`. При TLS offload задайте `CAJEER_TRUSTED_PROXY_IPS`: до 16 точных IPv4/IPv6, не CIDR. PHP должен получать запрос непосредственно от доверенного peer; `X-Forwarded-Host` и `X-Forwarded-Proto` должны соответствовать canonical origin. Некорректные и противоречивые значения отвергаются; клиентский `X-Forwarded-For` не применяется для авторизации или rate limit.
 
-The front proxy **must overwrite, not forward or append, client-provided** `Host`, `X-Forwarded-Host` and `X-Forwarded-Proto`. Block direct public access to the origin. The supplied origin config binds loopback; adjust only after restricting source IPs with firewall rules. An env list alone is NOT sufficient to secure a publicly reachable origin. Avoid passing `HTTPS=on` unconditionally from an HTTP-only backend: the trusted peer check must establish the actual external HTTPS connection first.
+Front proxy обязан перезаписывать клиентские Host/forwarded host/proto, а не добавлять их. Закройте прямой публичный доступ к origin firewall; примеры конфигурации используют loopback. Не устанавливайте безусловно `HTTPS=on` для HTTP-only backend.
 
-## Integration testing
+## Проверки на изолированном стенде
 
-```sh
+```bash
 php tests/core_146.php
 bash tests/compatibility_http_146.sh
-python tests/browser_146.py --browser chromium
-python tests/browser_146.py --browser firefox
-python tests/browser_146.py --browser webkit
+python3 tests/browser_146.py --browser chromium
+python3 tests/browser_146.py --browser firefox
+python3 tests/browser_146.py --browser webkit
 ```
 
-Run the native Nginx/Apache configuration lint with deployed certificate/socket paths, then test real TLS and real reverse proxy behavior in staging. The sample config files are not automatically installed and must be adapted to your environment. Unverified matrix entries must not be reported as production certified.
-
-## Release artifact compatibility
-
-The 1.4.8 builder rehearses the exact signed transition using the base updater and rejects omitted runtime paths. See RELEASE.md and UPGRADE.md. Python 3.11+ and OpenSSL CLI are build tools; no Python runtime is needed to run the CMS. A passing release rehearsal is not proof of all PHP/browser/FPM matrix combinations.
+Проверьте реальные конфиги Nginx/Apache, сертификаты, сокеты, TLS и proxy. Конфигурации `deploy/` являются примерами, не автоматической установкой. Python 3.11+ и OpenSSL CLI нужны сборке; CMS не требует Python, но GA supervisor использует его. Прогон exact-tag build не подтверждает все комбинации PHP/browser/FPM.
