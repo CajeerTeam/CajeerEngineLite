@@ -19,8 +19,11 @@ final class TarPackage
             $total=0;
             foreach ($files as $name=>$file) {
                 self::name($name);
-                if (is_link($file) || !is_file($file)) throw new \RuntimeException('Unsafe archive source');
-                $size=filesize($file);
+                clearstatcache(true,$file);
+                $before=@lstat($file);
+                if (!is_array($before) || ($before['mode']&0170000)!==0100000 ||
+                    $before['nlink']!==1) throw new \RuntimeException('Unsafe archive source');
+                $size=$before['size'];
                 if (!is_int($size) || $size<0 || $size>self::limit($name) || ($total += $size+1024)>self::MAX_SIZE) {
                     throw new \RuntimeException('Archive limit exceeded');
                 }
@@ -28,8 +31,22 @@ final class TarPackage
                 $input=@fopen($file,'rb');
                 if (!is_resource($input)) throw new \RuntimeException('Cannot open archive member');
                 try {
+                    $opened=fstat($input);
+                    clearstatcache(true,$file); $current=@lstat($file);
+                    if (!is_array($opened) || !is_array($current) ||
+                        $opened['ino']!==$before['ino'] || $opened['dev']!==$before['dev'] ||
+                        $current['ino']!==$before['ino'] || $current['dev']!==$before['dev'] ||
+                        $opened['size']!==$size || $current['size']!==$size ||
+                        $opened['nlink']!==1 || $current['nlink']!==1) {
+                        throw new \RuntimeException('Archive source replaced during open');
+                    }
                     if (stream_copy_to_stream($input,$handle,$size)!==$size || fread($input,1)!=='') {
                         throw new \RuntimeException('Source modified during archive write');
+                    }
+                    $after=fstat($input);
+                    if (!is_array($after) || $after['size']!==$size ||
+                        $after['mtime']!==$opened['mtime'] || $after['ctime']!==$opened['ctime']) {
+                        throw new \RuntimeException('Archive source changed during read');
                     }
                 } finally { fclose($input); }
                 $padding=(512-$size%512)%512;
@@ -74,6 +91,15 @@ final class TarPackage
                 $checksum=self::octal(substr($header,148,8));
                 if ($checksum!==array_sum(array_map('ord',str_split(substr_replace($header,str_repeat(' ',8),148,8))))) {
                     throw new \RuntimeException('Invalid TAR checksum');
+                }
+                // No executable bits, elevated owners, sparse formats or
+                // noncanonical archive member privileges, even though members
+                // are staged as data and never extracted by path.
+                if (self::octal(substr($header,100,8)) !== 0600 ||
+                    self::octal(substr($header,108,8)) !== 0 ||
+                    self::octal(substr($header,116,8)) !== 0 ||
+                    trim(substr($header,265,80),"\0") !== '') {
+                    throw new \RuntimeException('Unsafe TAR member permissions or owner');
                 }
                 $name=rtrim(substr($header,0,100),"\0"); self::name($name);
                 if (isset($actual[$name])) throw new \RuntimeException('Duplicate TAR member');

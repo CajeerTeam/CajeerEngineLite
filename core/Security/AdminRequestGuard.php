@@ -49,8 +49,20 @@ final class AdminRequestGuard
         // This endpoint uses a cryptographically validated OIDC logout token rather
         // than a browser cookie, and can legitimately be called by another origin.
         if ($path === '/admin/oidc/backchannel-logout') return;
-        if (($server['HTTP_SEC_FETCH_SITE'] ?? null) === 'cross-site') {
-            throw new RequestRejected(403, 'Cross-site administrative request denied');
+        // A sibling subdomain is not a trusted admin origin. Reject it even
+        // when browsers omit Origin/Referer (both headers are advisory).
+        $fetchSite = $server['HTTP_SEC_FETCH_SITE'] ?? null;
+        if ($fetchSite !== null && (!is_string($fetchSite) ||
+            !in_array($fetchSite, ['same-origin', 'none'], true))) {
+            throw new RequestRejected(403, 'Cross-origin administrative request denied');
+        }
+        // The application accepts HTML forms, not arbitrary content types.
+        // This also catches accidental broken proxy/PHP request parsing.
+        $contentType = $server['CONTENT_TYPE'] ?? $server['HTTP_CONTENT_TYPE'] ?? null;
+        if ($contentType !== null && (!is_string($contentType) ||
+            strlen($contentType) > 256 ||
+            preg_match('~\A(?:application/x-www-form-urlencoded|multipart/form-data)(?:\s*;[\x20-\x7e]*)?\z~iD', $contentType) !== 1)) {
+            throw new RequestRejected(415, 'Unsupported administrative content type');
         }
         foreach (['HTTP_ORIGIN', 'HTTP_REFERER'] as $key) {
             if (!array_key_exists($key, $server)) continue;

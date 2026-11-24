@@ -53,19 +53,39 @@ final class TemplateCompiler
     private function compileForeach(string $expression): string
     {
         if (preg_match('/^(.+)\s+as\s+(\$[a-zA-Z_][a-zA-Z0-9_]*)$/s', $expression, $match) === 1) {
+            $this->assertSafeLoopVariables([$match[2]]);
             return '<?php foreach ($__engine->iterable(' . var_export(trim($match[1]), true) . ', get_defined_vars()) as ' . $match[2] . '): ?>';
         }
 
         if (preg_match('/^(.+)\s+as\s+(\$[a-zA-Z_][a-zA-Z0-9_]*)\s*=>\s*(\$[a-zA-Z_][a-zA-Z0-9_]*)$/s', $expression, $match) === 1) {
+            $this->assertSafeLoopVariables([$match[2], $match[3]]);
+            if ($match[2] === $match[3]) throw new \RuntimeException('Duplicate loop variables');
             return '<?php foreach ($__engine->iterable(' . var_export(trim($match[1]), true) . ', get_defined_vars()) as ' . $match[2] . ' => ' . $match[3] . '): ?>';
         }
 
         throw new \RuntimeException('Некорректная директива @foreach: ' . $expression);
     }
 
+    /** Avoid corruption of generated PHP engine control variables. */
+    private function assertSafeLoopVariables(array $names): void
+    {
+        foreach ($names as $name) {
+            if (str_starts_with($name, '$__') ||
+                in_array($name, ['$context', '$compiledPhp', '$sections', '$GLOBALS', '$_SERVER', '$_ENV', '$_GET', '$_POST', '$_FILES', '$_COOKIE', '$_REQUEST', '$_SESSION'], true)) {
+                throw new \RuntimeException('Reserved template loop variable');
+            }
+        }
+    }
+
     private function assertSafeSource(string $source): void
     {
-        $forbidden = ['<?php', '<?=', '<? ', '<?', 'eval(', 'shell_exec', 'proc_open', 'passthru', 'system(', 'exec(', 'assert(', 'include', 'require', '`'];
+        // PHP open tags are the actual code-execution boundary; the words
+        // "include" and "require" are safe as plain text, and @include is a
+        // supported template directive compiled by this engine.
+        if (str_contains($source, "\0") || !preg_match('//u', $source)) {
+            throw new \RuntimeException('Template must be UTF-8 without NUL bytes');
+        }
+        $forbidden = ['<?', '`'];
         foreach ($forbidden as $needle) {
             if (stripos($source, $needle) !== false) {
                 throw new \RuntimeException('Шаблон содержит запрещённую PHP-конструкцию: ' . $needle);

@@ -1,5 +1,13 @@
-# CajeerEngine Lite Edition 1.4.2
+# CajeerEngine Lite Edition 1.4.3
 
+
+### 1.4.3 — Security Hardening (session, CSRF, OIDC, CSP, TAR and dependency inventory)
+
+This release rejects same-site cross-subdomain administrative POSTs, unsupported POST content types, unsafe OIDC RSA exponents, hardlinked/symlinked template sources and privileged TAR headers. Compiled templates now allow documented `@include(...)` directives while rejecting reserved loop variable names. Template evaluation reads only a verified single-link inode. Admin requests use a private file session handler and explicitly fail closed if session startup fails. Admin CSP disables inline script attributes and workers.
+
+Run `php bin/cajeer security audit --json` for an offline scan of web-executable files, public-directory symlinks and installed dependency manifests and lockfiles. This command does **not** claim to check current CVEs; for third-party dependency vulnerabilities, a trusted online advisory scanner is still required. See `SECURITY_HARDENING.md`.
+
+**Upgrade from 1.4.2:** stop PHP-FPM and background jobs, make a verified independent backup of the code, templates, `storage/` and secrets, then overlay the patch keeping paths. Run `php tests/core_143.php`, `bash tests/security_hardening_http_143.sh`, `php bin/cajeer security audit` and your full CI test suite before restarting. JSON schema stays at 14. Do not import third-party TAR archives or use non-file PHP session handlers without a dedicated compatibility review.
 
 ### 1.4.2 — Storage & Recovery Hardening
 

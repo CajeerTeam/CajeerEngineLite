@@ -43,7 +43,11 @@ final class TemplateManager
         }
         $path=OperationFiles::path($this->root,'templates/'.$name);
         (new TemplateSandbox($this->root.'/templates'))->assertTemplatePath($path);
-        if (!is_file($path) || is_link($path)) throw new \RuntimeException('Template is not a regular file');
+        clearstatcache(true,$path);
+        $entry=@lstat($path);
+        if (!is_array($entry) || ($entry['mode']&0170000)!==0100000 || $entry['nlink']!==1) {
+            throw new \RuntimeException('Unsafe template file or hardlink');
+        }
         return $path;
     }
 
@@ -51,10 +55,38 @@ final class TemplateManager
     public function read(string $name): array
     {
         $path=$this->path($name);
-        if (filesize($path)>self::MAX_SOURCE) throw new \RuntimeException('Template exceeds 128 KiB');
-        $source=file_get_contents($path);
-        if (!is_string($source) || strlen($source)>self::MAX_SOURCE) throw new \RuntimeException('Cannot read template');
+        $source=self::boundedRegularRead($path,self::MAX_SOURCE,false);
         return ['name'=>$name,'source'=>$source,'revision'=>hash('sha256',$source),'size'=>strlen($source)];
+    }
+
+    /** File descriptor is pinned to a regular, single-link inode. */
+    private static function boundedRegularRead(string $path,int $max,bool $private): string
+    {
+        clearstatcache(true,$path);
+        $before=@lstat($path);
+        if (!is_array($before) || ($before['mode']&0170000)!==0100000 ||
+            $before['nlink']!==1 || $before['size']>$max ||
+            ($private && ($before['mode']&0077)!==0)) {
+            throw new \RuntimeException('Unsafe template source file');
+        }
+        $handle=@fopen($path,'rb');
+        if (!is_resource($handle)) throw new \RuntimeException('Cannot read template file');
+        try {
+            $opened=fstat($handle); clearstatcache(true,$path); $current=@lstat($path);
+            if (!is_array($opened) || !is_array($current) ||
+                $opened['dev']!==$before['dev'] || $opened['ino']!==$before['ino'] ||
+                $current['dev']!==$before['dev'] || $current['ino']!==$before['ino'] ||
+                $opened['size']!==$before['size'] || $current['size']!==$before['size'] ||
+                ($opened['mode']&0170000)!==0100000 || $opened['nlink']!==1 ||
+                ($private && ($opened['mode']&0077)!==0)) {
+                throw new \RuntimeException('Template replaced during open');
+            }
+            $source=stream_get_contents($handle,$max+1);
+            if (!is_string($source) || strlen($source)!==$before['size']) {
+                throw new \RuntimeException('Incomplete template read');
+            }
+            return $source;
+        } finally { fclose($handle); }
     }
 
     public function validateSource(string $source): void
@@ -140,8 +172,7 @@ final class TemplateManager
             if (is_link($file) || !is_file($file) || !in_array($backup,$this->history($name),true)) {
                 throw new \InvalidArgumentException('Backup unavailable');
             }
-            $source=file_get_contents($file);
-            if (!is_string($source) || strlen($source)>self::MAX_SOURCE) throw new \RuntimeException('Invalid template history data');
+            $source=self::boundedRegularRead($file,self::MAX_SOURCE,true);
             $this->putLocked($name,$source,$revision);
         } finally { flock($lock,LOCK_UN); fclose($lock); }
     }

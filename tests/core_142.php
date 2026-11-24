@@ -22,7 +22,7 @@ function clean142(string $dir):void {
 function png142(): string {
     return base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUT9rBwMDAxMDAwMDAAAAOPQE9xgjZwQAAAABJRU5ErkJggg==',true);
 }
-ok142(Lite::VERSION==='1.4.2' && SiteState::SCHEMA===14,'version, storage schema');
+ok142(version_compare(Lite::VERSION,'1.4.2','>=') && SiteState::SCHEMA===14,'version, storage schema');
 $source=sys_get_temp_dir().'/cms142-source-'.bin2hex(random_bytes(6));
 $target=sys_get_temp_dir().'/cms142-target-'.bin2hex(random_bytes(6));
 mkdir($source,0700); mkdir($target,0700);

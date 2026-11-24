@@ -3,6 +3,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/bootstrap.php';
 use CajeerEngine\Lite;
+use CajeerEngine\Security\SecurityAudit;
 use CajeerEngine\AI\{OpenAIClient,UsageLimiter,SupportDiagnostics,Acceptance,ProductionAIAcceptance};
 use CajeerEngine\Auth\{RecoveryService,AuthAcceptance,StableAcceptance};
 use CajeerEngine\Analytics\{ReportService,ReportCache,HttpClient};
@@ -15,6 +16,22 @@ $app=new Lite(dirname(__DIR__));
 try {
     $cmd = $argv[1] ?? 'help';
     switch ($cmd) {
+        case 'security':
+            if (($argv[2]??'')!=='audit' || count($argv)>4 ||
+                (isset($argv[3]) && $argv[3]!=='--json')) {
+                throw new InvalidArgumentException('Usage: security audit [--json]');
+            }
+            $report=SecurityAudit::run($app->root);
+            if (($argv[3]??'')==='--json') {
+                echo json_encode($report,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n";
+            } else {
+                foreach ($report['checks'] as $check) {
+                    echo strtoupper($check['status']).' '.$check['id'].': '.$check['detail']."\n";
+                }
+                echo 'Dependency inventory: '.json_encode($report['dependency_inventory'],JSON_THROW_ON_ERROR)."\n";
+            }
+            if (!$report['ok']) exit(1);
+            break;
         case 'operations':
             $ops=new CmsOperations($app->root);
             $action=$argv[2]??'';
@@ -313,7 +330,7 @@ try {
             break;
         default:
             echo "CajeerEngine Lite ".Lite::VERSION." (CajeerEngine core ".Lite::ENGINE_BASE_VERSION.")\n".
-                 "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer migrate\n".
+                 "php bin/cajeer install [url] [name]\nphp bin/cajeer doctor\nphp bin/cajeer security audit [--json]\nphp bin/cajeer migrate\n".
                  "php bin/cajeer ai status | ai acceptance [--json] [--live] | ai release-check [--json] [--live] [--paid]\nphp bin/cajeer support check [--json]\n".
                  "php bin/cajeer module list|enable|disable [name]\n".
                  "php bin/cajeer backup create|list|verify|restore [filename]\n".

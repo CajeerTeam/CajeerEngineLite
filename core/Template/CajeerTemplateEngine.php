@@ -24,7 +24,7 @@ final class CajeerTemplateEngine
         $this->sandbox->assertTemplatePath($templatePath);
         $canonicalPath = realpath($templatePath);
         $source = is_string($canonicalPath) && array_key_exists($canonicalPath,$this->sourceOverrides)
-            ? $this->sourceOverrides[$canonicalPath] : file_get_contents($templatePath);
+            ? $this->sourceOverrides[$canonicalPath] : $this->sandbox->readSource($templatePath);
         if (!is_string($source)) {
             throw new \RuntimeException("Шаблон не найден: {$templatePath}");
         }

@@ -70,7 +70,7 @@ function form(string $action,string $html): string { return '<form method="post"
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin'); header('X-Frame-Options: DENY');
 header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
 header('Cross-Origin-Opener-Policy: same-origin');
-header("Content-Security-Policy: default-src 'self'; script-src '".(str_starts_with(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH) ?: '/', '/admin/editor')?'self':'none')."'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; frame-src 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src '".(str_starts_with(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH) ?: '/', '/admin/editor')?'self':'none')."'; script-src-attr 'none'; style-src 'self'; img-src 'self'; connect-src 'self'; worker-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; frame-src 'self'");
 header('Content-Type: text/html; charset=utf-8');
 try {
     $raw=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
@@ -171,11 +171,13 @@ try {
             shell('Выход SkiF4er ID','<p>Сеанс Lite завершён. Выход из SkiF4er ID запрошен.</p><p><a href="/admin">Вернуться ко входу</a></p>');
         }
         $secure=str_starts_with($d['settings']['url'],'https://') || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off');
-        ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
+        ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1'); ini_set('session.use_trans_sid','0');
+        if (session_module_name()!=='files') stop(503,'A private file-backed session handler is required');
         ini_set('session.gc_maxlifetime',(string)SessionRegistry::MAX_SECONDS);
         $sessions=new SessionRegistry($app->root);
         session_save_path($sessions->phpSessionDirectory());
-        session_name('CajeerLite'); session_set_cookie_params(['path'=>'/','httponly'=>true,'secure'=>$secure,'samesite'=>'Lax']); session_start();
+        session_name('CajeerLite'); session_set_cookie_params(['path'=>'/','domain'=>'','httponly'=>true,'secure'=>$secure,'samesite'=>'Lax']);
+        if (session_start()!==true) stop(503,'Administrative sessions unavailable');
         $_SESSION['csrf']??=bin2hex(random_bytes(32));
         $auth=isset($_SESSION['auth'],$_SESSION['seen']) && is_string($_SESSION['auth']) &&
             is_int($_SESSION['seen']) && hash_equals(hash('sha256',$d['password']),$_SESSION['auth']) &&

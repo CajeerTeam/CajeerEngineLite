@@ -170,6 +170,7 @@ final class OidcClient
         }
         if (($header['alg'] ?? null) !== 'RS256' || !is_string($header['kid'] ?? null) ||
             strlen($header['kid']) < 1 || strlen($header['kid']) > 128 ||
+            preg_match('/[^\x21-\x7e]/', $header['kid']) ||
             (isset($header['typ']) && !in_array($header['typ'], $logout ? ['JWT','application/jwt','logout+jwt'] : ['JWT','application/jwt'], true))) {
             throw new \RuntimeException('Untrusted ID token algorithm');
         }
@@ -409,6 +410,14 @@ final class OidcClient
         $details=openssl_pkey_get_details($key);
         if (!is_array($details) || ($details['type'] ?? null)!==OPENSSL_KEYTYPE_RSA ||
             ($details['bits'] ?? 0)<2048) throw new \RuntimeException('RSA signing key is too weak');
+        // A 2048-bit modulus with e=1 (or even/noncanonical exponent) does NOT
+        // constitute a trustworthy RSA verification key. OpenSSL may parse it.
+        $exponent = $details['rsa']['e'] ?? null;
+        if (!is_string($exponent) || strlen($exponent) > 4 ||
+            strlen($exponent) < 1 || (strlen($exponent)>1 && $exponent[0]==="\0") ||
+            ($value = hexdec(bin2hex($exponent))) < 3 || ((int)$value & 1) === 0) {
+            throw new \RuntimeException('Unsafe RSA public exponent');
+        }
         return $key;
     }
 }
