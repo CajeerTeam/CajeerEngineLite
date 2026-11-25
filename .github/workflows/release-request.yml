@@ -1,0 +1,68 @@
+name: Request signed CajeerEngine Lite v1.6.0
+on:
+  push:
+    branches:
+      - release-request/v1.6.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-request-v1.6.0
+  cancel-in-progress: false
+
+jobs:
+  request-release:
+    if: github.repository == 'CajeerTeam/CajeerEngineLite' && github.ref == 'refs/heads/release-request/v1.6.0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Verify certified main and request existing signed release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: c6a52cbbe4fe123dacdf19b1cfd4ed9b15e0a587
+          BASE_SHA: c1ce243e802a81ea055dffbf9f7f6491d1807145
+          RC_SHA: 6776de9f8538db66bcf52b743a444238cfc29534
+          CI_RUN: '45458479415'
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          [[ "$(gh api "repos/$repo/git/ref/heads/main" --jq .object.sha)" == "$TARGET_SHA" ]]
+          gh api "repos/$repo/actions/runs/$CI_RUN" | jq -e --arg sha "$TARGET_SHA" '.head_sha == $sha and .head_branch == "main" and .status == "completed" and .conclusion == "success" and .path == ".github/workflows/ci.yml"' >/dev/null
+          check_version() {
+            local sha="$1" version="$2"
+            [[ "$(gh api "repos/$repo/contents/VERSION?ref=$sha" --jq .content | base64 -d)" == "$version" ]]
+          }
+          check_version "$TARGET_SHA" 1.6.0
+          check_version "$BASE_SHA" 1.5.7
+          check_version "$RC_SHA" 1.5.9
+          for base in "$BASE_SHA" "$RC_SHA"; do
+            gh api "repos/$repo/compare/$base...$TARGET_SHA" | jq -e '.status == "ahead" and .behind_by == 0' >/dev/null
+          done
+          ensure_tag() {
+            local tag="$1" sha="$2" actual
+            if actual="$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha 2>/dev/null)"; then
+              [[ "$actual" == "$sha" ]] || { echo "::error::Conflicting tag $tag; refusing to move it"; exit 1; }
+            else
+              gh api -X POST "repos/$repo/git/refs" -f "ref=refs/tags/$tag" -f "sha=$sha"
+            fi
+            [[ "$(gh api "repos/$repo/commits/$tag" --jq .sha)" == "$sha" ]]
+          }
+          if gh release view v1.6.0 --repo "$repo" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing to overwrite"
+            exit 1
+          fi
+          # Restore exact source tags; 1.0.0 lacks the package engine. These
+          # historical tags do not claim earlier releases were published.
+          ensure_tag v1.5.7 "$BASE_SHA"
+          ensure_tag v1.5.9 "$RC_SHA"
+          [[ "$(gh api "repos/$repo/git/ref/heads/main" --jq .object.sha)" == "$TARGET_SHA" ]]
+          ensure_tag v1.6.0 "$TARGET_SHA"
+          # Manual input selects an exact supported baseline for the first
+          # signed distribution. The original CI, rehearsal, protected
+          # signing and publication jobs still have to pass.
+          gh workflow run release.yml --ref v1.6.0 --repo "$repo" -f base_tag=v1.5.7 -f extra_base_tags=v1.5.9
+          echo "Requested signed release v1.6.0 at $TARGET_SHA"
